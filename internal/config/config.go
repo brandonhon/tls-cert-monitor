@@ -1,0 +1,230 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/spf13/viper"
+)
+
+// Config represents the application configuration
+type Config struct {
+	// Server settings
+	Port        int    `mapstructure:"port" yaml:"port"`
+	BindAddress string `mapstructure:"bind_address" yaml:"bind_address"`
+	
+	// TLS settings for metrics endpoint
+	TLSCert string `mapstructure:"tls_cert" yaml:"tls_cert"`
+	TLSKey  string `mapstructure:"tls_key" yaml:"tls_key"`
+	
+	// Certificate monitoring
+	CertificateDirectories []string      `mapstructure:"certificate_directories" yaml:"certificate_directories"`
+	ScanInterval          time.Duration `mapstructure:"scan_interval" yaml:"scan_interval"`
+	
+	// Performance
+	Workers int `mapstructure:"workers" yaml:"workers"`
+	
+	// Logging
+	LogFile  string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel string `mapstructure:"log_level" yaml:"log_level"`
+	
+	// Operation modes
+	DryRun     bool `mapstructure:"dry_run" yaml:"dry_run"`
+	HotReload  bool `mapstructure:"hot_reload" yaml:"hot_reload"`
+	
+	// Cache settings
+	CacheDir      string        `mapstructure:"cache_dir" yaml:"cache_dir"`
+	CacheTTL      time.Duration `mapstructure:"cache_ttl" yaml:"cache_ttl"`
+	CacheMaxSize  int64         `mapstructure:"cache_max_size" yaml:"cache_max_size"`
+}
+
+// Defaults returns a Config with default values
+func Defaults() *Config {
+	return &Config{
+		Port:                   3200,
+		BindAddress:           "0.0.0.0",
+		CertificateDirectories: []string{"/etc/ssl/certs"},
+		ScanInterval:          5 * time.Minute,
+		Workers:               4,
+		LogLevel:              "info",
+		DryRun:                false,
+		HotReload:             true,
+		CacheDir:              "./cache",
+		CacheTTL:              1 * time.Hour,
+		CacheMaxSize:          100 * 1024 * 1024, // 100MB
+	}
+}
+
+// Load loads configuration from file or environment
+func Load(configFile string) (*Config, error) {
+	cfg := Defaults()
+	
+	v := viper.New()
+	
+	// Set defaults
+	v.SetDefault("port", cfg.Port)
+	v.SetDefault("bind_address", cfg.BindAddress)
+	v.SetDefault("certificate_directories", cfg.CertificateDirectories)
+	v.SetDefault("scan_interval", cfg.ScanInterval)
+	v.SetDefault("workers", cfg.Workers)
+	v.SetDefault("log_level", cfg.LogLevel)
+	v.SetDefault("dry_run", cfg.DryRun)
+	v.SetDefault("hot_reload", cfg.HotReload)
+	v.SetDefault("cache_dir", cfg.CacheDir)
+	v.SetDefault("cache_ttl", cfg.CacheTTL)
+	v.SetDefault("cache_max_size", cfg.CacheMaxSize)
+	
+	// Enable environment variables
+	v.SetEnvPrefix("TLS_MONITOR")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	
+	// Load from config file if provided
+	if configFile != "" {
+		v.SetConfigFile(configFile)
+		if err := v.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+	}
+	
+	// Unmarshal into struct
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	
+	// Normalize paths
+	cfg.normalizePaths()
+	
+	return cfg, nil
+}
+
+// Validate validates the configuration
+func (c *Config) Validate() error {
+	// Validate port
+	if c.Port < 1 || c.Port > 65535 {
+		return fmt.Errorf("invalid port: %d", c.Port)
+	}
+	
+	// Validate certificate directories
+	if len(c.CertificateDirectories) == 0 {
+		return fmt.Errorf("at least one certificate directory must be specified")
+	}
+	
+	for _, dir := range c.CertificateDirectories {
+		// Clean the path to prevent traversal
+		cleanPath := filepath.Clean(dir)
+		if cleanPath != dir {
+			return fmt.Errorf("invalid directory path: %s", dir)
+		}
+		
+		// Check if directory exists
+		info, err := os.Stat(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("certificate directory does not exist: %s", dir)
+			}
+			return fmt.Errorf("failed to access certificate directory %s: %w", dir, err)
+		}
+		
+		if !info.IsDir() {
+			return fmt.Errorf("certificate path is not a directory: %s", dir)
+		}
+	}
+	
+	// Validate TLS settings
+	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
+		return fmt.Errorf("both TLS certificate and key must be provided")
+	}
+	
+	if c.TLSCert != "" {
+		if _, err := os.Stat(c.TLSCert); err != nil {
+			return fmt.Errorf("TLS certificate file not accessible: %w", err)
+		}
+	}
+	
+	if c.TLSKey != "" {
+		if _, err := os.Stat(c.TLSKey); err != nil {
+			return fmt.Errorf("TLS key file not accessible: %w", err)
+		}
+	}
+	
+	// Validate workers
+	if c.Workers < 1 {
+		return fmt.Errorf("workers must be at least 1")
+	}
+	
+	// Validate scan interval
+	if c.ScanInterval < 10*time.Second {
+		return fmt.Errorf("scan interval must be at least 10 seconds")
+	}
+	
+	// Validate log level
+	validLevels := map[string]bool{
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
+	
+	if !validLevels[strings.ToLower(c.LogLevel)] {
+		return fmt.Errorf("invalid log level: %s", c.LogLevel)
+	}
+	
+	return nil
+}
+
+// normalizePaths normalizes all file paths in the configuration
+func (c *Config) normalizePaths() {
+	// Normalize certificate directories
+	for i, dir := range c.CertificateDirectories {
+		c.CertificateDirectories[i] = filepath.Clean(dir)
+	}
+	
+	// Normalize TLS paths
+	if c.TLSCert != "" {
+		c.TLSCert = filepath.Clean(c.TLSCert)
+	}
+	if c.TLSKey != "" {
+		c.TLSKey = filepath.Clean(c.TLSKey)
+	}
+	
+	// Normalize log file path
+	if c.LogFile != "" {
+		c.LogFile = filepath.Clean(c.LogFile)
+	}
+	
+	// Normalize cache directory
+	if c.CacheDir != "" {
+		c.CacheDir = filepath.Clean(c.CacheDir)
+	}
+}
+
+// IsPathAllowed checks if a path is within the configured certificate directories
+func (c *Config) IsPathAllowed(path string) bool {
+	cleanPath := filepath.Clean(path)
+	
+	for _, dir := range c.CertificateDirectories {
+		cleanDir := filepath.Clean(dir)
+		
+		// Check if path is within the allowed directory
+		rel, err := filepath.Rel(cleanDir, cleanPath)
+		if err != nil {
+			continue
+		}
+		
+		// Check for path traversal
+		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+	
+	return false
+}
