@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  tls-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      # Mount certificate directories for monitoring
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
+    environment:
+      - TLS_MONITOR_LOG_LEVEL=info
+      - TLS_MONITOR_HOT_RELOAD=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    profiles:
+      - monitoring
+
+volumes:
+  grafana-storage:
+
+networks:
+  default:
+    name: tls-monitor-network

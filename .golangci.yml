@@ -1,0 +1,143 @@
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - vendor
+    - build
+    - dist
+  skip-files:
+    - ".*_test.go"
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  
+  govet:
+    check-shadowing: true
+    enable-all: true
+  
+  gocyclo:
+    min-complexity: 15
+  
+  goimports:
+    local-prefixes: github.com/brandonhon/tls-cert-monitor
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+  
+  funlen:
+    lines: 100
+    statements: 50
+  
+  misspell:
+    locale: US
+  
+  lll:
+    line-length: 120
+  
+  unused:
+    check-exported: false
+  
+  unparam:
+    check-exported: false
+  
+  nakedret:
+    max-func-lines: 30
+  
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+  
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - errcheck
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gomnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - rowserrcheck
+    - scopelint
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gomnd
+        - funlen
+        - goconst
+        - gosec
+    
+    - path: main\.go
+      linters:
+        - funlen
+    
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+    
+    - text: "G404:"
+      linters:
+        - gosec
+  
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+
+severity:
+  default-severity: error
+  case-sensitive: false
