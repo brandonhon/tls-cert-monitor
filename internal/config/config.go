@@ -1,3 +1,5 @@
+// internal/config/config.go
+
 package config
 
 import (
@@ -95,6 +97,9 @@ func Load(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Expand environment variables in paths
+	cfg.expandEnvironmentVariables()
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
@@ -104,6 +109,28 @@ func Load(configFile string) (*Config, error) {
 	cfg.normalizePaths()
 
 	return cfg, nil
+}
+
+// expandEnvironmentVariables expands environment variables in configuration paths
+func (c *Config) expandEnvironmentVariables() {
+	// Expand certificate directories
+	for i, dir := range c.CertificateDirectories {
+		c.CertificateDirectories[i] = os.ExpandEnv(dir)
+	}
+
+	// Expand other paths
+	if c.TLSCert != "" {
+		c.TLSCert = os.ExpandEnv(c.TLSCert)
+	}
+	if c.TLSKey != "" {
+		c.TLSKey = os.ExpandEnv(c.TLSKey)
+	}
+	if c.LogFile != "" {
+		c.LogFile = os.ExpandEnv(c.LogFile)
+	}
+	if c.CacheDir != "" {
+		c.CacheDir = os.ExpandEnv(c.CacheDir)
+	}
 }
 
 // Validate validates the configuration
