@@ -33,7 +33,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("TLS Certificate Monitor\nVersion: %s\nBuild Time: %s\nGit Commit: %s\n", 
+		fmt.Printf("TLS Certificate Monitor\nVersion: %s\nBuild Time: %s\nGit Commit: %s\n",
 			version, buildTime, gitCommit)
 		os.Exit(0)
 	}
@@ -65,7 +65,7 @@ func main() {
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewCollector()
-	
+
 	// Initialize health checker
 	healthChecker := health.New(cfg, metricsCollector)
 
@@ -85,18 +85,18 @@ func main() {
 	configWatcher := config.NewWatcher(cfg, *configFile, log)
 	go configWatcher.Watch(ctx, func(newCfg *config.Config) {
 		log.Info("Configuration changed, reloading...")
-		
+
 		// Update scanner with new config
 		if err := certScanner.UpdateConfig(newCfg); err != nil {
 			log.Error("Failed to update scanner configuration", zap.Error(err))
 			return
 		}
-		
+
 		// Trigger rescan
 		if err := certScanner.Scan(ctx); err != nil {
 			log.Error("Rescan after config change failed", zap.Error(err))
 		}
-		
+
 		// Update health checker
 		healthChecker.UpdateConfig(newCfg)
 	})
@@ -108,7 +108,7 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(cfg.ScanInterval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -124,11 +124,11 @@ func main() {
 
 	// Initialize and start HTTP server
 	srv := server.New(cfg, metricsCollector, healthChecker, log)
-	
+
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Info("Starting HTTP server", 
+		log.Info("Starting HTTP server",
 			zap.String("address", cfg.BindAddress),
 			zap.Int("port", cfg.Port),
 			zap.Bool("tls", cfg.TLSCert != "" && cfg.TLSKey != ""))
@@ -149,20 +149,20 @@ func main() {
 
 	// Graceful shutdown
 	log.Info("Starting graceful shutdown...")
-	
+
 	// Cancel context to stop all goroutines
 	cancel()
-	
+
 	// Shutdown server with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
-	
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server shutdown error", zap.Error(err))
 	}
-	
+
 	// Final cleanup
 	certScanner.Close()
-	
+
 	log.Info("Shutdown complete")
 }

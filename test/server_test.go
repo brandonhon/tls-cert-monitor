@@ -14,6 +14,7 @@ import (
 	"github.com/brandonhon/tls-cert-monitor/internal/logger"
 	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
 	"github.com/brandonhon/tls-cert-monitor/internal/server"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestServerEndpoints(t *testing.T) {
@@ -21,14 +22,15 @@ func TestServerEndpoints(t *testing.T) {
 	port := generateTestPort()
 	cfg := &config.Config{
 		Port:                   port,
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{t.TempDir()},
-		Workers:               2,
-		LogLevel:              "debug",
-		ScanInterval:          1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "debug",
+		ScanInterval:           1 * time.Minute,
 	}
 
-	metricsCollector := metrics.NewCollector()
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
@@ -84,19 +86,20 @@ func TestHealthEndpoint(t *testing.T) {
 	// Setup
 	port := generateTestPort()
 	tmpDir := t.TempDir()
-	
+
 	cfg := &config.Config{
 		Port:                   port,
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{tmpDir},
-		Workers:               2,
-		LogLevel:              "info",
-		HotReload:             true,
-		CacheDir:              tmpDir,
-		ScanInterval:          1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "info",
+		HotReload:              true,
+		CacheDir:               tmpDir,
+		ScanInterval:           1 * time.Minute,
 	}
 
-	metricsCollector := metrics.NewCollector()
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
@@ -181,14 +184,15 @@ func TestMetricsEndpoint(t *testing.T) {
 	port := generateTestPort()
 	cfg := &config.Config{
 		Port:                   port,
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{t.TempDir()},
-		Workers:               2,
-		LogLevel:              "info",
-		ScanInterval:          1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "info",
+		ScanInterval:           1 * time.Minute,
 	}
 
-	metricsCollector := metrics.NewCollector()
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
@@ -256,14 +260,15 @@ func TestGracefulShutdown(t *testing.T) {
 	port := generateTestPort()
 	cfg := &config.Config{
 		Port:                   port,
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{t.TempDir()},
-		Workers:               2,
-		LogLevel:              "info",
-		ScanInterval:          1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "info",
+		ScanInterval:           1 * time.Minute,
 	}
 
-	metricsCollector := metrics.NewCollector()
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 

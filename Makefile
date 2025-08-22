@@ -119,7 +119,7 @@ vet: deps
 .PHONY: deps
 deps:
 	@echo "Downloading dependencies..."
-	$(GOGET) -d ./...
+	$(GOMOD) download
 
 .PHONY: tidy
 tidy:

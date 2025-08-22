@@ -8,20 +8,20 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/brandonhon/tls-cert-monitor/internal/config"
 	"github.com/brandonhon/tls-cert-monitor/internal/health"
 	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	config    *config.Config
-	metrics   *metrics.Collector
-	health    *health.Checker
-	logger    *zap.Logger
-	server    *http.Server
+	config  *config.Config
+	metrics *metrics.Collector
+	health  *health.Checker
+	logger  *zap.Logger
+	server  *http.Server
 }
 
 // New creates a new HTTP server
@@ -207,7 +207,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 // handleHealth handles the health check endpoint
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response := s.health.Check()
-	
+
 	// Set status code based on health
 	statusCode := http.StatusOK
 	switch response.Status {
@@ -220,7 +220,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		s.logger.Error("Failed to encode health response", zap.Error(err))
 	}

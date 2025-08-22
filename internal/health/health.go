@@ -34,10 +34,10 @@ type Check struct {
 
 // Response represents the health check response
 type Response struct {
-	Status      Status           `json:"status"`
-	Timestamp   time.Time        `json:"timestamp"`
-	Checks      []Check          `json:"checks"`
-	Metadata    map[string]interface{} `json:"metadata"`
+	Status    Status                 `json:"status"`
+	Timestamp time.Time              `json:"timestamp"`
+	Checks    []Check                `json:"checks"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // Checker performs health checks
@@ -207,7 +207,7 @@ func (c *Checker) checkCache() []Check {
 // checkCertificates performs certificate-related health checks
 func (c *Checker) checkCertificates() []Check {
 	checks := []Check{}
-	
+
 	metricValues := c.metrics.GetMetrics()
 
 	// Certificate files total
@@ -366,15 +366,15 @@ func (c *Checker) checkSystem() []Check {
 	// Memory usage
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	checks = append(checks, Check{
 		Name:   "memory_usage",
 		Status: StatusHealthy,
 		Value: map[string]interface{}{
-			"alloc_mb":       m.Alloc / 1024 / 1024,
-			"sys_mb":         m.Sys / 1024 / 1024,
-			"num_gc":         m.NumGC,
-			"goroutines":     runtime.NumGoroutine(),
+			"alloc_mb":   m.Alloc / 1024 / 1024,
+			"sys_mb":     m.Sys / 1024 / 1024,
+			"num_gc":     m.NumGC,
+			"goroutines": runtime.NumGoroutine(),
 		},
 		LastChecked: time.Now(),
 	})

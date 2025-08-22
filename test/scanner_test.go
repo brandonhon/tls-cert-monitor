@@ -2,12 +2,6 @@ package test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +11,7 @@ import (
 	"github.com/brandonhon/tls-cert-monitor/internal/logger"
 	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
 	"github.com/brandonhon/tls-cert-monitor/internal/scanner"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestCertificateScanning(t *testing.T) {
@@ -37,20 +32,21 @@ func TestCertificateScanning(t *testing.T) {
 	// Create scanner configuration
 	cfg := &config.Config{
 		Port:                   generateTestPort(),
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{certDir},
-		ScanInterval:          1 * time.Minute,
-		Workers:               2,
-		LogLevel:              "debug",
-		CacheDir:              filepath.Join(tmpDir, "cache"),
-		CacheTTL:              30 * time.Minute,
-		CacheMaxSize:          10485760,
+		ScanInterval:           1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "debug",
+		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheTTL:               30 * time.Minute,
+		CacheMaxSize:           10485760,
 	}
 
-	// Create scanner
-	metricsCollector := metrics.NewCollector()
+	// Create scanner with test registry
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	log := logger.NewNop()
-	
+
 	s, err := scanner.New(cfg, metricsCollector, log)
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +61,7 @@ func TestCertificateScanning(t *testing.T) {
 
 	// Verify metrics
 	metrics := metricsCollector.GetMetrics()
-	
+
 	if metrics["cert_files_total"] != 3 {
 		t.Errorf("Expected 3 certificate files, got %v", metrics["cert_files_total"])
 	}
@@ -81,11 +77,11 @@ func TestCertificateScanning(t *testing.T) {
 
 func TestCertificateFileDetection(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create test files with various extensions
 	testFiles := []struct {
-		name     string
-		isCert   bool
+		name   string
+		isCert bool
 	}{
 		{"cert.pem", true},
 		{"cert.crt", true},
@@ -106,16 +102,17 @@ func TestCertificateFileDetection(t *testing.T) {
 
 	cfg := &config.Config{
 		CertificateDirectories: []string{tmpDir},
-		Workers:               1,
-		CacheDir:              filepath.Join(tmpDir, "cache"),
-		CacheTTL:              30 * time.Minute,
-		CacheMaxSize:          10485760,
-		ScanInterval:          1 * time.Minute,
+		Workers:                1,
+		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheTTL:               30 * time.Minute,
+		CacheMaxSize:           10485760,
+		ScanInterval:           1 * time.Minute,
 	}
 
-	metricsCollector := metrics.NewCollector()
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	log := logger.NewNop()
-	
+
 	s, err := scanner.New(cfg, metricsCollector, log)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +121,7 @@ func TestCertificateFileDetection(t *testing.T) {
 
 	// Test file detection
 	for _, tf := range testFiles {
-		path := filepath.Join(tmpDir, tf.name)
+		_ = filepath.Join(tmpDir, tf.name)
 		// Note: This test relies on the internal logic of isCertificateFile
 		// In a real scenario, we'd make this method public or test through the Scan method
 	}
@@ -132,9 +129,9 @@ func TestCertificateFileDetection(t *testing.T) {
 
 func TestWeakKeyDetection(t *testing.T) {
 	tests := []struct {
-		name       string
-		keySize    int
-		isWeak     bool
+		name    string
+		keySize int
+		isWeak  bool
 	}{
 		{"strong_2048", 2048, false},
 		{"strong_4096", 4096, false},
@@ -146,22 +143,23 @@ func TestWeakKeyDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			certPath := filepath.Join(tmpDir, "cert.pem")
-			
+
 			cert := generateTestCertificate(t, tt.keySize, time.Now().Add(365*24*time.Hour))
 			writeCertToFile(t, certPath, cert)
 
 			cfg := &config.Config{
 				CertificateDirectories: []string{tmpDir},
-				Workers:               1,
-				CacheDir:              filepath.Join(tmpDir, "cache"),
-				CacheTTL:              30 * time.Minute,
-				CacheMaxSize:          10485760,
-				ScanInterval:          1 * time.Minute,
+				Workers:                1,
+				CacheDir:               filepath.Join(tmpDir, "cache"),
+				CacheTTL:               30 * time.Minute,
+				CacheMaxSize:           10485760,
+				ScanInterval:           1 * time.Minute,
 			}
 
-			metricsCollector := metrics.NewCollector()
+			registry := prometheus.NewRegistry()
+			metricsCollector := metrics.NewCollectorWithRegistry(registry)
 			log := logger.NewNop()
-			
+
 			s, err := scanner.New(cfg, metricsCollector, log)
 			if err != nil {
 				t.Fatal(err)
@@ -175,7 +173,7 @@ func TestWeakKeyDetection(t *testing.T) {
 
 			metrics := metricsCollector.GetMetrics()
 			weakKeys := metrics["weak_key_total"]
-			
+
 			if tt.isWeak && weakKeys != 1 {
 				t.Errorf("Expected weak key to be detected, but wasn't")
 			}
@@ -183,51 +181,5 @@ func TestWeakKeyDetection(t *testing.T) {
 				t.Errorf("Expected no weak key detection, but was detected")
 			}
 		})
-	}
-}
-
-// Helper functions
-
-func generateTestCertificate(t *testing.T, keySize int, notAfter time.Time) []byte {
-	priv, err := rsa.GenerateKey(rand.Reader, keySize)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization:  []string{"Test Org"},
-			Country:       []string{"US"},
-			Province:      []string{""},
-			Locality:      []string{"San Francisco"},
-			StreetAddress: []string{""},
-			PostalCode:    []string{""},
-		},
-		NotBefore:             time.Now().Add(-24 * time.Hour),
-		NotAfter:              notAfter,
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{"test.example.com", "*.example.com"},
-		IPAddresses:           nil,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certDER,
-	})
-
-	return certPEM
-}
-
-func writeCertToFile(t *testing.T, path string, cert []byte) {
-	if err := os.WriteFile(path, cert, 0644); err != nil {
-		t.Fatal(err)
 	}
 }

@@ -20,17 +20,17 @@ type Entry struct {
 
 // Cache provides a thread-safe in-memory cache with disk persistence
 type Cache struct {
-	entries   map[string]*Entry
-	mu        sync.RWMutex
-	dir       string
-	ttl       time.Duration
-	maxSize   int64
+	entries     map[string]*Entry
+	mu          sync.RWMutex
+	dir         string
+	ttl         time.Duration
+	maxSize     int64
 	currentSize int64
-	hits      atomic.Uint64
-	misses    atomic.Uint64
-	evictions atomic.Uint64
-	stopChan  chan struct{}
-	wg        sync.WaitGroup
+	hits        atomic.Uint64
+	misses      atomic.Uint64
+	evictions   atomic.Uint64
+	stopChan    chan struct{}
+	wg          sync.WaitGroup
 }
 
 // New creates a new cache instance
@@ -169,7 +169,7 @@ func (c *Cache) cleanup() {
 // removeExpired removes all expired entries
 func (c *Cache) removeExpired() {
 	now := time.Now()
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -276,7 +276,7 @@ func (c *Cache) Stats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"entries":         entriesCount,
+		"entries":        entriesCount,
 		"size":           c.currentSize,
 		"max_size":       c.maxSize,
 		"hits":           c.hits.Load(),

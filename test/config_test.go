@@ -1,8 +1,6 @@
 package test
 
 import (
-	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,16 +23,16 @@ func TestConfigLoad(t *testing.T) {
 
 	cfg := &config.Config{
 		Port:                   generateTestPort(),
-		BindAddress:           "127.0.0.1",
+		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{certDir},
-		ScanInterval:          1 * time.Minute,
-		Workers:               2,
-		LogLevel:              "debug",
-		DryRun:                false,
-		HotReload:             true,
-		CacheDir:              filepath.Join(tmpDir, "cache"),
-		CacheTTL:              30 * time.Minute,
-		CacheMaxSize:          10485760,
+		ScanInterval:           1 * time.Minute,
+		Workers:                2,
+		LogLevel:               "debug",
+		DryRun:                 false,
+		HotReload:              true,
+		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheTTL:               30 * time.Minute,
+		CacheMaxSize:           10485760,
 	}
 
 	// Write config to file
@@ -63,7 +61,7 @@ func TestConfigLoad(t *testing.T) {
 	}
 
 	if len(loaded.CertificateDirectories) != len(cfg.CertificateDirectories) {
-		t.Errorf("CertificateDirectories length mismatch: got %d, want %d", 
+		t.Errorf("CertificateDirectories length mismatch: got %d, want %d",
 			len(loaded.CertificateDirectories), len(cfg.CertificateDirectories))
 	}
 }
@@ -79,11 +77,11 @@ func TestConfigValidation(t *testing.T) {
 			name: "valid config",
 			config: &config.Config{
 				Port:                   3200,
-				BindAddress:           "0.0.0.0",
+				BindAddress:            "0.0.0.0",
 				CertificateDirectories: []string{t.TempDir()},
-				ScanInterval:          1 * time.Minute,
-				Workers:               4,
-				LogLevel:              "info",
+				ScanInterval:           1 * time.Minute,
+				Workers:                4,
+				LogLevel:               "info",
 			},
 			wantErr: false,
 		},
@@ -92,9 +90,9 @@ func TestConfigValidation(t *testing.T) {
 			config: &config.Config{
 				Port:                   -1,
 				CertificateDirectories: []string{t.TempDir()},
-				ScanInterval:          1 * time.Minute,
-				Workers:               4,
-				LogLevel:              "info",
+				ScanInterval:           1 * time.Minute,
+				Workers:                4,
+				LogLevel:               "info",
 			},
 			wantErr: true,
 			errMsg:  "invalid port",
@@ -104,9 +102,9 @@ func TestConfigValidation(t *testing.T) {
 			config: &config.Config{
 				Port:                   3200,
 				CertificateDirectories: []string{},
-				ScanInterval:          1 * time.Minute,
-				Workers:               4,
-				LogLevel:              "info",
+				ScanInterval:           1 * time.Minute,
+				Workers:                4,
+				LogLevel:               "info",
 			},
 			wantErr: true,
 			errMsg:  "at least one certificate directory",
@@ -116,9 +114,9 @@ func TestConfigValidation(t *testing.T) {
 			config: &config.Config{
 				Port:                   3200,
 				CertificateDirectories: []string{t.TempDir()},
-				ScanInterval:          1 * time.Minute,
-				Workers:               0,
-				LogLevel:              "info",
+				ScanInterval:           1 * time.Minute,
+				Workers:                0,
+				LogLevel:               "info",
 			},
 			wantErr: true,
 			errMsg:  "workers must be at least 1",
@@ -128,9 +126,9 @@ func TestConfigValidation(t *testing.T) {
 			config: &config.Config{
 				Port:                   3200,
 				CertificateDirectories: []string{t.TempDir()},
-				ScanInterval:          5 * time.Second,
-				Workers:               4,
-				LogLevel:              "info",
+				ScanInterval:           5 * time.Second,
+				Workers:                4,
+				LogLevel:               "info",
 			},
 			wantErr: true,
 			errMsg:  "scan interval must be at least 10 seconds",
@@ -140,9 +138,9 @@ func TestConfigValidation(t *testing.T) {
 			config: &config.Config{
 				Port:                   3200,
 				CertificateDirectories: []string{t.TempDir()},
-				ScanInterval:          1 * time.Minute,
-				Workers:               4,
-				LogLevel:              "invalid",
+				ScanInterval:           1 * time.Minute,
+				Workers:                4,
+				LogLevel:               "invalid",
 			},
 			wantErr: true,
 			errMsg:  "invalid log level",
@@ -228,15 +226,4 @@ func TestConfigPathTraversal(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper functions
-
-func generateTestPort() int {
-	rand.Seed(time.Now().UnixNano())
-	return 18000 + rand.Intn(400)
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || contains(s[1:], substr))
 }

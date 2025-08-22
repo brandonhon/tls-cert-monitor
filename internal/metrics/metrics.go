@@ -8,18 +8,23 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
+var (
+	once     sync.Once
+	instance *Collector
+)
+
 // Collector manages all Prometheus metrics
 type Collector struct {
 	// Certificate metrics
-	certExpiration    *prometheus.GaugeVec
-	certSANCount      *prometheus.GaugeVec
-	certInfo          *prometheus.GaugeVec
+	certExpiration     *prometheus.GaugeVec
+	certSANCount       *prometheus.GaugeVec
+	certInfo           *prometheus.GaugeVec
 	certDuplicateCount *prometheus.GaugeVec
-	certIssuerCode    *prometheus.GaugeVec
+	certIssuerCode     *prometheus.GaugeVec
 
 	// Security metrics
-	weakKeyTotal      prometheus.Gauge
-	deprecatedSigAlg  prometheus.Gauge
+	weakKeyTotal     prometheus.Gauge
+	deprecatedSigAlg prometheus.Gauge
 
 	// Operational metrics
 	certFilesTotal       prometheus.Gauge
@@ -28,12 +33,27 @@ type Collector struct {
 	scanDuration         prometheus.Gauge
 	lastScanTimestamp    prometheus.Gauge
 
-	mu sync.RWMutex
+	mu       sync.RWMutex
+	registry prometheus.Registerer
 }
 
-// NewCollector creates a new metrics collector
+// NewCollector creates a new metrics collector (singleton for default registry)
 func NewCollector() *Collector {
+	once.Do(func() {
+		instance = createCollector(prometheus.DefaultRegisterer)
+	})
+	return instance
+}
+
+// NewCollectorWithRegistry creates a new metrics collector with a custom registry (for testing)
+func NewCollectorWithRegistry(reg prometheus.Registerer) *Collector {
+	return createCollector(reg)
+}
+
+// createCollector creates the actual collector instance
+func createCollector(reg prometheus.Registerer) *Collector {
 	c := &Collector{
+		registry: reg,
 		// Certificate metrics
 		certExpiration: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -118,35 +138,37 @@ func NewCollector() *Collector {
 		),
 	}
 
-	// Register all metrics
-	c.registerMetrics()
+	// Register all metrics with the provided registerer
+	c.registerMetrics(reg)
 
 	return c
 }
 
-// registerMetrics registers all metrics with Prometheus
-func (c *Collector) registerMetrics() {
+// registerMetrics registers all metrics with the provided registerer
+func (c *Collector) registerMetrics(reg prometheus.Registerer) {
 	// Certificate metrics
-	prometheus.MustRegister(c.certExpiration)
-	prometheus.MustRegister(c.certSANCount)
-	prometheus.MustRegister(c.certInfo)
-	prometheus.MustRegister(c.certDuplicateCount)
-	prometheus.MustRegister(c.certIssuerCode)
+	reg.MustRegister(c.certExpiration)
+	reg.MustRegister(c.certSANCount)
+	reg.MustRegister(c.certInfo)
+	reg.MustRegister(c.certDuplicateCount)
+	reg.MustRegister(c.certIssuerCode)
 
 	// Security metrics
-	prometheus.MustRegister(c.weakKeyTotal)
-	prometheus.MustRegister(c.deprecatedSigAlg)
+	reg.MustRegister(c.weakKeyTotal)
+	reg.MustRegister(c.deprecatedSigAlg)
 
 	// Operational metrics
-	prometheus.MustRegister(c.certFilesTotal)
-	prometheus.MustRegister(c.certsParsedTotal)
-	prometheus.MustRegister(c.certParseErrorsTotal)
-	prometheus.MustRegister(c.scanDuration)
-	prometheus.MustRegister(c.lastScanTimestamp)
+	reg.MustRegister(c.certFilesTotal)
+	reg.MustRegister(c.certsParsedTotal)
+	reg.MustRegister(c.certParseErrorsTotal)
+	reg.MustRegister(c.scanDuration)
+	reg.MustRegister(c.lastScanTimestamp)
 
-	// Register Go runtime metrics
-	prometheus.MustRegister(collectors.NewGoCollector())
-	prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	// Only register Go runtime metrics if using default registry
+	if reg == prometheus.DefaultRegisterer {
+		reg.MustRegister(collectors.NewGoCollector())
+		reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	}
 }
 
 // ResetCertificateMetrics resets certificate-specific metrics
@@ -227,7 +249,7 @@ func (c *Collector) GetMetrics() map[string]float64 {
 	defer c.mu.RUnlock()
 
 	metrics := make(map[string]float64)
-	
+
 	// Gather current values
 	metrics["cert_files_total"] = c.getGaugeValue(c.certFilesTotal)
 	metrics["certs_parsed_total"] = c.getGaugeValue(c.certsParsedTotal)
@@ -235,7 +257,7 @@ func (c *Collector) GetMetrics() map[string]float64 {
 	metrics["weak_key_total"] = c.getGaugeValue(c.weakKeyTotal)
 	metrics["deprecated_sigalg_total"] = c.getGaugeValue(c.deprecatedSigAlg)
 	metrics["last_scan_timestamp"] = c.getGaugeValue(c.lastScanTimestamp)
-	
+
 	return metrics
 }
 
