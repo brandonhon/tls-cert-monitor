@@ -232,19 +232,30 @@ func TestMetricsEndpoint(t *testing.T) {
 
 	bodyStr := string(body)
 
-	// Check for expected metrics
+	// Check for expected application metrics only
+	// Note: Go runtime metrics (go_memstats, go_threads) are only registered
+	// with the default registry, not custom test registries
 	expectedMetrics := []string{
 		"ssl_cert_files_total",
 		"ssl_certs_parsed_total",
 		"ssl_cert_parse_errors_total",
-		"go_memstats",
-		"go_threads",
 	}
 
 	for _, metric := range expectedMetrics {
 		if !contains(bodyStr, metric) {
 			t.Errorf("Metrics response missing expected metric: %s", metric)
 		}
+	}
+
+	// Verify the test metrics we set are present with correct values
+	if !contains(bodyStr, "ssl_cert_files_total 10") {
+		t.Error("Expected ssl_cert_files_total to be 10")
+	}
+	if !contains(bodyStr, "ssl_certs_parsed_total 8") {
+		t.Error("Expected ssl_certs_parsed_total to be 8")
+	}
+	if !contains(bodyStr, "ssl_cert_parse_errors_total 2") {
+		t.Error("Expected ssl_cert_parse_errors_total to be 2")
 	}
 
 	// Shutdown server

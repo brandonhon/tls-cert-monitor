@@ -10,12 +10,12 @@ bind_address: "0.0.0.0"
 
 # Certificate monitoring
 certificate_directories:
-  - "/home/bhoneycutt/Projects/Personal/CERT/cert-monitor.bak/test/fixtures/certificates"
-  # - "/home/bhoneycutt/Projects/Midway/Certs"
+  - "/etc/ssl/certs"
+  - "/etc/pki/tls/certs"
   # Add more directories as needed
 
 # Scan interval (how often to scan for certificates)
-scan_interval: "1m"
+scan_interval: "5m"
 
 # Performance settings
 workers: 4

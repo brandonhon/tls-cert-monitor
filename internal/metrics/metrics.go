@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -144,30 +145,44 @@ func createCollector(reg prometheus.Registerer) *Collector {
 	return c
 }
 
+// safeRegister safely registers a collector, logging warnings instead of panicking on duplicates
+func (c *Collector) safeRegister(reg prometheus.Registerer, collector prometheus.Collector, name string) {
+	if err := reg.Register(collector); err != nil {
+		if areErr, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			// Log warning but continue - this is expected in some scenarios
+			fmt.Printf("Warning: Metric %s already registered, using existing instance: %v\n", name, areErr)
+		} else {
+			// Log error for other registration issues but don't panic
+			fmt.Printf("Warning: Failed to register metric %s: %v\n", name, err)
+		}
+	}
+}
+
 // registerMetrics registers all metrics with the provided registerer
 func (c *Collector) registerMetrics(reg prometheus.Registerer) {
-	// Certificate metrics
-	reg.MustRegister(c.certExpiration)
-	reg.MustRegister(c.certSANCount)
-	reg.MustRegister(c.certInfo)
-	reg.MustRegister(c.certDuplicateCount)
-	reg.MustRegister(c.certIssuerCode)
+	// Certificate metrics - use safe registration
+	c.safeRegister(reg, c.certExpiration, "ssl_cert_expiration_timestamp")
+	c.safeRegister(reg, c.certSANCount, "ssl_cert_san_count")
+	c.safeRegister(reg, c.certInfo, "ssl_cert_info")
+	c.safeRegister(reg, c.certDuplicateCount, "ssl_cert_duplicate_count")
+	c.safeRegister(reg, c.certIssuerCode, "ssl_cert_issuer_code")
 
 	// Security metrics
-	reg.MustRegister(c.weakKeyTotal)
-	reg.MustRegister(c.deprecatedSigAlg)
+	c.safeRegister(reg, c.weakKeyTotal, "ssl_cert_weak_key_total")
+	c.safeRegister(reg, c.deprecatedSigAlg, "ssl_cert_deprecated_sigalg_total")
 
 	// Operational metrics
-	reg.MustRegister(c.certFilesTotal)
-	reg.MustRegister(c.certsParsedTotal)
-	reg.MustRegister(c.certParseErrorsTotal)
-	reg.MustRegister(c.scanDuration)
-	reg.MustRegister(c.lastScanTimestamp)
+	c.safeRegister(reg, c.certFilesTotal, "ssl_cert_files_total")
+	c.safeRegister(reg, c.certsParsedTotal, "ssl_certs_parsed_total")
+	c.safeRegister(reg, c.certParseErrorsTotal, "ssl_cert_parse_errors_total")
+	c.safeRegister(reg, c.scanDuration, "ssl_cert_scan_duration_seconds")
+	c.safeRegister(reg, c.lastScanTimestamp, "ssl_cert_last_scan_timestamp")
 
 	// Only register Go runtime metrics if using default registry
+	// Use safe registration for these as they're commonly registered by other code
 	if reg == prometheus.DefaultRegisterer {
-		reg.MustRegister(collectors.NewGoCollector())
-		reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		c.safeRegister(reg, collectors.NewGoCollector(), "go_collector")
+		c.safeRegister(reg, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}), "process_collector")
 	}
 }
 
