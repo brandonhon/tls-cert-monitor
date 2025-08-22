@@ -1,3 +1,5 @@
+// test/scanner_test.go
+
 package test
 
 import (
@@ -179,6 +181,103 @@ func TestWeakKeyDetection(t *testing.T) {
 			}
 			if !tt.isWeak && weakKeys != 0 {
 				t.Errorf("Expected no weak key detection, but was detected")
+			}
+		})
+	}
+}
+
+func TestIssuerClassification(t *testing.T) {
+	tests := []struct {
+		name         string
+		issuer       string
+		expectedCode int
+	}{
+		{"digicert", "CN=DigiCert TLS RSA SHA256 2020 CA1,O=DigiCert Inc,C=US", 30},
+		{"verisign", "CN=VeriSign Class 3 Public Primary Certification Authority - G5,OU=(c) 2006 VeriSign", 30},
+		{"amazon", "CN=Amazon RSA 2048 M01,O=Amazon,C=US", 31},
+		{"aws_acm", "CN=ACM Private CA,O=AWS,C=US", 31},
+		{"lets_encrypt", "CN=Let's Encrypt Authority X3,O=Let's Encrypt,C=US", 32},
+		{"comodo", "CN=COMODO RSA Domain Validation Secure Server CA,O=COMODO CA Limited", 32},
+		{"self_signed", "CN=self-signed.example.com,O=Self-Signed Org,C=US", 33},
+		{"localhost", "CN=localhost", 33},
+		{"internal", "CN=Internal CA,O=Internal,C=US", 33},
+		{"unknown", "CN=Unknown CA,O=Unknown Org,C=US", 32},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			certDir := filepath.Join(tmpDir, "certs")
+			os.MkdirAll(certDir, 0755)
+
+			// Create a certificate with custom issuer
+			cert := createCertificateWithIssuer(t, tt.issuer)
+			certPath := filepath.Join(certDir, "test.pem")
+			writeCertToFile(t, certPath, cert)
+
+			cfg := &config.Config{
+				CertificateDirectories: []string{certDir},
+				Workers:                1,
+				LogLevel:               "debug",
+				CacheDir:               filepath.Join(tmpDir, "cache"),
+				CacheTTL:               30 * time.Minute,
+				CacheMaxSize:           10485760,
+				ScanInterval:           1 * time.Minute,
+			}
+
+			registry := prometheus.NewRegistry()
+			metricsCollector := metrics.NewCollectorWithRegistry(registry)
+			log := logger.NewNop()
+
+			s, err := scanner.New(cfg, metricsCollector, log)
+			if err != nil {
+				t.Fatal("Failed to create scanner:", err)
+			}
+			defer s.Close()
+
+			ctx := context.Background()
+			if err := s.Scan(ctx); err != nil {
+				t.Fatal("Failed to run scan:", err)
+			}
+
+			// Give time for async operations
+			time.Sleep(100 * time.Millisecond)
+
+			// Check issuer code metric
+			families, err := registry.Gather()
+			if err != nil {
+				t.Fatal("Failed to gather metrics:", err)
+			}
+
+			foundExpectedCode := false
+			for _, family := range families {
+				if family.GetName() == "ssl_cert_issuer_code" {
+					for _, metric := range family.GetMetric() {
+						if metric.Gauge != nil && metric.Gauge.Value != nil {
+							actualCode := int(*metric.Gauge.Value)
+							if actualCode == tt.expectedCode {
+								foundExpectedCode = true
+								break
+							}
+						}
+					}
+				}
+			}
+
+			if !foundExpectedCode {
+				t.Errorf("Expected issuer code %d for issuer '%s', but was not found", tt.expectedCode, tt.issuer)
+
+				// Debug: show what codes were found
+				t.Logf("Found issuer codes:")
+				for _, family := range families {
+					if family.GetName() == "ssl_cert_issuer_code" {
+						for _, metric := range family.GetMetric() {
+							if metric.Gauge != nil && metric.Gauge.Value != nil {
+								t.Logf("  Code: %d", int(*metric.Gauge.Value))
+							}
+						}
+					}
+				}
 			}
 		})
 	}

@@ -1,3 +1,5 @@
+// internal/scanner/scanner.go
+
 package scanner
 
 import (
@@ -82,7 +84,8 @@ func (s *Scanner) Scan(ctx context.Context) error {
 	s.logger.Info("Starting certificate scan")
 	startTime := time.Now()
 
-	// Reset certificate metrics before scan
+	// MOVED: Reset certificate metrics BEFORE starting workers to avoid race condition
+	// This ensures we start with a clean slate
 	s.metrics.ResetCertificateMetrics()
 
 	var (
@@ -96,6 +99,10 @@ func (s *Scanner) Scan(ctx context.Context) error {
 		wg             sync.WaitGroup
 		semaphore      = make(chan struct{}, s.config.Workers)
 	)
+
+	// Collect all certificate info for later metric updates
+	var allCertInfos []*CertificateInfo
+	var certInfosMu sync.Mutex
 
 	// Scan each configured directory
 	for _, dir := range s.config.CertificateDirectories {
@@ -161,8 +168,10 @@ func (s *Scanner) Scan(ctx context.Context) error {
 					}
 					certsMu.Unlock()
 
-					// Update metrics
-					s.updateMetrics(certInfo)
+					// Store certificate info for later metric updates
+					certInfosMu.Lock()
+					allCertInfos = append(allCertInfos, certInfo)
+					certInfosMu.Unlock()
 				}
 			}(path)
 
@@ -176,6 +185,13 @@ func (s *Scanner) Scan(ctx context.Context) error {
 
 	// Wait for all workers to complete
 	wg.Wait()
+
+	// NOW update all certificate-specific metrics AFTER all workers are done
+	// This ensures no race condition with ResetCertificateMetrics
+	s.logger.Debug("Updating certificate-specific metrics", zap.Int("certificates", len(allCertInfos)))
+	for _, certInfo := range allCertInfos {
+		s.updateMetrics(certInfo)
+	}
 
 	// Update operational metrics
 	s.metrics.SetCertFilesTotal(float64(totalFiles))
@@ -404,35 +420,70 @@ func (s *Scanner) updateMetrics(certInfo *CertificateInfo) {
 	s.metrics.SetCertIssuerCode(certInfo.Issuer, float64(issuerCode))
 }
 
-// classifyIssuer classifies certificate issuer
+// classifyIssuer classifies certificate issuer with updated classification codes
+// Returns specific numeric codes for different CA types:
+// DigiCert=30, Amazon=31, Other=32, Self-signed=33
 func (s *Scanner) classifyIssuer(issuer string) int {
 	lowerIssuer := strings.ToLower(issuer)
 
-	// Self-signed
-	if strings.Contains(lowerIssuer, "self") {
-		return 1
+	// Self-signed certificates
+	if strings.Contains(lowerIssuer, "self-signed") ||
+		strings.Contains(lowerIssuer, "self signed") ||
+		(strings.Contains(lowerIssuer, "cn=") &&
+			(strings.Contains(lowerIssuer, "localhost") ||
+				strings.Contains(lowerIssuer, "example.com") ||
+				strings.Contains(lowerIssuer, "test"))) {
+		return 33 // Self-signed
+	}
+
+	// DigiCert family
+	if strings.Contains(lowerIssuer, "digicert") ||
+		strings.Contains(lowerIssuer, "rapidssl") ||
+		strings.Contains(lowerIssuer, "geotrust") ||
+		strings.Contains(lowerIssuer, "thawte") ||
+		strings.Contains(lowerIssuer, "verisign") ||
+		strings.Contains(lowerIssuer, "symantec") {
+		return 30 // DigiCert
+	}
+
+	// Amazon certificates
+	if strings.Contains(lowerIssuer, "amazon") ||
+		strings.Contains(lowerIssuer, "aws") ||
+		strings.Contains(lowerIssuer, "acm") {
+		return 31 // Amazon
 	}
 
 	// Let's Encrypt
-	if strings.Contains(lowerIssuer, "let's encrypt") || strings.Contains(lowerIssuer, "letsencrypt") {
-		return 2
+	if strings.Contains(lowerIssuer, "let's encrypt") ||
+		strings.Contains(lowerIssuer, "letsencrypt") ||
+		strings.Contains(lowerIssuer, "isrg") {
+		return 32 // Other (Let's Encrypt goes in Other category)
 	}
 
-	// Commercial CAs
-	commercialCAs := []string{"digicert", "verisign", "comodo", "godaddy", "globalsign", "sectigo"}
-	for _, ca := range commercialCAs {
-		if strings.Contains(lowerIssuer, ca) {
-			return 3
-		}
+	// Other commercial CAs
+	if strings.Contains(lowerIssuer, "comodo") ||
+		strings.Contains(lowerIssuer, "sectigo") ||
+		strings.Contains(lowerIssuer, "godaddy") ||
+		strings.Contains(lowerIssuer, "globalsign") ||
+		strings.Contains(lowerIssuer, "entrust") ||
+		strings.Contains(lowerIssuer, "trustwave") ||
+		strings.Contains(lowerIssuer, "ssl.com") ||
+		strings.Contains(lowerIssuer, "certigna") ||
+		strings.Contains(lowerIssuer, "buypass") ||
+		strings.Contains(lowerIssuer, "zerossl") {
+		return 32 // Other
 	}
 
 	// Internal/Enterprise CAs
-	if strings.Contains(lowerIssuer, "internal") || strings.Contains(lowerIssuer, "enterprise") {
-		return 4
+	if strings.Contains(lowerIssuer, "internal") ||
+		strings.Contains(lowerIssuer, "enterprise") ||
+		strings.Contains(lowerIssuer, "corporate") ||
+		strings.Contains(lowerIssuer, "private") {
+		return 33 // Self-signed (internal CAs treated as self-signed)
 	}
 
-	// Unknown
-	return 0
+	// Default for unknown issuers
+	return 32 // Other
 }
 
 // isCertificateFile checks if a file is likely a certificate

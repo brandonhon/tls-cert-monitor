@@ -1,5 +1,8 @@
 # TLS Certificate Monitor Makefile
 
+# Shell setup
+SHELL := /bin/bash
+
 # Build variables
 BINARY_NAME=tls-cert-monitor
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -23,6 +26,7 @@ LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -X 
 BUILD_DIR=build
 DIST_DIR=dist
 COVERAGE_DIR=coverage
+EXAMPLE_DIR=./test/fixtures
 
 # Default target
 .PHONY: all
@@ -33,21 +37,22 @@ all: clean fmt lint test build
 help:
 	@echo "TLS Certificate Monitor - Available targets:"
 	@echo ""
-	@echo "  build         Build the binary"
-	@echo "  test          Run tests"
-	@echo "  test-v        Run tests with verbose output"
-	@echo "  test-race     Run tests with race detection"
-	@echo "  test-cover    Run tests with coverage"
-	@echo "  bench         Run benchmarks"
-	@echo "  fmt           Format code"
-	@echo "  lint          Run linter"
-	@echo "  clean         Clean build artifacts"
-	@echo "  deps          Download dependencies"
-	@echo "  tidy          Tidy dependencies"
-	@echo "  run           Run the application"
-	@echo "  install       Install the binary"
-	@echo "  docker-build  Build Docker image"
-	@echo "  release       Build release binaries for all platforms"
+	@echo "  build        	  Build the binary"
+	@echo "  example-certs	  Generate example certificates for testing"
+	@echo "  test         	  Run tests"
+	@echo "  test-v       	  Run tests with verbose output"
+	@echo "  test-race    	  Run tests with race detection"
+	@echo "  test-cover   	  Run tests with coverage"
+	@echo "  bench        	  Run benchmarks"
+	@echo "  fmt          	  Format code"
+	@echo "  lint         	  Run linter"
+	@echo "  clean        	  Clean build artifacts"
+	@echo "  deps         	  Download dependencies"
+	@echo "  tidy         	  Tidy dependencies"
+	@echo "  run          	  Run the application"
+	@echo "  install      	  Install the binary"
+	@echo "  docker-build 	  Build Docker image"
+	@echo "  release      	  Build release binaries for all platforms"
 	@echo ""
 
 # Build targets
@@ -140,6 +145,7 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@rm -rf $(DIST_DIR)
 	@rm -rf $(COVERAGE_DIR)
+	@rm -rf $(EXAMPLE_DIR)
 	@rm -rf vendor/
 
 .PHONY: clean-cache
@@ -220,6 +226,97 @@ mock:
 	@echo "Generating mocks..."
 	@which mockgen > /dev/null || $(GOGET) github.com/golang/mock/mockgen@latest
 	$(GOCMD) generate -tags=mock ./...
+
+.PHONY: example-certs
+example-certs: ## Generate example certificates for testing
+	@echo "🔐 Generating example certificates..."
+	@mkdir -p $(EXAMPLE_DIR)/example-certs
+
+	# Root CA
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/ca.key 2048 2>/dev/null
+	@openssl req -new -x509 -key $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/ca-cert.pem -days 365 -subj "/CN=Test CA" 2>/dev/null
+
+	# 1yr_valid certs
+	@for i in 1 2 3; do \
+		openssl genrsa -out $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.key 2048 2>/dev/null; \
+		openssl req -new -key $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.key -out $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.csr -subj "/CN=valid$$i.example.com" 2>/dev/null; \
+		openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.pem -days 365 2>/dev/null; \
+		rm -f $(EXAMPLE_DIR)/example-certs/1yr_valid_$$i.csr; \
+	done
+
+	# Duplicate certs
+	@cp $(EXAMPLE_DIR)/example-certs/1yr_valid_1.pem $(EXAMPLE_DIR)/example-certs/1yr_valid_dup_1.pem
+	@cp $(EXAMPLE_DIR)/example-certs/1yr_valid_1.pem $(EXAMPLE_DIR)/example-certs/1yr_valid_dup_2.pem
+	@cp $(EXAMPLE_DIR)/example-certs/1yr_valid_1.key $(EXAMPLE_DIR)/example-certs/1yr_valid_dup_1.key
+	@cp $(EXAMPLE_DIR)/example-certs/1yr_valid_1.key $(EXAMPLE_DIR)/example-certs/1yr_valid_dup_2.key
+
+	# Short expiration certs
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/valid_short_1.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/valid_short_1.key -out $(EXAMPLE_DIR)/example-certs/valid_short_1.csr -subj "/CN=short1.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/valid_short_1.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/valid_short_1.pem -days 5 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/valid_short_1.csr
+
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/valid_short_2.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/valid_short_2.key -out $(EXAMPLE_DIR)/example-certs/valid_short_2.csr -subj "/CN=short2.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/valid_short_2.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/valid_short_2.pem -days 180 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/valid_short_2.csr
+
+	# Weak keys
+	@for i in 1 2; do \
+		openssl genrsa -out $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.key 512 2>/dev/null; \
+		openssl req -new -key $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.key -out $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.csr -subj "/CN=weakkey$$i.example.com" 2>/dev/null; \
+		openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.pem -days 365 2>/dev/null; \
+		rm -f $(EXAMPLE_DIR)/example-certs/1yr_weak_key_$$i.csr; \
+	done
+
+	# Weak algorithms
+	@for i in 1 2; do \
+		openssl genrsa -out $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.key 2048 2>/dev/null; \
+		openssl req -new -md5 -key $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.key -out $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.csr -subj "/CN=weakalgo$$i.example.com" 2>/dev/null; \
+		openssl x509 -req -md5 -in $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.pem -days 365 2>/dev/null; \
+		rm -f $(EXAMPLE_DIR)/example-certs/1yr_weak_algo_$$i.csr; \
+	done
+
+	# Simulated DigiCert Issuer via Fake CA
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/fake_digicert_ca.key 2048 2>/dev/null
+	@openssl req -new -x509 -key $(EXAMPLE_DIR)/example-certs/fake_digicert_ca.key -out $(EXAMPLE_DIR)/example-certs/fake_digicert_ca.pem -days 365 -subj "/O=DigiCert Inc/CN=DigiCert Root CA" 2>/dev/null
+
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/digicert.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/digicert.key -out $(EXAMPLE_DIR)/example-certs/digicert.csr -subj "/CN=digicert.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/digicert.csr -CA $(EXAMPLE_DIR)/example-certs/fake_digicert_ca.pem -CAkey $(EXAMPLE_DIR)/example-certs/fake_digicert_ca.key -out $(EXAMPLE_DIR)/example-certs/digicert.pem -days 365 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/digicert.csr
+
+	# Simulated Amazon Issuer via Fake CA
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/fake_amazon_ca.key 2048 2>/dev/null
+	@openssl req -new -x509 -key $(EXAMPLE_DIR)/example-certs/fake_amazon_ca.key -out $(EXAMPLE_DIR)/example-certs/fake_amazon_ca.pem -days 365 -subj "/O=Amazon Trust Services/CN=Amazon Root CA" 2>/dev/null
+
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/amazon.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/amazon.key -out $(EXAMPLE_DIR)/example-certs/amazon.csr -subj "/CN=amazon.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/amazon.csr -CA $(EXAMPLE_DIR)/example-certs/fake_amazon_ca.pem -CAkey $(EXAMPLE_DIR)/example-certs/fake_amazon_ca.key -out $(EXAMPLE_DIR)/example-certs/amazon.pem -days 365 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/amazon.csr
+
+
+	# Valid certs with SANs (3–8 entries)
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/san_1.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/san_1.key -out $(EXAMPLE_DIR)/example-certs/san_1.csr -subj "/CN=san1.example.com" -addext "subjectAltName=DNS:san1.example.com,DNS:www.san1.example.com,DNS:alt1.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/san_1.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/san_1.pem -days 365 -extfile <(echo "subjectAltName=DNS:san1.example.com,DNS:www.san1.example.com,DNS:alt1.example.com") 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/san_1.csr
+
+	@openssl genrsa -out $(EXAMPLE_DIR)/example-certs/san_2.key 2048 2>/dev/null
+	@openssl req -new -key $(EXAMPLE_DIR)/example-certs/san_2.key -out $(EXAMPLE_DIR)/example-certs/san_2.csr -subj "/CN=san2.example.com" -addext "subjectAltName=DNS:san2.example.com,DNS:alt2.example.com,DNS:www.alt2.example.com,DNS:dev.alt2.example.com,DNS:test.alt2.example.com,DNS:x.alt2.example.com,DNS:y.alt2.example.com,DNS:z.alt2.example.com" 2>/dev/null
+	@openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/san_2.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/san_2.pem -days 365 -extfile <(echo "subjectAltName=DNS:san2.example.com,DNS:alt2.example.com,DNS:www.alt2.example.com,DNS:dev.alt2.example.com,DNS:test.alt2.example.com,DNS:x.alt2.example.com,DNS:y.alt2.example.com,DNS:z.alt2.example.com") 2>/dev/null
+	@rm -f $(EXAMPLE_DIR)/example-certs/san_2.csr
+
+	# 2 Valid P12 Certificates
+	@for i in 1 2; do \
+		openssl genrsa -out $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.key 2048 2>/dev/null; \
+		openssl req -new -key $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.key -out $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.csr -subj "/CN=p12cert$$i.example.com" 2>/dev/null; \
+		openssl x509 -req -in $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.csr -CA $(EXAMPLE_DIR)/example-certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/example-certs/ca.key -out $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.pem -days 365 2>/dev/null; \
+		openssl pkcs12 -export -out $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.p12 -inkey $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.key -in $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.pem -passout pass:changeit 2>/dev/null; \
+		rm -f $(EXAMPLE_DIR)/example-certs/p12_cert_$$i.csr; \
+	done
+
+	@echo "✅ Example certificates generated in $(EXAMPLE_DIR)/example-certs/"
 
 # Database/Migration helpers (if needed in future)
 .PHONY: migrate-up

@@ -10,7 +10,7 @@ bind_address: "0.0.0.0"
 
 # Certificate monitoring
 certificate_directories:
-  - "/home/bhoneycutt/Projects/Personal/CERT/cert-monitor.bak/test/fixtures/certificates"
+  - "/home/bhoneycutt/Projects/Personal/CERT/cert-monitor/test/fixtures/example-certs"
   # - "/home/bhoneycutt/Projects/Midway/Certs"
   # Add more directories as needed
 
