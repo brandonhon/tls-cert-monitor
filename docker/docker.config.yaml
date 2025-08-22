@@ -10,12 +10,11 @@ bind_address: "0.0.0.0"
 
 # Certificate monitoring
 certificate_directories:
-  - "/home/bhoneycutt/Projects/Personal/CERT/cert-monitor/test/fixtures/example-certs"
-  # - "/home/bhoneycutt/Projects/Midway/Certs"
+  - "/app/certs"
   # Add more directories as needed
 
 # Scan interval (how often to scan for certificates)
-scan_interval: "1m"
+scan_interval: "5m"
 
 # Performance settings
 workers: 4
@@ -29,6 +28,6 @@ dry_run: false
 hot_reload: true
 
 # Cache settings
-cache_dir: "./cache"
+cache_dir: "/app/cache"
 cache_ttl: "1h"
 cache_max_size: 104857600  # 100MB in bytes

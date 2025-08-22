@@ -39,10 +39,10 @@ WORKDIR /app
 COPY --from=builder /app/tls-cert-monitor .
 
 # Copy configuration file
-COPY config.yaml .
+COPY ./docker/docker.config.yaml ./config.yaml
 
 # Create directories with correct permissions
-RUN mkdir -p /app/cache /app/logs && \
+RUN mkdir -p /app/cache /app/logs /app/certs && \
     chown -R appuser:appgroup /app
 
 # Switch to non-root user

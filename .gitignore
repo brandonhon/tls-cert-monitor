@@ -58,7 +58,7 @@ config.yaml
 certs/
 certificates/
 test-certs/
-test/fixtures/example-certs
+test/fixtures/
 
 # Temporary files
 tmp/
