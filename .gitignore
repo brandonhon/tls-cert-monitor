@@ -1,0 +1,120 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+tls-cert-monitor
+tls-cert-monitor-*
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.xml
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build directories
+bin/
+dist/
+build/
+
+# Log files
+*.log
+logs/
+
+# Cache files
+cache.json
+*.cache
+
+# Configuration files (keep examples)
+config.yaml
+!config.yaml.example
+
+# Certificate directories for testing
+certs/
+certificates/
+test-certs/
+test/fixtures/example-certs
+
+# Temporary files
+tmp/
+temp/
+
+# Docker
+.dockerignore
+
+# Kubernetes
+*.kubeconfig
+
+# Prometheus/Grafana
+prometheus/
+grafana/data/
+
+# Runtime files
+*.pid
+*.sock
+
+# Backup files
+*.bak
+*.backup
+
+# Archives
+*.tar.gz
+*.zip
+*.7z
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Node modules (if using any JS tooling)
+node_modules/
+
+# Python (if using any Python tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+
+# Terraform (if using for deployment)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local development
+local/
+dev/
+
+# Documentation build
+site/
+_site/
+
+# Release files
+checksums.txt
+release-notes.md

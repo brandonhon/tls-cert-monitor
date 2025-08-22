@@ -257,6 +257,27 @@ func TestIssuerClassification(t *testing.T) {
 							actualCode := int(*metric.Gauge.Value)
 							if actualCode == tt.expectedCode {
 								foundExpectedCode = true
+
+								// Also check that we have the new labels
+								hasCommonName := false
+								hasFileName := false
+								for _, label := range metric.GetLabel() {
+									if label.GetName() == "common_name" && label.GetValue() != "" {
+										hasCommonName = true
+										t.Logf("Found common_name: %s", label.GetValue())
+									}
+									if label.GetName() == "file_name" && label.GetValue() != "" {
+										hasFileName = true
+										t.Logf("Found file_name: %s", label.GetValue())
+									}
+								}
+
+								if !hasCommonName {
+									t.Error("Expected common_name label to be present")
+								}
+								if !hasFileName {
+									t.Error("Expected file_name label to be present")
+								}
 								break
 							}
 						}

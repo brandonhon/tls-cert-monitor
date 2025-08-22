@@ -415,9 +415,18 @@ func (s *Scanner) updateMetrics(certInfo *CertificateInfo) {
 		certInfo.SignatureAlgorithm,
 	)
 
-	// Issuer classification
+	// Extract common name from subject
+	commonName := extractCommonName(certInfo.Subject)
+	if commonName == "" {
+		commonName = "unknown"
+	}
+
+	// Extract filename from path
+	fileName := filepath.Base(certInfo.Path)
+
+	// Issuer classification with additional labels
 	issuerCode := s.classifyIssuer(certInfo.Issuer)
-	s.metrics.SetCertIssuerCode(certInfo.Issuer, float64(issuerCode))
+	s.metrics.SetCertIssuerCodeWithLabels(certInfo.Issuer, commonName, fileName, float64(issuerCode))
 }
 
 // classifyIssuer classifies certificate issuer with updated classification codes
@@ -508,6 +517,19 @@ func (s *Scanner) isCertificateFile(path string) bool {
 	}
 
 	return false
+}
+
+// extractCommonName extracts the common name from a certificate subject string
+func extractCommonName(subject string) string {
+	// Subject format is typically: CN=example.com,O=Organization,C=US
+	parts := strings.Split(subject, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(strings.ToUpper(part), "CN=") {
+			return strings.TrimSpace(part[3:]) // Remove "CN=" prefix
+		}
+	}
+	return ""
 }
 
 // handleFileChange handles certificate file changes

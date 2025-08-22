@@ -120,9 +120,9 @@ func generateSelfSignedCertificate(t *testing.T, keySize int, notAfter time.Time
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			Organization:  []string{"Self-Signed Org"},
-			Country:       []string{"US"},
-			CommonName:    "self-signed.example.com",
+			Organization: []string{"Self-Signed Org"},
+			Country:      []string{"US"},
+			CommonName:   "self-signed.example.com",
 		},
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              notAfter,
@@ -183,7 +183,7 @@ type CertificateTestSet struct {
 // createCertificateTestSet creates a comprehensive set of test certificates
 func createCertificateTestSet(t *testing.T) *CertificateTestSet {
 	validCert := createValidCertificate(t)
-	
+
 	return &CertificateTestSet{
 		ValidCert:      validCert,
 		WeakKeyCert:    createWeakKeyCertificate(t),
@@ -206,32 +206,32 @@ type MetricValue struct {
 func parsePrometheusMetrics(content string) []MetricValue {
 	var metrics []MetricValue
 	lines := strings.Split(content, "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip comments and empty lines
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 		// Find the metric name and value
 		// Handle both cases: metric_name{labels} value and metric_name value
 		var metricName string
 		var labelsStr string
 		var valueStr string
-		
+
 		if strings.Contains(line, "{") {
 			// Has labels: metric_name{labels} value
 			openBrace := strings.Index(line, "{")
 			metricName = line[:openBrace]
-			
+
 			// Find the closing brace by counting braces (handles nested quotes)
 			braceCount := 0
 			closeBrace := -1
 			inQuotes := false
 			var escapeNext bool
-			
+
 			for i := openBrace; i < len(line); i++ {
 				char := line[i]
 				if escapeNext {
@@ -258,14 +258,14 @@ func parsePrometheusMetrics(content string) []MetricValue {
 					}
 				}
 			}
-			
+
 			if closeBrace == -1 {
 				continue // Malformed line
 			}
-			
+
 			labelsStr = line[openBrace+1 : closeBrace]
 			remainingLine := strings.TrimSpace(line[closeBrace+1:])
-			
+
 			// Extract value (everything after the closing brace)
 			fields := strings.Fields(remainingLine)
 			if len(fields) > 0 {
@@ -279,91 +279,91 @@ func parsePrometheusMetrics(content string) []MetricValue {
 				valueStr = fields[1]
 			}
 		}
-		
+
 		if metricName == "" || valueStr == "" {
 			continue
 		}
-		
+
 		// Parse value (handle scientific notation)
 		value, err := strconv.ParseFloat(valueStr, 64)
 		if err != nil {
 			continue
 		}
-		
+
 		// Parse labels
 		labels := make(map[string]string)
 		if labelsStr != "" {
 			labels = parseLabels(labelsStr)
 		}
-		
+
 		metrics = append(metrics, MetricValue{
 			Name:   metricName,
 			Labels: labels,
 			Value:  value,
 		})
 	}
-	
+
 	return metrics
 }
 
 // parseLabels parses the label string inside braces
 func parseLabels(labelsStr string) map[string]string {
 	labels := make(map[string]string)
-	
+
 	// Split by commas, but respect quoted values
 	var parts []string
 	var current strings.Builder
 	inQuotes := false
 	var escapeNext bool
-	
+
 	for _, char := range labelsStr {
 		if escapeNext {
 			current.WriteRune(char)
 			escapeNext = false
 			continue
 		}
-		
+
 		if char == '\\' {
 			escapeNext = true
 			current.WriteRune(char)
 			continue
 		}
-		
+
 		if char == '"' {
 			inQuotes = !inQuotes
 			current.WriteRune(char)
 			continue
 		}
-		
+
 		if char == ',' && !inQuotes {
 			parts = append(parts, current.String())
 			current.Reset()
 			continue
 		}
-		
+
 		current.WriteRune(char)
 	}
-	
+
 	// Add the last part
 	if current.Len() > 0 {
 		parts = append(parts, current.String())
 	}
-	
+
 	// Parse each part as key="value"
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		
+
 		eqIndex := strings.Index(part, "=")
 		if eqIndex == -1 {
 			continue
 		}
-		
+
 		key := strings.TrimSpace(part[:eqIndex])
 		valueWithQuotes := strings.TrimSpace(part[eqIndex+1:])
-		
+
 		// Remove surrounding quotes
 		value := valueWithQuotes
 		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
@@ -372,10 +372,10 @@ func parseLabels(labelsStr string) map[string]string {
 			value = strings.ReplaceAll(value, `\"`, `"`)
 			value = strings.ReplaceAll(value, `\\`, `\`)
 		}
-		
+
 		labels[key] = value
 	}
-	
+
 	return labels
 }
 
@@ -440,7 +440,7 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	privSubject, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +448,7 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 
 	// Parse the issuer string into a pkix.Name
 	issuer := parseDN(issuerStr)
-	
+
 	// Create subject (different from issuer)
 	subject := pkix.Name{
 		CommonName:   "test-subject.example.com",
@@ -458,15 +458,15 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 
 	// Create issuer certificate template
 	issuerTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      issuer,
-		Issuer:       issuer, // Self-signed issuer
-		NotBefore:    time.Now().Add(-48 * time.Hour),
-		NotAfter:     time.Now().Add(2 * 365 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		SerialNumber:          big.NewInt(1),
+		Subject:               issuer,
+		Issuer:                issuer, // Self-signed issuer
+		NotBefore:             time.Now().Add(-48 * time.Hour),
+		NotAfter:              time.Now().Add(2 * 365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 	}
 
 	// Create the issuer certificate (self-signed)
@@ -474,7 +474,7 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Parse the issuer certificate
 	issuerCert, err := x509.ParseCertificate(issuerCertDER)
 	if err != nil {
@@ -483,15 +483,15 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 
 	// Create subject certificate template
 	subjectTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(2),
-		Subject:      subject,
-		Issuer:       issuer, // This will be the custom issuer we want
-		NotBefore:    time.Now().Add(-24 * time.Hour),
-		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		SerialNumber:          big.NewInt(2),
+		Subject:               subject,
+		Issuer:                issuer, // This will be the custom issuer we want
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		DNSNames:     []string{"test-subject.example.com"},
+		DNSNames:              []string{"test-subject.example.com"},
 	}
 
 	// Create the subject certificate signed by the issuer
@@ -509,7 +509,7 @@ func createCertificateWithIssuer(t *testing.T, issuerStr string) []byte {
 // parseDN parses a distinguished name string into pkix.Name
 func parseDN(dn string) pkix.Name {
 	name := pkix.Name{}
-	
+
 	// Split by commas and parse each component
 	parts := strings.Split(dn, ",")
 	for _, part := range parts {
@@ -517,16 +517,16 @@ func parseDN(dn string) pkix.Name {
 		if part == "" {
 			continue
 		}
-		
+
 		// Split by = to get key and value
 		kvParts := strings.SplitN(part, "=", 2)
 		if len(kvParts) != 2 {
 			continue
 		}
-		
+
 		key := strings.TrimSpace(kvParts[0])
 		value := strings.TrimSpace(kvParts[1])
-		
+
 		switch strings.ToUpper(key) {
 		case "CN":
 			name.CommonName = value
@@ -542,6 +542,39 @@ func parseDN(dn string) pkix.Name {
 			name.Province = append(name.Province, value)
 		}
 	}
-	
+
 	return name
+}
+
+// createCertificateWithCustomSubject creates a certificate with a custom subject string
+func createCertificateWithCustomSubject(t *testing.T, subjectStr string) []byte {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Parse the subject string into a pkix.Name
+	subject := parseDN(subjectStr)
+
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               subject, // Use custom subject
+		Issuer:                subject, // Self-signed
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"test.example.com"},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
 }
