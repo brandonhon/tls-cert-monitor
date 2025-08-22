@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourusername/tls-cert-monitor/internal/config"
+	"github.com/brandonhon/tls-cert-monitor/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

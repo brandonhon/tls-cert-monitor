@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourusername/tls-cert-monitor/internal/config"
-	"github.com/yourusername/tls-cert-monitor/internal/health"
-	"github.com/yourusername/tls-cert-monitor/internal/logger"
-	"github.com/yourusername/tls-cert-monitor/internal/metrics"
-	"github.com/yourusername/tls-cert-monitor/internal/server"
+	"github.com/brandonhon/tls-cert-monitor/internal/config"
+	"github.com/brandonhon/tls-cert-monitor/internal/health"
+	"github.com/brandonhon/tls-cert-monitor/internal/logger"
+	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
+	"github.com/brandonhon/tls-cert-monitor/internal/server"
 )
 
 func TestServerEndpoints(t *testing.T) {

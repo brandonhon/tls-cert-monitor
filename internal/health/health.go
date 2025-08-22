@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yourusername/tls-cert-monitor/internal/cache"
-	"github.com/yourusername/tls-cert-monitor/internal/config"
-	"github.com/yourusername/tls-cert-monitor/internal/metrics"
+	"github.com/brandonhon/tls-cert-monitor/internal/cache"
+	"github.com/brandonhon/tls-cert-monitor/internal/config"
+	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
 )
 
 // Status represents health check status

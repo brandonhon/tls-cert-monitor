@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/yourusername/tls-cert-monitor/internal/config"
-	"github.com/yourusername/tls-cert-monitor/internal/health"
-	"github.com/yourusername/tls-cert-monitor/internal/metrics"
+	"github.com/brandonhon/tls-cert-monitor/internal/config"
+	"github.com/brandonhon/tls-cert-monitor/internal/health"
+	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
 	"go.uber.org/zap"
 )
 

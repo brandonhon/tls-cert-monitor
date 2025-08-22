@@ -1,4 +1,4 @@
-module github.com/yourusername/tls-cert-monitor
+module github.com/brandonhon/tls-cert-monitor
 
 go 1.21
 
