@@ -117,7 +117,7 @@ func (s *Scanner) Scan(ctx context.Context) error {
 				return nil
 			}
 
-			// Check if file is a certificate
+			// Check if file is a certificate (this now excludes private keys)
 			if !s.isCertificateFile(path) {
 				return nil
 			}
@@ -495,27 +495,49 @@ func (s *Scanner) classifyIssuer(issuer string) int {
 	return 32 // Other
 }
 
-// isCertificateFile checks if a file is likely a certificate
+// isCertificateFile checks if a file is likely a certificate (excluding private keys)
 func (s *Scanner) isCertificateFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	certExts := []string{".pem", ".crt", ".cer", ".cert", ".der", ".p7b", ".p7c", ".pfx", ".p12"}
+	basename := strings.ToLower(filepath.Base(path))
 
+	// FIRST: Exclude private key files by extension
+	privateKeyExts := []string{".key", ".pem.key", ".private", ".priv"}
+	for _, keyExt := range privateKeyExts {
+		if ext == keyExt {
+			s.logger.Debug("Excluding private key file by extension", zap.String("path", path), zap.String("extension", ext))
+			return false
+		}
+	}
+
+	// SECOND: Exclude private key files by name patterns
+	if strings.Contains(basename, "private") ||
+		strings.Contains(basename, ".key") ||
+		strings.Contains(basename, "_key") ||
+		strings.Contains(basename, "-key") ||
+		strings.HasSuffix(basename, "key.pem") {
+		s.logger.Debug("Excluding private key file by name pattern", zap.String("path", path), zap.String("basename", basename))
+		return false
+	}
+
+	// THIRD: Check for certificate extensions
+	certExts := []string{".pem", ".crt", ".cer", ".cert", ".der", ".p7b", ".p7c", ".pfx", ".p12"}
 	for _, certExt := range certExts {
 		if ext == certExt {
+			s.logger.Debug("Including certificate file by extension", zap.String("path", path), zap.String("extension", ext))
 			return true
 		}
 	}
 
-	// Check filename patterns
-	basename := strings.ToLower(filepath.Base(path))
-	patterns := []string{"cert", "certificate", "chain", "bundle"}
-
-	for _, pattern := range patterns {
+	// FOURTH: Check filename patterns for certificates
+	certPatterns := []string{"cert", "certificate", "chain", "bundle", "ca-cert", "cacert"}
+	for _, pattern := range certPatterns {
 		if strings.Contains(basename, pattern) {
+			s.logger.Debug("Including certificate file by name pattern", zap.String("path", path), zap.String("pattern", pattern))
 			return true
 		}
 	}
 
+	s.logger.Debug("File does not match certificate patterns", zap.String("path", path))
 	return false
 }
 

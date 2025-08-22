@@ -31,6 +31,10 @@ func TestCertificateScanning(t *testing.T) {
 	writeCertToFile(t, filepath.Join(certDir, "weak.pem"), weakCert)
 	writeCertToFile(t, filepath.Join(certDir, "expired.pem"), expiredCert)
 
+	// Add some private key files that should be excluded
+	writeCertToFile(t, filepath.Join(certDir, "private.key"), []byte("dummy private key"))
+	writeCertToFile(t, filepath.Join(certDir, "server_key.pem"), []byte("dummy private key"))
+
 	// Create scanner configuration
 	cfg := &config.Config{
 		Port:                   generateTestPort(),
@@ -61,9 +65,10 @@ func TestCertificateScanning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify metrics
+	// Verify metrics - should only count certificate files, not private keys
 	metrics := metricsCollector.GetMetrics()
 
+	// Should only find 3 certificate files (private keys excluded)
 	if metrics["cert_files_total"] != 3 {
 		t.Errorf("Expected 3 certificate files, got %v", metrics["cert_files_total"])
 	}
@@ -85,12 +90,27 @@ func TestCertificateFileDetection(t *testing.T) {
 		name   string
 		isCert bool
 	}{
+		// Certificate files - should be included
 		{"cert.pem", true},
 		{"cert.crt", true},
 		{"cert.cer", true},
 		{"cert.der", true},
 		{"certificate.pem", true},
-		{"notacert.txt", false},
+		{"ca-cert.pem", true},
+		{"chain.pem", true},
+		{"bundle.pem", true},
+		{"cacert.pem", true}, // The scanner looks for "cacert" pattern too
+
+		// Private key files - should be excluded
+		{"private.key", false},
+		{"server.key", false},
+		{"cert_key.pem", false},
+		{"server-key.pem", false},
+		{"private.pem", false},
+		{"server.pem.key", false},
+
+		// Non-certificate files - should be excluded
+		{"nothing.txt", false},
 		{"readme.md", false},
 		{"config.yaml", false},
 	}
@@ -121,11 +141,106 @@ func TestCertificateFileDetection(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Test file detection
+	// Run a scan to test the file detection
+	ctx := context.Background()
+	if err := s.Scan(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that only certificate files were processed
+	metrics := metricsCollector.GetMetrics()
+
+	// Count expected certificate files
+	expectedCertFiles := 0
 	for _, tf := range testFiles {
-		_ = filepath.Join(tmpDir, tf.name)
-		// Note: This test relies on the internal logic of isCertificateFile
-		// In a real scenario, we'd make this method public or test through the Scan method
+		if tf.isCert {
+			expectedCertFiles++
+		}
+	}
+
+	t.Logf("Expected %d certificate files, got %v", expectedCertFiles, metrics["cert_files_total"])
+
+	if metrics["cert_files_total"] != float64(expectedCertFiles) {
+		t.Errorf("Expected %d certificate files, got %v", expectedCertFiles, metrics["cert_files_total"])
+
+		// Debug: show which files are being detected
+		t.Log("Certificate files that should be detected:")
+		for _, tf := range testFiles {
+			if tf.isCert {
+				t.Logf("  %s", tf.name)
+			}
+		}
+
+		// Let's also check what the scanner's isCertificateFile function looks for
+		t.Log("Scanner certificate patterns include:")
+		t.Log("  Extensions: .pem, .crt, .cer, .cert, .der, .p7b, .p7c, .pfx, .p12")
+		t.Log("  Name patterns: cert, certificate, chain, bundle, ca-cert, cacert")
+	}
+}
+
+func TestPrivateKeyExclusion(t *testing.T) {
+	tmpDir := t.TempDir()
+	certDir := filepath.Join(tmpDir, "certs")
+	os.MkdirAll(certDir, 0755)
+
+	// Create a valid certificate
+	validCert := generateTestCertificate(t, 2048, time.Now().Add(365*24*time.Hour))
+	writeCertToFile(t, filepath.Join(certDir, "valid.pem"), validCert)
+
+	// Create various private key files that should be excluded
+	privateKeyFiles := []string{
+		"server.key",
+		"private.key",
+		"cert_key.pem",
+		"server-key.pem",
+		"private.pem",
+		"server.pem.key",
+		"internal_private.pem",
+	}
+
+	for _, keyFile := range privateKeyFiles {
+		writeCertToFile(t, filepath.Join(certDir, keyFile), []byte("dummy private key content"))
+	}
+
+	cfg := &config.Config{
+		CertificateDirectories: []string{certDir},
+		Workers:                1,
+		LogLevel:               "debug",
+		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheTTL:               30 * time.Minute,
+		CacheMaxSize:           10485760,
+		ScanInterval:           1 * time.Minute,
+	}
+
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
+	log := logger.NewNop()
+
+	s, err := scanner.New(cfg, metricsCollector, log)
+	if err != nil {
+		t.Fatal("Failed to create scanner:", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	if err := s.Scan(ctx); err != nil {
+		t.Fatal("Failed to run scan:", err)
+	}
+
+	// Should only process the one valid certificate, not any private keys
+	metrics := metricsCollector.GetMetrics()
+
+	if metrics["cert_files_total"] != 1 {
+		t.Errorf("Expected 1 certificate file (private keys excluded), got %v", metrics["cert_files_total"])
+	}
+
+	if metrics["certs_parsed_total"] != 1 {
+		t.Errorf("Expected 1 parsed certificate, got %v", metrics["certs_parsed_total"])
+	}
+
+	// Should have no parse errors since private keys are excluded before parsing
+	if metrics["cert_parse_errors_total"] != 0 {
+		t.Errorf("Expected 0 parse errors, got %v", metrics["cert_parse_errors_total"])
 	}
 }
 

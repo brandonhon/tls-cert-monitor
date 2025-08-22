@@ -1,3 +1,5 @@
+// internal/metrics/metrics.go
+
 package metrics
 
 import (
@@ -89,7 +91,7 @@ func createCollector(reg prometheus.Registerer) *Collector {
 				Name: "ssl_cert_issuer_code",
 				Help: "Numeric issuer classification",
 			},
-			[]string{"issuer"},
+			[]string{"issuer", "common_name", "file_name"},
 		),
 
 		// Security metrics
@@ -218,9 +220,14 @@ func (c *Collector) SetCertDuplicateCount(fingerprint string, count float64) {
 	c.certDuplicateCount.WithLabelValues(fingerprint).Set(count)
 }
 
-// SetCertIssuerCode sets issuer code metric
+// SetCertIssuerCode sets issuer code metric (legacy method for backward compatibility)
 func (c *Collector) SetCertIssuerCode(issuer string, code float64) {
-	c.certIssuerCode.WithLabelValues(issuer).Set(code)
+	c.certIssuerCode.WithLabelValues(issuer, "", "").Set(code)
+}
+
+// SetCertIssuerCodeWithLabels sets issuer code metric with additional labels
+func (c *Collector) SetCertIssuerCodeWithLabels(issuer, commonName, fileName string, code float64) {
+	c.certIssuerCode.WithLabelValues(issuer, commonName, fileName).Set(code)
 }
 
 // SetWeakKeyTotal sets weak key total metric

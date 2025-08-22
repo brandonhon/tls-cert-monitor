@@ -145,7 +145,6 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@rm -rf $(DIST_DIR)
 	@rm -rf $(COVERAGE_DIR)
-	@rm -rf $(EXAMPLE_DIR)
 	@rm -rf vendor/
 
 .PHONY: clean-cache
