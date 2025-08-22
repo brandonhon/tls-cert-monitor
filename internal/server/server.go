@@ -11,26 +11,40 @@ import (
 	"github.com/brandonhon/tls-cert-monitor/internal/config"
 	"github.com/brandonhon/tls-cert-monitor/internal/health"
 	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	config  *config.Config
-	metrics *metrics.Collector
-	health  *health.Checker
-	logger  *zap.Logger
-	server  *http.Server
+	config   *config.Config
+	metrics  *metrics.Collector
+	health   *health.Checker
+	logger   *zap.Logger
+	server   *http.Server
+	registry *prometheus.Registry
 }
 
 // New creates a new HTTP server
 func New(cfg *config.Config, metrics *metrics.Collector, health *health.Checker, logger *zap.Logger) *Server {
 	return &Server{
-		config:  cfg,
-		metrics: metrics,
-		health:  health,
-		logger:  logger,
+		config:   cfg,
+		metrics:  metrics,
+		health:   health,
+		logger:   logger,
+		registry: nil, // Will use default prometheus.Handler()
+	}
+}
+
+// NewWithRegistry creates a new HTTP server with a custom registry
+func NewWithRegistry(cfg *config.Config, metrics *metrics.Collector, health *health.Checker, logger *zap.Logger, registry *prometheus.Registry) *Server {
+	return &Server{
+		config:   cfg,
+		metrics:  metrics,
+		health:   health,
+		logger:   logger,
+		registry: registry,
 	}
 }
 
@@ -41,8 +55,17 @@ func (s *Server) Start() error {
 	// Health check endpoint
 	mux.HandleFunc("/healthz", s.handleHealth)
 
-	// Metrics endpoint
-	mux.Handle("/metrics", promhttp.Handler())
+	// Metrics endpoint - use HandlerFor with the custom registry if provided
+	if s.registry != nil {
+		mux.Handle("/metrics", promhttp.HandlerFor(
+			s.registry,
+			promhttp.HandlerOpts{
+				ErrorHandling: promhttp.ContinueOnError,
+			},
+		))
+	} else {
+		mux.Handle("/metrics", promhttp.Handler())
+	}
 
 	// Root endpoint
 	mux.HandleFunc("/", s.handleRoot)

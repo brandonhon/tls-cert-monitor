@@ -34,7 +34,7 @@ func TestServerEndpoints(t *testing.T) {
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
-	srv := server.New(cfg, metricsCollector, healthChecker, log)
+	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 
 	// Start server
 	go func() {
@@ -103,7 +103,7 @@ func TestHealthEndpoint(t *testing.T) {
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
-	srv := server.New(cfg, metricsCollector, healthChecker, log)
+	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 
 	// Start server
 	go func() {
@@ -201,7 +201,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	metricsCollector.SetCertsParsedTotal(8)
 	metricsCollector.SetCertParseErrorsTotal(2)
 
-	srv := server.New(cfg, metricsCollector, healthChecker, log)
+	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 
 	// Start server
 	go func() {
@@ -272,7 +272,7 @@ func TestGracefulShutdown(t *testing.T) {
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
 
-	srv := server.New(cfg, metricsCollector, healthChecker, log)
+	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 
 	// Start server
 	serverErr := make(chan error, 1)
