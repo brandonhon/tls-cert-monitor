@@ -8,12 +8,13 @@ services:
     ports:
       - "3200:3200"
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ./docker/docker.config.yaml:/app/config.yaml:ro
       - ./logs:/app/logs
       - ./cache:/app/cache
       # Mount certificate directories for monitoring
-      - /etc/ssl/certs:/etc/ssl/certs:ro
-      - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
+      # - /etc/ssl/certs:/etc/ssl/certs:ro
+      # - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
+      - $PWD/test/fixtures/certs:/app/certs
     environment:
       - TLS_MONITOR_LOG_LEVEL=info
       - TLS_MONITOR_HOT_RELOAD=true
@@ -31,7 +32,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'

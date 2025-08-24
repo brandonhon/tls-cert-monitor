@@ -6,6 +6,7 @@ SHELL := /bin/bash
 # Build variables
 BINARY_NAME=tls-cert-monitor
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+IMAGE_TAG ?= $(shell git describe --tags --always 2>/dev/null || echo "dev")
 BUILD_TIME ?= $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GO_VERSION := $(shell go version | cut -d' ' -f3)
@@ -173,6 +174,21 @@ clean-all: clean clean-cache ## Clean everything including configs, examples and
 	@rm -rf $(EXAMPLE_DIR)/*
 	@echo "✅ All generated files cleaned"
 
+.PHONY: clean-docker
+clean-docker: ## Clean docker images and containers
+	@echo "🐳 Cleaning docker images and containers..."
+	@DOCKER_IMAGE_ID=$$(docker images -q $(BINARY_NAME)); \
+	if [ -n "$$DOCKER_IMAGE_ID" ]; then \
+		echo "🐳 Cleaning docker image: $(BINARY_NAME)"; \
+	    docker rmi -f $$DOCKER_IMAGE_ID; \
+		echo "✅ Removed docker image: $(BINARY_NAME)"; \
+		echo "🐳 Cleaning containers and build objects"; \
+		docker system prune -f; \
+		echo "✅ Containers and build objects cleaned"; \
+	else \
+		echo "⛔ Docker image $(BINARY_NAME) not found"; \
+	fi
+
 .PHONY: clean-cache
 clean-cache: ## Clean go build cache
 	@echo "🗄️ Cleaning go cache..."
@@ -208,7 +224,6 @@ install: build ## Install binary in $GOPATH/bin
 docker: ## Build Docker image
 	@echo "🐳 Building Docker image..."
 	docker build -f $(PWD)/docker/Dockerfile -t $(BINARY_NAME):$(VERSION) .
-# 	docker build -f $(PWD)/docker/Dockerfile -t $(BINARY_NAME):latest .
 	docker tag $(BINARY_NAME):$(VERSION) $(BINARY_NAME):latest
 	@echo "✅ Docker image built: $(BINARY_NAME):$(VERSION)"
 
@@ -225,21 +240,21 @@ docker-run: certs docker ## Run in Docker container
 release: clean deps test
 	@echo "Building release binaries..."
 	@mkdir -p $(DIST_DIR)
-	
+
 	# Linux
 	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 .
 	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 .
-	
+
 	# macOS
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
-	
+
 	# Windows
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe .
-	
+
 	# Create checksums
 	cd $(DIST_DIR) && sha256sum * > checksums.txt
-	
+
 	@echo "Release binaries created in $(DIST_DIR)/"
 
 # Development helpers
