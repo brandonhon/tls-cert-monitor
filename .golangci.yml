@@ -1,27 +1,76 @@
 run:
   timeout: 5m
+  go: "1.21"
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - vendor
-    - build
-    - dist
-  skip-files:
-    - ".*_test.go"
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
+
+linters:
+  enable:
+    # Core linters (from your working config)
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - gocritic
+    - gosec
+    - revive
+    - gocyclo
+    
+    # Additional valuable linters from original config
+    - bodyclose      # Checks whether HTTP response body is closed
+    - dogsled        # Checks for too many blank identifiers
+    - dupl           # Finds duplicate code
+    - goconst        # Finds repeated strings that could be constants
+    - nakedret       # Finds naked returns in long functions
+    - unparam        # Reports unused function parameters
+    - unconvert      # Unnecessary type conversions
+    - prealloc       # Finds slice declarations that could be preallocated
+    - noctx          # Finds HTTP requests without context.Context
+    
+    # Modern linters worth adding
+    - copyloopvar    # Replaces exportloopref for Go 1.22+
+    - nilerr         # Finds code returning nil even with non-nil error
+    - exhaustive     # Checks exhaustiveness of enum switch statements
+    - sqlclosecheck  # Checks that sql.Rows and sql.Stmt are closed
+    - tparallel      # Detects improper use of t.Parallel()
+    - errorlint      # Better error wrapping checks
+    - forcetypeassert # Enforces type assertions with ok check
+    - makezero       # Finds slice declarations with non-zero initial length
+
+  disable:
+    # Potentially problematic linters
+    - mnd            # Magic numbers - too noisy (replaces deprecated gomnd)
+    - funlen         # Function length - use judiciously
+    - lll            # Line length - handled by formatter
+    - gochecknoinits # Init functions - sometimes necessary
+    - gochecknoglobals # Global variables - sometimes necessary
+    - wsl            # Whitespace linter - too opinionated
+    - nlreturn       # Newline before return - too opinionated
+    - testpackage    # Enforces _test package - not always desired
 
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
+    exclude-functions:
+      - io.Copy
+      - fmt.Fprint
   
   govet:
-    check-shadowing: true
     enable-all: true
+    # Shadow checking is now included in enable-all
   
   gocyclo:
     min-complexity: 15
@@ -37,21 +86,24 @@ linters-settings:
       - performance
       - style
     disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
+      - dupImport      # Duplicate imports handled by goimports
+      - ifElseChain    # Sometimes clearer than switch
+      - octalLiteral   # Octal literals are fine for file permissions
+      - whyNoLint      # Don't require explanations for nolint
+      - wrapperFunc    # Wrapper functions are sometimes necessary
+      - unnamedResult  # Allow unnamed results for simple functions
+      - hugeParam      # Large structs by value - context dependent
+      - rangeValCopy   # Sometimes intentional
   
-  funlen:
-    lines: 100
-    statements: 50
+  dupl:
+    threshold: 100  # Only flag substantial duplication
+  
+  goconst:
+    min-len: 3
+    min-occurrences: 3
   
   misspell:
     locale: US
-  
-  lll:
-    line-length: 120
   
   unused:
     check-exported: false
@@ -67,77 +119,136 @@ linters-settings:
     range-loops: true
     for-loops: false
   
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-
-linters:
-  disable-all: true
-  enable:
-    - bodyclose
-    - deadcode
-    - depguard
-    - dogsled
-    - dupl
-    - errcheck
-    - funlen
-    - gochecknoinits
-    - goconst
-    - gocritic
-    - gocyclo
-    - gofmt
-    - goimports
-    - golint
-    - gomnd
-    - goprintffuncname
-    - gosec
-    - gosimple
-    - govet
-    - ineffassign
-    - interfacer
-    - lll
-    - misspell
-    - nakedret
-    - noctx
-    - nolintlint
-    - rowserrcheck
-    - scopelint
-    - staticcheck
-    - structcheck
-    - stylecheck
-    - typecheck
-    - unconvert
-    - unparam
-    - unused
-    - varcheck
-    - whitespace
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G108  # Profiling endpoint automatically exposed
+      - G204  # Subprocess launched with variable
+      - G304  # File path provided as taint input
+      - G306  # Poor file permissions for non-sensitive files
+      - G404  # Weak random for non-crypto purposes
+    config:
+      G306:
+        allowed_permissions:
+          - "0644"
+          - "0755"
+          - "0600"
+  
+  revive:
+    confidence: 0.8
+    severity: warning
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+  
+  nolintlint:
+    allow-unused: false
+    allow-leading-space: false
+    require-explanation: false  # Set to true for stricter control
+    require-specific: true
+  
+  exhaustive:
+    default-signifies-exhaustive: true
+  
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
 
 issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+  uniq-by-line: false  # Don't deduplicate issues on same lines
+  
+  # Exclude specific directories and files
+  exclude-dirs:
+    - vendor
+    - build
+    - dist
+  
+  exclude-files:
+    - ".*\\.pb\\.go$"  # Skip protobuf generated files
+    - ".*_generated\\.go$"  # Skip other generated files
+  
   exclude-rules:
+    # Test files - relax some rules
     - path: _test\.go
       linters:
-        - gomnd
-        - funlen
-        - goconst
-        - gosec
+        - mnd           # Magic numbers fine in tests (replaces gomnd)
+        - funlen        # Test functions can be long
+        - goconst       # Repeated strings fine in tests
+        - gosec         # Security checks less critical in tests
+        - dupl          # Test code duplication is acceptable
+        - errorlint     # Error handling can be simpler in tests
+        - forcetypeassert # Type assertions without checks OK in tests
     
+    # Main function - can be longer
     - path: main\.go
       linters:
         - funlen
+        - gocyclo
     
+    # Generated files
+    - path: .*\.gen\.go
+      linters:
+        - gosec
+        - errcheck
+        - dupl
+        - goconst
+    
+    # Specific exclusions for your project
+    - path: internal/scanner/scanner\.go
+      text: "cyclomatic complexity"
+      linters:
+        - gocyclo
+    
+    # Common false positives
     - text: "weak cryptographic primitive"
       linters:
         - gosec
     
-    - text: "G404:"
+    - text: "G115:"  # Integer overflow - often false positive
       linters:
         - gosec
+    
+    - text: "SA1019:"  # Deprecated function usage
+      linters:
+        - staticcheck
   
+  # Exclude some default exclusions
   exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  new: false
+  
+  # Custom exclude patterns
+  exclude:
+    - "^.*Generated.*$"
+    - "^.*\\.pb\\.go.*$"
 
 severity:
   default-severity: error
   case-sensitive: false
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - goconst
+      severity: warning

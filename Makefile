@@ -172,6 +172,7 @@ clean-all: clean clean-cache ## Clean everything including configs, examples and
 	@echo "🧹 Cleaning all generated files..."
 	@rm -rf $(CACHE_DIR)
 	@rm -rf $(EXAMPLE_DIR)/*
+	@rm -rf ./docker/{cache,logs}
 	@echo "✅ All generated files cleaned"
 
 .PHONY: clean-docker
