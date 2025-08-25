@@ -12,9 +12,8 @@ services:
       - ./logs:/app/logs
       - ./cache:/app/cache
       # Mount certificate directories for monitoring
-      # - /etc/ssl/certs:/etc/ssl/certs:ro
-      # - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
-      - $PWD/test/fixtures/certs:/app/certs
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
     environment:
       - TLS_MONITOR_LOG_LEVEL=info
       - TLS_MONITOR_HOT_RELOAD=true

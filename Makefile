@@ -189,6 +189,16 @@ clean-docker: ## Clean docker images and containers
 		echo "⛔ Docker image $(BINARY_NAME) not found"; \
 	fi
 
+# .PHONY: clean-compose
+# clean-compose: ## Clean compose stack (stop, purge containers, images, networks, volumes, directories)
+# 	@echo "🐳 Cleaning compose stack..."
+# 	@mkdir -p ./docker/logs ./docker/cache
+# 	docker compose -f docker-compose.dev.yml --profile monitoring up -d
+# 	@echo "tls-cert-monitor available at: http://localhost:3200/"
+# 	@echo "Prometheus available at: http://localhost:9090/"
+# 	@echo "Grafana available at: http://localhost:3000/"
+# 	@echo "✅ Docker compose stack started"
+
 .PHONY: clean-cache
 clean-cache: ## Clean go build cache
 	@echo "🗄️ Cleaning go cache..."
@@ -234,6 +244,16 @@ docker-run: certs docker ## Run in Docker container
 		--name tls-monitor \
 		-v $(EXAMPLE_DIR)/certs:/app/certs:ro \
 		$(BINARY_NAME):latest
+
+.PHONY: compose-run
+compose-run: ## Run compose stack (tls-monitor, prometheus, grafana)
+	@echo "🐳 Running compose stack..."
+	@mkdir -p ./docker/logs ./docker/cache
+	docker compose -f docker-compose.dev.yml --profile monitoring up -d
+	@echo "tls-cert-monitor available at: http://localhost:3200/"
+	@echo "Prometheus available at: http://localhost:9090/"
+	@echo "Grafana available at: http://localhost:3000/"
+	@echo "✅ Docker compose stack started"
 
 # Release targets
 .PHONY: release
