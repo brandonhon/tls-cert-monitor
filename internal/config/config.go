@@ -1,5 +1,6 @@
-// internal/config/config.go
-
+// Package config provides configuration management for the TLS Certificate Monitor.
+// It handles loading configuration from files and environment variables, validates
+// settings, and supports hot-reloading of configuration changes.
 package config
 
 import (
@@ -12,35 +13,32 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config represents the application configuration
+// Config represents the application configuration.
+// Field order is optimized to minimize memory padding.
 type Config struct {
-	// Server settings
-	Port        int    `mapstructure:"port" yaml:"port"`
-	BindAddress string `mapstructure:"bind_address" yaml:"bind_address"`
+	// Group 8-byte aligned fields first
+	CacheMaxSize int64         `mapstructure:"cache_max_size" yaml:"cache_max_size"`
+	ScanInterval time.Duration `mapstructure:"scan_interval" yaml:"scan_interval"`
+	CacheTTL     time.Duration `mapstructure:"cache_ttl" yaml:"cache_ttl"`
 
-	// TLS settings for metrics endpoint
-	TLSCert string `mapstructure:"tls_cert" yaml:"tls_cert"`
-	TLSKey  string `mapstructure:"tls_key" yaml:"tls_key"`
-
-	// Certificate monitoring
-	CertificateDirectories []string      `mapstructure:"certificate_directories" yaml:"certificate_directories"`
-	ScanInterval           time.Duration `mapstructure:"scan_interval" yaml:"scan_interval"`
-
-	// Performance
+	// int fields (8 bytes on 64-bit, 4 bytes on 32-bit)
+	Port    int `mapstructure:"port" yaml:"port"`
 	Workers int `mapstructure:"workers" yaml:"workers"`
 
-	// Logging
-	LogFile  string `mapstructure:"log_file" yaml:"log_file"`
-	LogLevel string `mapstructure:"log_level" yaml:"log_level"`
+	// Slice (24 bytes header: pointer + len + cap)
+	CertificateDirectories []string `mapstructure:"certificate_directories" yaml:"certificate_directories"`
 
-	// Operation modes
+	// String fields (16 bytes each: pointer + len)
+	BindAddress string `mapstructure:"bind_address" yaml:"bind_address"`
+	TLSCert     string `mapstructure:"tls_cert" yaml:"tls_cert"`
+	TLSKey      string `mapstructure:"tls_key" yaml:"tls_key"`
+	LogFile     string `mapstructure:"log_file" yaml:"log_file"`
+	LogLevel    string `mapstructure:"log_level" yaml:"log_level"`
+	CacheDir    string `mapstructure:"cache_dir" yaml:"cache_dir"`
+
+	// Boolean fields last (1 byte each)
 	DryRun    bool `mapstructure:"dry_run" yaml:"dry_run"`
 	HotReload bool `mapstructure:"hot_reload" yaml:"hot_reload"`
-
-	// Cache settings
-	CacheDir     string        `mapstructure:"cache_dir" yaml:"cache_dir"`
-	CacheTTL     time.Duration `mapstructure:"cache_ttl" yaml:"cache_ttl"`
-	CacheMaxSize int64         `mapstructure:"cache_max_size" yaml:"cache_max_size"`
 }
 
 // Defaults returns a Config with default values
@@ -97,50 +95,76 @@ func Load(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// Expand environment variables in paths
-	cfg.expandEnvironmentVariables()
+	// Process paths: expand environment variables and normalize
+	cfg.processPaths()
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Normalize paths
-	cfg.normalizePaths()
-
 	return cfg, nil
 }
 
-// expandEnvironmentVariables expands environment variables in configuration paths
-func (c *Config) expandEnvironmentVariables() {
-	// Expand certificate directories
+// processPaths handles both environment variable expansion and path normalization
+// to avoid code duplication between expandEnvironmentVariables and normalizePaths
+func (c *Config) processPaths() {
+	// Process certificate directories
 	for i, dir := range c.CertificateDirectories {
-		c.CertificateDirectories[i] = os.ExpandEnv(dir)
+		c.CertificateDirectories[i] = filepath.Clean(os.ExpandEnv(dir))
 	}
 
-	// Expand other paths
+	// Process TLS paths
 	if c.TLSCert != "" {
-		c.TLSCert = os.ExpandEnv(c.TLSCert)
+		c.TLSCert = filepath.Clean(os.ExpandEnv(c.TLSCert))
 	}
 	if c.TLSKey != "" {
-		c.TLSKey = os.ExpandEnv(c.TLSKey)
+		c.TLSKey = filepath.Clean(os.ExpandEnv(c.TLSKey))
 	}
+
+	// Process log file path
 	if c.LogFile != "" {
-		c.LogFile = os.ExpandEnv(c.LogFile)
+		c.LogFile = filepath.Clean(os.ExpandEnv(c.LogFile))
 	}
+
+	// Process cache directory
 	if c.CacheDir != "" {
-		c.CacheDir = os.ExpandEnv(c.CacheDir)
+		c.CacheDir = filepath.Clean(os.ExpandEnv(c.CacheDir))
 	}
 }
 
-// Validate validates the configuration
+// Validate validates the configuration.
+// This function is split into smaller validation functions to reduce cyclomatic complexity.
 func (c *Config) Validate() error {
-	// Validate port
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("invalid port: %d", c.Port)
+	// Validate network settings
+	if err := c.validateNetworkSettings(); err != nil {
+		return err
 	}
 
 	// Validate certificate directories
+	if err := c.validateCertificateDirectories(); err != nil {
+		return err
+	}
+
+	// Validate TLS settings
+	if err := c.validateTLSSettings(); err != nil {
+		return err
+	}
+
+	// Validate operational settings
+	return c.validateOperationalSettings()
+}
+
+// validateNetworkSettings validates port and bind address
+func (c *Config) validateNetworkSettings() error {
+	if c.Port < 1 || c.Port > 65535 {
+		return fmt.Errorf("invalid port: %d", c.Port)
+	}
+	return nil
+}
+
+// validateCertificateDirectories validates certificate directory settings
+func (c *Config) validateCertificateDirectories() error {
 	if len(c.CertificateDirectories) == 0 {
 		return fmt.Errorf("at least one certificate directory must be specified")
 	}
@@ -166,7 +190,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Validate TLS settings
+	return nil
+}
+
+// validateTLSSettings validates TLS certificate and key configuration
+func (c *Config) validateTLSSettings() error {
+	// Both must be provided or neither
 	if (c.TLSCert != "" && c.TLSKey == "") || (c.TLSCert == "" && c.TLSKey != "") {
 		return fmt.Errorf("both TLS certificate and key must be provided")
 	}
@@ -183,6 +212,11 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateOperationalSettings validates workers, scan interval, and log level
+func (c *Config) validateOperationalSettings() error {
 	// Validate workers
 	if c.Workers < 1 {
 		return fmt.Errorf("workers must be at least 1")
@@ -206,32 +240,6 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
-}
-
-// normalizePaths normalizes all file paths in the configuration
-func (c *Config) normalizePaths() {
-	// Normalize certificate directories
-	for i, dir := range c.CertificateDirectories {
-		c.CertificateDirectories[i] = filepath.Clean(dir)
-	}
-
-	// Normalize TLS paths
-	if c.TLSCert != "" {
-		c.TLSCert = filepath.Clean(c.TLSCert)
-	}
-	if c.TLSKey != "" {
-		c.TLSKey = filepath.Clean(c.TLSKey)
-	}
-
-	// Normalize log file path
-	if c.LogFile != "" {
-		c.LogFile = filepath.Clean(c.LogFile)
-	}
-
-	// Normalize cache directory
-	if c.CacheDir != "" {
-		c.CacheDir = filepath.Clean(c.CacheDir)
-	}
 }
 
 // IsPathAllowed checks if a path is within the configured certificate directories
