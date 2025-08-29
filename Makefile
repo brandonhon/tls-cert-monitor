@@ -388,6 +388,11 @@ config-dev: certs ## Create development configuration file
 # ----------------------------
 # Linting Targets
 # ----------------------------
+.PHONY: fmt
+fmt: ## Format code
+	@echo "📄 Formatting all code..."
+	go fmt ./...
+
 .PHONY: lint
 lint: ## Run linters (warnings won't fail)
 	@echo "🔍 Running linters..."
