@@ -87,12 +87,14 @@ func (s *Server) Start() error {
 			MinVersion:               tls.VersionTLS12,
 			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
 			PreferServerCipherSuites: true,
+			// Fixed gosec G402 - Removed weak cipher suites and kept only secure ones
 			CipherSuites: []uint16{
 				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				// Removed weak cipher suite (gosec G402 fix)
-				// tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
 			},
 		}
 
@@ -236,11 +238,12 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHealth handles the health check endpoint
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+// Fixed revive unused parameter issue by removing unused parameter name
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	response := s.health.Check()
 
-	// Set status code based on health (exhaustive fix)
-	statusCode := http.StatusOK
+	// Set status code based on health (fixed ineffassign issue)
+	var statusCode int
 	switch response.Status {
 	case health.StatusHealthy:
 		statusCode = http.StatusOK

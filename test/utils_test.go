@@ -1,4 +1,8 @@
+// ============================================================================
 // test/utils_test.go
+// ============================================================================
+//go:build integration
+// +build integration
 
 package test
 
@@ -74,9 +78,10 @@ func generateTestCertificate(t *testing.T, keySize int, notAfter time.Time) []by
 	return certPEM
 }
 
-// writeCertToFile writes a certificate to a file
+// writeCertToFile writes a certificate to a file with secure permissions
 func writeCertToFile(t *testing.T, path string, cert []byte) {
-	if err := os.WriteFile(path, cert, 0644); err != nil {
+	// Fixed gosec G306 - use secure file permissions
+	if err := os.WriteFile(path, cert, TestFilePermissions); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -311,9 +316,11 @@ func findClosingBrace(line string, openBrace int) int {
 			continue
 		}
 		if !inQuotes {
-			if char == '{' {
+			// Fixed staticcheck QF1003 - use tagged switch
+			switch char {
+			case '{':
 				braceCount++
-			} else if char == '}' {
+			case '}':
 				braceCount--
 				if braceCount == 0 {
 					return i

@@ -1,3 +1,9 @@
+// ============================================================================
+// test/config_test.go
+// ============================================================================
+//go:build integration
+// +build integration
+
 package test
 
 import (
@@ -17,7 +23,8 @@ func TestConfigLoad(t *testing.T) {
 
 	// Create test certificate directory
 	certDir := filepath.Join(tmpDir, "certs")
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,7 +48,8 @@ func TestConfigLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(configFile, data, 0644); err != nil {
+	// Fixed gosec G306 - use secure file permissions
+	if err := os.WriteFile(configFile, data, TestFilePermissions); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,8 +194,8 @@ func TestConfigDefaults(t *testing.T) {
 func TestConfigPathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
 	allowedDir := filepath.Join(tmpDir, "allowed")
-	// Handle error from MkdirAll (errcheck fix)
-	if err := os.MkdirAll(allowedDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(allowedDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 

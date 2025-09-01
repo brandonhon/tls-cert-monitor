@@ -43,8 +43,13 @@ func New(logFile, logLevel string) (*zap.Logger, error) {
 			return nil, fmt.Errorf("failed to create log directory: %w", err)
 		}
 
-		// Open log file with restricted permissions (gosec G302 fix)
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		// Validate log file path to prevent directory traversal (gosec G304 fix)
+		if !isValidLogFile(logFile) {
+			return nil, fmt.Errorf("invalid log file path: %s", logFile)
+		}
+
+		// Open log file with restricted permissions using secure method (gosec G304 fix)
+		file, err := openLogFileSecurely(logFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}
@@ -84,4 +89,66 @@ func parseLogLevel(level string) (zapcore.Level, error) {
 // NewNop creates a no-op logger for testing
 func NewNop() *zap.Logger {
 	return zap.NewNop()
+}
+
+// Security helper functions to prevent path traversal attacks
+
+// isValidLogFile validates that the log file path is safe and doesn't contain
+// directory traversal attempts or suspicious characters
+func isValidLogFile(filePath string) bool {
+	// Clean the path to resolve any ".." components
+	cleanPath := filepath.Clean(filePath)
+
+	// Check for absolute path (should be allowed for log files)
+	if !filepath.IsAbs(cleanPath) {
+		// For relative paths, ensure they don't try to escape current directory
+		if strings.Contains(cleanPath, "..") {
+			return false
+		}
+	}
+
+	// Ensure the file extension is appropriate for log files
+	ext := strings.ToLower(filepath.Ext(cleanPath))
+	validExtensions := map[string]bool{
+		".log": true,
+		".txt": true,
+		".out": true,
+		"":     true, // Allow files without extension
+	}
+
+	if !validExtensions[ext] {
+		return false
+	}
+
+	// Check for suspicious characters or patterns - Fixed staticcheck S1008
+	base := filepath.Base(cleanPath)
+	return !strings.ContainsAny(base, "<>:\"|?*")
+}
+
+// openLogFileSecurely opens a log file with proper security measures
+func openLogFileSecurely(filePath string) (*os.File, error) {
+	// Additional validation - ensure log files are not created in restricted system directories
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	// Block log files in system directories
+	restrictedPaths := []string{
+		"/etc", "/usr/bin", "/usr/sbin", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys",
+	}
+
+	for _, restricted := range restrictedPaths {
+		if strings.HasPrefix(absPath, restricted+string(filepath.Separator)) {
+			return nil, fmt.Errorf("cannot create log files in restricted directory: %s", restricted)
+		}
+	}
+
+	// Open log file with restricted permissions (gosec G302 fix - use 0600 instead of wider permissions)
+	// #nosec G304 -- This is intentional log file creation with validated path
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file securely: %w", err)
+	}
+	return file, nil
 }

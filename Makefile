@@ -264,6 +264,7 @@ compose-clean: ## docker compose down --volumes --remove-orphans --rmi all
 		echo "🧹 Cleaning up Docker environment..."; \
 		echo "📦 docker compose -f docker-compose.dev.yml --profile monitoring down --volumes --remove-orphans --rmi all"; \
 		$(DOCKER) compose -f docker-compose.dev.yml --profile monitoring down --volumes --remove-orphans --rmi all; \
+		rm -rf ./docker/cache ./docker/logs; \
 		echo "✅ Docker environment cleaned up successfully!"; \
 	else \
 		echo "❌ No docker-compose.dev.yml or compose.dev.yml found"; \
@@ -418,26 +419,26 @@ lint-fix: ## Automatically fix common linting issues
 # Testing Targets
 # ----------------------------
 .PHONY: test
-test: ## Run tests 
-	@echo "🧪 Running tests..."
-	$(GOTEST) ./test/... 
+test: ## Run integration tests 
+	@echo "🧪 Running integration tests..."
+	$(GOTEST) -tags=integration ./test/... 
 	@echo "✅ Tests completed."
 
 .PHONY: test-verbose
 test-verbose: ## Run tests with verbose
 	@echo "🧪 Running tests with verbose..."
-	$(GOTEST) -v ./test/... 
+	$(GOTEST) -v -tags=integration ./test/... 
 	@echo "✅ Tests completed."
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage
 	@echo "🧪 Running tests..."
-	$(GOTEST) ./... -coverprofile=$(COVERAGE_DIR)/coverage.out
+	$(GOTEST) -tags=integration ./test/... -coverprofile=$(COVERAGE_DIR)/coverage.out
 	@echo "✅ Tests completed. Coverage report at $(COVERAGE_DIR)/coverage.out"
 
 .PHONY: test-race
 test-race: ## Run tests with race detector
-	$(GOTEST) -race ./...
+	$(GOTEST) -tags=integration -race ./test/...
 
 # ----------------------------
 # Security Targets

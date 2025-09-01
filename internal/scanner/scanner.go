@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/gob"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -24,6 +25,12 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
 )
+
+// init registers types with gob for cache serialization
+func init() {
+	// Register CertificateInfo with gob so it can be cached
+	gob.Register(&CertificateInfo{})
+}
 
 // Scanner scans directories for SSL/TLS certificates
 // Field order optimized for memory alignment (fieldalignment fix)
@@ -306,6 +313,11 @@ func (s *Scanner) Close() {
 
 // processCertificate processes a single certificate file
 func (s *Scanner) processCertificate(path string) (*CertificateInfo, error) {
+	// Validate file path to prevent directory traversal (gosec G304 fix)
+	if !s.isPathAllowed(path) {
+		return nil, fmt.Errorf("path not allowed: %s", path)
+	}
+
 	// Check cache first
 	if cached := s.cache.Get(path); cached != nil {
 		if certInfo, ok := cached.(*CertificateInfo); ok {
@@ -313,8 +325,8 @@ func (s *Scanner) processCertificate(path string) (*CertificateInfo, error) {
 		}
 	}
 
-	// Read certificate file
-	data, err := os.ReadFile(path)
+	// Read certificate file using secure method (gosec G304 fix)
+	data, err := s.readCertificateFileSecurely(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read certificate: %w", err)
 	}
@@ -445,70 +457,100 @@ func (s *Scanner) updateMetrics(certInfo *CertificateInfo) {
 	s.metrics.SetCertIssuerCodeWithLabels(certInfo.Issuer, commonName, fileName, float64(issuerCode))
 }
 
-// classifyIssuer classifies certificate issuer with updated classification codes
-// Returns specific numeric codes for different CA types:
-// DigiCert=30, Amazon=31, Other=32, Self-signed=33
+// classifyIssuer classifies certificate issuer
+// Refactored to reduce cyclomatic complexity (gocyclo fix)
 func (s *Scanner) classifyIssuer(issuer string) int {
 	lowerIssuer := strings.ToLower(issuer)
 
-	// Self-signed certificates
-	if strings.Contains(lowerIssuer, "self-signed") ||
-		strings.Contains(lowerIssuer, "self signed") ||
-		(strings.Contains(lowerIssuer, "cn=") &&
-			(strings.Contains(lowerIssuer, "localhost") ||
-				strings.Contains(lowerIssuer, "example.com") ||
-				strings.Contains(lowerIssuer, "test"))) {
+	// Use classification functions to reduce complexity
+	if s.isSelfSignedIssuer(lowerIssuer) {
 		return 33 // Self-signed
 	}
 
-	// DigiCert family
-	if strings.Contains(lowerIssuer, "digicert") ||
-		strings.Contains(lowerIssuer, "rapidssl") ||
-		strings.Contains(lowerIssuer, "geotrust") ||
-		strings.Contains(lowerIssuer, "thawte") ||
-		strings.Contains(lowerIssuer, "verisign") ||
-		strings.Contains(lowerIssuer, "symantec") {
+	if s.isDigiCertFamily(lowerIssuer) {
 		return 30 // DigiCert
 	}
 
-	// Amazon certificates
-	if strings.Contains(lowerIssuer, "amazon") ||
-		strings.Contains(lowerIssuer, "aws") ||
-		strings.Contains(lowerIssuer, "acm") {
+	if s.isAmazonIssuer(lowerIssuer) {
 		return 31 // Amazon
 	}
 
-	// Let's Encrypt
-	if strings.Contains(lowerIssuer, "let's encrypt") ||
-		strings.Contains(lowerIssuer, "letsencrypt") ||
-		strings.Contains(lowerIssuer, "isrg") {
-		return 32 // Other (Let's Encrypt goes in Other category)
-	}
-
-	// Other commercial CAs
-	if strings.Contains(lowerIssuer, "comodo") ||
-		strings.Contains(lowerIssuer, "sectigo") ||
-		strings.Contains(lowerIssuer, "godaddy") ||
-		strings.Contains(lowerIssuer, "globalsign") ||
-		strings.Contains(lowerIssuer, "entrust") ||
-		strings.Contains(lowerIssuer, "trustwave") ||
-		strings.Contains(lowerIssuer, "ssl.com") ||
-		strings.Contains(lowerIssuer, "certigna") ||
-		strings.Contains(lowerIssuer, "buypass") ||
-		strings.Contains(lowerIssuer, "zerossl") {
+	if s.isOtherKnownCA(lowerIssuer) {
 		return 32 // Other
 	}
 
-	// Internal/Enterprise CAs
-	if strings.Contains(lowerIssuer, "internal") ||
-		strings.Contains(lowerIssuer, "enterprise") ||
-		strings.Contains(lowerIssuer, "corporate") ||
-		strings.Contains(lowerIssuer, "private") {
+	if s.isInternalCA(lowerIssuer) {
 		return 33 // Self-signed (internal CAs treated as self-signed)
 	}
 
 	// Default for unknown issuers
 	return 32 // Other
+}
+
+// Helper functions for issuer classification to reduce complexity
+
+// isSelfSignedIssuer checks if the issuer appears to be self-signed
+func (s *Scanner) isSelfSignedIssuer(lowerIssuer string) bool {
+	return strings.Contains(lowerIssuer, "self-signed") ||
+		strings.Contains(lowerIssuer, "self signed") ||
+		(strings.Contains(lowerIssuer, "cn=") &&
+			(strings.Contains(lowerIssuer, "localhost") ||
+				strings.Contains(lowerIssuer, "example.com") ||
+				strings.Contains(lowerIssuer, "test")))
+}
+
+// isDigiCertFamily checks if the issuer is part of the DigiCert family
+func (s *Scanner) isDigiCertFamily(lowerIssuer string) bool {
+	digiCertKeywords := []string{
+		"digicert", "rapidssl", "geotrust", "thawte", "verisign", "symantec",
+	}
+
+	for _, keyword := range digiCertKeywords {
+		if strings.Contains(lowerIssuer, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAmazonIssuer checks if the issuer is Amazon/AWS related
+func (s *Scanner) isAmazonIssuer(lowerIssuer string) bool {
+	amazonKeywords := []string{"amazon", "aws", "acm"}
+
+	for _, keyword := range amazonKeywords {
+		if strings.Contains(lowerIssuer, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// isOtherKnownCA checks if the issuer is another well-known CA
+func (s *Scanner) isOtherKnownCA(lowerIssuer string) bool {
+	otherCAKeywords := []string{
+		"let's encrypt", "letsencrypt", "isrg", "comodo", "sectigo",
+		"godaddy", "globalsign", "entrust", "trustwave", "ssl.com",
+		"certigna", "buypass", "zerossl",
+	}
+
+	for _, keyword := range otherCAKeywords {
+		if strings.Contains(lowerIssuer, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// isInternalCA checks if the issuer is an internal/enterprise CA
+func (s *Scanner) isInternalCA(lowerIssuer string) bool {
+	internalKeywords := []string{"internal", "enterprise", "corporate", "private"}
+
+	for _, keyword := range internalKeywords {
+		if strings.Contains(lowerIssuer, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 // isCertificateFile checks if a file is likely a certificate (excluding private keys)
@@ -588,4 +630,57 @@ func (s *Scanner) handleFileChange(path string) {
 			zap.String("path", path),
 			zap.String("subject", certInfo.Subject))
 	}
+}
+
+// Security helper functions to prevent path traversal attacks
+
+// isPathAllowed validates that the path is within configured certificate directories
+func (s *Scanner) isPathAllowed(path string) bool {
+	cleanPath := filepath.Clean(path)
+
+	for _, dir := range s.config.CertificateDirectories {
+		cleanDir := filepath.Clean(dir)
+
+		// Check if path is within the allowed directory
+		rel, err := filepath.Rel(cleanDir, cleanPath)
+		if err != nil {
+			continue
+		}
+
+		// Check for path traversal - path should not start with ".." or be absolute
+		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// readCertificateFileSecurely reads a certificate file with security validation
+func (s *Scanner) readCertificateFileSecurely(path string) ([]byte, error) {
+	// Double-check path validation
+	if !s.isPathAllowed(path) {
+		return nil, fmt.Errorf("path not within allowed directories: %s", path)
+	}
+
+	// Check file size to prevent reading extremely large files
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	// Limit certificate file size to 1MB (certificates are typically much smaller)
+	const maxCertSize = 1024 * 1024 // 1MB
+	if fileInfo.Size() > maxCertSize {
+		return nil, fmt.Errorf("certificate file too large: %d bytes", fileInfo.Size())
+	}
+
+	// Additional security check - ensure file is a regular file
+	if !fileInfo.Mode().IsRegular() {
+		return nil, fmt.Errorf("not a regular file: %s", path)
+	}
+
+	// Use secure file reading
+	// gosec G304: This is intentional file reading with validated path within allowed directories
+	return os.ReadFile(path) // #nosec G304
 }

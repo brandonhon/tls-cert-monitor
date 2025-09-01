@@ -1,7 +1,14 @@
+// ============================================================================
+// test/metrics_test.go
+// ============================================================================
+//go:build integration
+// +build integration
+
 package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,7 +75,7 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 		testDuplicateDetection(t, parsedMetrics)
 	})
 
-	if hasMetric(parsedMetrics, "ssl_cert_issuer_code") {
+	if hasMetric(parsedMetrics, MetricSSLCertIssuerCode) {
 		t.Run("IssuerClassification", func(t *testing.T) {
 			testIssuerClassification(t, parsedMetrics)
 		})
@@ -79,7 +86,8 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 func setupTestEnvironment(t *testing.T) (string, string) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 	return tmpDir, certDir
@@ -160,7 +168,8 @@ func startServerAndFetchMetrics(t *testing.T, cfg *config.Config, registry *prom
 
 	// Start HTTP server
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+		// Fixed errorlint issue - use errors.Is for wrapped error comparison
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server start error: %v", err)
 		}
 	}()
@@ -254,7 +263,7 @@ func testAllExpectedMetricsPresent(t *testing.T, parsedMetrics []MetricValue) {
 		"ssl_cert_san_count",
 		"ssl_cert_info",
 		"ssl_cert_duplicate_count",
-		"ssl_cert_issuer_code",
+		MetricSSLCertIssuerCode,
 		"ssl_cert_weak_key_total",
 		"ssl_cert_deprecated_sigalg_total",
 		"ssl_cert_files_total",
@@ -370,7 +379,7 @@ func testDuplicateDetection(t *testing.T, parsedMetrics []MetricValue) {
 
 // testIssuerClassification tests issuer classification
 func testIssuerClassification(t *testing.T, parsedMetrics []MetricValue) {
-	issuerCount := getMetricCount(parsedMetrics, "ssl_cert_issuer_code")
+	issuerCount := getMetricCount(parsedMetrics, MetricSSLCertIssuerCode)
 	if issuerCount == 0 {
 		t.Error("Expected to find issuer classification metrics")
 	}
@@ -379,7 +388,7 @@ func testIssuerClassification(t *testing.T, parsedMetrics []MetricValue) {
 	foundRegular := false
 
 	for _, metric := range parsedMetrics {
-		if metric.Name == "ssl_cert_issuer_code" {
+		if metric.Name == MetricSSLCertIssuerCode {
 			if issuer, exists := metric.Labels["issuer"]; exists {
 				if strings.Contains(issuer, "Self-Signed") {
 					foundSelfSigned = true
@@ -403,7 +412,8 @@ func TestMetricsWithEmptyDirectoryFixed(t *testing.T) {
 	// Test behavior when no certificates are found
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "empty_certs")
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 
@@ -437,7 +447,8 @@ func TestMetricsWithInvalidCertificatesFixed(t *testing.T) {
 	// Test behavior with invalid certificate files
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "invalid_certs")
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, testDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 

@@ -4,9 +4,11 @@ package health
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -353,13 +355,28 @@ func (c *Checker) checkSystem() []Check {
 	}
 }
 
-// isPathWritable checks if a path is writable
+// isPathWritable checks if a path is writable using a secure method
+// Fixed gosec G304 issue by validating the path and using secure file creation
 func (c *Checker) isPathWritable(path string) bool {
-	testFile := filepath.Join(path, ".healthcheck")
-	file, err := os.Create(testFile)
+	// Validate the path to prevent directory traversal
+	cleanPath := filepath.Clean(path)
+
+	// Check if the path is within allowed directories
+	if !c.isPathAllowed(cleanPath) {
+		return false
+	}
+
+	// Create a secure test file name with timestamp to avoid conflicts
+	testFileName := fmt.Sprintf(".healthcheck_%d", time.Now().UnixNano())
+	testFile := filepath.Join(cleanPath, testFileName)
+
+	// Use secure file creation with restricted permissions (gosec G304 fix)
+	// gosec G304: This is intentional file creation with validated path and restricted permissions
+	file, err := os.OpenFile(testFile, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600) // #nosec G304
 	if err != nil {
 		return false
 	}
+
 	// Properly handle file close and remove (errcheck fix)
 	if err := file.Close(); err != nil {
 		// Log but continue - file was created successfully
@@ -370,6 +387,50 @@ func (c *Checker) isPathWritable(path string) bool {
 		return true
 	}
 	return true
+}
+
+// isPathAllowed validates that the path is within configured directories
+// to prevent directory traversal attacks
+func (c *Checker) isPathAllowed(path string) bool {
+	cleanPath := filepath.Clean(path)
+
+	// Check against certificate directories
+	for _, dir := range c.config.CertificateDirectories {
+		cleanDir := filepath.Clean(dir)
+		if isWithinDirectory(cleanPath, cleanDir) {
+			return true
+		}
+	}
+
+	// Check against cache directory
+	if c.config.CacheDir != "" {
+		cleanCacheDir := filepath.Clean(c.config.CacheDir)
+		if isWithinDirectory(cleanPath, cleanCacheDir) {
+			return true
+		}
+	}
+
+	// Check against log directory
+	if c.config.LogFile != "" {
+		logDir := filepath.Dir(c.config.LogFile)
+		cleanLogDir := filepath.Clean(logDir)
+		if isWithinDirectory(cleanPath, cleanLogDir) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isWithinDirectory checks if a path is within a base directory
+func isWithinDirectory(path, baseDir string) bool {
+	rel, err := filepath.Rel(baseDir, path)
+	if err != nil {
+		return false
+	}
+
+	// Check for path traversal attempts
+	return !filepath.IsAbs(rel) && !strings.HasPrefix(rel, "..")
 }
 
 // DiskUsage represents disk usage statistics

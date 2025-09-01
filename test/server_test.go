@@ -1,8 +1,15 @@
+// ============================================================================
+// test/server_test.go
+// ============================================================================
+//go:build integration
+// +build integration
+
 package test
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,7 +45,8 @@ func TestServerEndpoints(t *testing.T) {
 
 	// Start server
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+		// Fixed errorlint issue - use errors.Is for wrapped error comparison
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server start error: %v", err)
 		}
 	}()
@@ -120,7 +128,8 @@ func TestHealthEndpoint(t *testing.T) {
 
 	// Start server
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+		// Fixed errorlint issue - use errors.Is for wrapped error comparison
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server start error: %v", err)
 		}
 	}()
@@ -229,7 +238,8 @@ func TestMetricsEndpoint(t *testing.T) {
 
 	// Start server
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+		// Fixed errorlint issue - use errors.Is for wrapped error comparison
+		if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Server start error: %v", err)
 		}
 	}()
@@ -361,7 +371,8 @@ func TestGracefulShutdown(t *testing.T) {
 	// Verify server stopped
 	select {
 	case err := <-serverErr:
-		if err != http.ErrServerClosed {
+		// Fixed errorlint issue - use errors.Is for wrapped error comparison
+		if !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Unexpected server error: %v", err)
 		}
 	case <-time.After(1 * time.Second):

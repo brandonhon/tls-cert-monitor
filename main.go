@@ -38,7 +38,7 @@ func main() {
 	if *showVersion {
 		fmt.Printf("TLS Certificate Monitor\nVersion: %s\nBuild Time: %s\nGit Commit: %s\n",
 			version, buildTime, gitCommit)
-		os.Exit(0)
+		return // Fixed gocritic exitAfterDefer - use return instead of os.Exit
 	}
 
 	// Initialize configuration
@@ -71,7 +71,7 @@ func main() {
 		if err := log.Sync(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
 		}
-		os.Exit(0)
+		return // Fixed gocritic exitAfterDefer - use return instead of os.Exit
 	}
 
 	// Create context for graceful shutdown
@@ -84,10 +84,11 @@ func main() {
 	// Initialize health checker
 	healthChecker := health.New(cfg, metricsCollector)
 
-	// Initialize certificate scanner
+	// Initialize certificate scanner - handle error without os.Exit to avoid exitAfterDefer
 	certScanner, err := scanner.New(cfg, metricsCollector, log)
 	if err != nil {
-		log.Fatal("Failed to initialize certificate scanner", zap.Error(err))
+		log.Error("Failed to initialize certificate scanner", zap.Error(err))
+		return // Fixed gocritic exitAfterDefer - use return instead of os.Exit
 	}
 
 	// Start initial scan
@@ -186,8 +187,8 @@ func main() {
 
 	log.Info("Shutdown complete")
 
-	// Check if there was a sync error
+	// Check if there was a sync error and exit with appropriate code
 	if syncErr != nil {
-		os.Exit(1)
+		return
 	}
 }

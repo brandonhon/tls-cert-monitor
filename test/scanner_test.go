@@ -1,3 +1,10 @@
+
+// ============================================================================
+// test/scanner_test.go
+// ============================================================================
+//go:build integration
+// +build integration
+
 package test
 
 import (
@@ -18,8 +25,8 @@ import (
 func TestCertificateScanning(t *testing.T) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	// Handle error from MkdirAll (errcheck fix)
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +126,8 @@ func TestCertificateFileDetection(t *testing.T) {
 
 	for _, tf := range testFiles {
 		path := filepath.Join(tmpDir, tf.name)
-		if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+		// Fixed gosec G306 - use secure file permissions
+		if err := os.WriteFile(path, []byte("test"), TestFilePermissions); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -183,8 +191,8 @@ func TestCertificateFileDetection(t *testing.T) {
 func TestPrivateKeyExclusion(t *testing.T) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	// Handle error from MkdirAll (errcheck fix)
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal(err)
 	}
 
@@ -338,8 +346,8 @@ func TestIssuerClassification(t *testing.T) {
 func testSingleIssuerClassification(t *testing.T, issuer string, expectedCode int) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	// Handle error from MkdirAll (errcheck fix)
-	if err := os.MkdirAll(certDir, 0755); err != nil {
+	// Fixed gosec G301 - use secure directory permissions
+	if err := os.MkdirAll(certDir, TestDirPermissions); err != nil {
 		t.Fatal("Failed to create cert directory:", err)
 	}
 
@@ -383,16 +391,17 @@ func testSingleIssuerClassification(t *testing.T, issuer string, expectedCode in
 		t.Fatal("Failed to gather metrics:", err)
 	}
 
-	if !verifyIssuerCode(t, families, expectedCode, issuer) {
+	if !verifyIssuerCode(t, families, expectedCode) {
 		t.Errorf("Expected issuer code %d for issuer '%s', but was not found", expectedCode, issuer)
 		debugIssuerCodes(t, families)
 	}
 }
 
 // verifyIssuerCode checks if the expected issuer code is present
-func verifyIssuerCode(t *testing.T, families []*dto.MetricFamily, expectedCode int, issuer string) bool {
+// Fixed revive unused parameter issue by removing unused parameter
+func verifyIssuerCode(t *testing.T, families []*dto.MetricFamily, expectedCode int) bool {
 	for _, family := range families {
-		if family.GetName() == "ssl_cert_issuer_code" {
+		if family.GetName() == MetricSSLCertIssuerCode {
 			for _, metric := range family.GetMetric() {
 				if metric.Gauge != nil && metric.Gauge.Value != nil {
 					actualCode := int(*metric.Gauge.Value)
@@ -440,7 +449,7 @@ func verifyIssuerLabels(t *testing.T, metric *dto.Metric) {
 func debugIssuerCodes(t *testing.T, families []*dto.MetricFamily) {
 	t.Logf("Found issuer codes:")
 	for _, family := range families {
-		if family.GetName() == "ssl_cert_issuer_code" {
+		if family.GetName() == MetricSSLCertIssuerCode {
 			for _, metric := range family.GetMetric() {
 				if metric.Gauge != nil && metric.Gauge.Value != nil {
 					t.Logf("  Code: %d", int(*metric.Gauge.Value))
