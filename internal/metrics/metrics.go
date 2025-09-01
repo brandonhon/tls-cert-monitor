@@ -1,8 +1,10 @@
-// internal/metrics/metrics.go
-
+// Package metrics provides Prometheus metrics collection and management
+// for the TLS Certificate Monitor. It tracks certificate health, security
+// issues, and operational statistics.
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -17,27 +19,27 @@ var (
 )
 
 // Collector manages all Prometheus metrics
+// Field order optimized for memory alignment (fieldalignment fix)
 type Collector struct {
-	// Certificate metrics
+	// Gauge vectors (8 bytes each pointer)
 	certExpiration     *prometheus.GaugeVec
 	certSANCount       *prometheus.GaugeVec
 	certInfo           *prometheus.GaugeVec
 	certDuplicateCount *prometheus.GaugeVec
 	certIssuerCode     *prometheus.GaugeVec
 
-	// Security metrics
-	weakKeyTotal     prometheus.Gauge
-	deprecatedSigAlg prometheus.Gauge
-
-	// Operational metrics
+	// Simple gauges (8 bytes each)
+	weakKeyTotal         prometheus.Gauge
+	deprecatedSigAlg     prometheus.Gauge
 	certFilesTotal       prometheus.Gauge
 	certsParsedTotal     prometheus.Gauge
 	certParseErrorsTotal prometheus.Gauge
 	scanDuration         prometheus.Gauge
 	lastScanTimestamp    prometheus.Gauge
 
-	mu       sync.RWMutex
-	registry prometheus.Registerer
+	// Other fields
+	registry prometheus.Registerer // 16 bytes (interface)
+	mu       sync.RWMutex          // 24 bytes
 }
 
 // NewCollector creates a new metrics collector (singleton for default registry)
@@ -150,9 +152,11 @@ func createCollector(reg prometheus.Registerer) *Collector {
 // safeRegister safely registers a collector, logging warnings instead of panicking on duplicates
 func (c *Collector) safeRegister(reg prometheus.Registerer, collector prometheus.Collector, name string) {
 	if err := reg.Register(collector); err != nil {
-		if areErr, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		// Use errors.As for proper error checking (errorlint fix)
+		var alreadyRegisteredError prometheus.AlreadyRegisteredError
+		if errors.As(err, &alreadyRegisteredError) {
 			// Log warning but continue - this is expected in some scenarios
-			fmt.Printf("Warning: Metric %s already registered, using existing instance: %v\n", name, areErr)
+			fmt.Printf("Warning: Metric %s already registered, using existing instance: %v\n", name, alreadyRegisteredError)
 		} else {
 			// Log error for other registration issues but don't panic
 			fmt.Printf("Warning: Failed to register metric %s: %v\n", name, err)
@@ -286,7 +290,12 @@ func (c *Collector) GetMetrics() map[string]float64 {
 // getGaugeValue safely retrieves a gauge value
 func (c *Collector) getGaugeValue(gauge prometheus.Gauge) float64 {
 	metric := &dto.Metric{}
-	gauge.Write(metric)
+	// Handle error from Write (errcheck fix)
+	if err := gauge.Write(metric); err != nil {
+		// Log error but return zero value
+		fmt.Printf("Failed to read gauge value: %v\n", err)
+		return 0
+	}
 	if metric.Gauge != nil && metric.Gauge.Value != nil {
 		return *metric.Gauge.Value
 	}

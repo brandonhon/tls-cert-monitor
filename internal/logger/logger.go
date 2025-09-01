@@ -1,3 +1,6 @@
+// Package logger provides structured logging functionality for the TLS Certificate Monitor.
+// It uses zap for high-performance, structured logging with support for multiple output
+// destinations and configurable log levels.
 package logger
 
 import (
@@ -10,7 +13,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// New creates a new logger instance
+// New creates a new logger instance with the specified configuration
 func New(logFile, logLevel string) (*zap.Logger, error) {
 	// Parse log level
 	level, err := parseLogLevel(logLevel)
@@ -35,12 +38,13 @@ func New(logFile, logLevel string) (*zap.Logger, error) {
 	} else {
 		// Ensure log directory exists
 		logDir := filepath.Dir(logFile)
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		// Use 0750 for better security (gosec G301 fix)
+		if err := os.MkdirAll(logDir, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create log directory: %w", err)
 		}
 
-		// Open log file
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		// Open log file with restricted permissions (gosec G302 fix)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}

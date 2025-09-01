@@ -21,7 +21,11 @@ import (
 func generateTestPort() int {
 	// Use crypto/rand for better randomness
 	b := make([]byte, 2)
-	rand.Read(b)
+	// Handle error from rand.Read (errcheck fix)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to a fixed port range if random fails
+		return 18000 + (int(time.Now().Unix()) % 400)
+	}
 	port := 18000 + (int(b[0])<<8+int(b[1]))%400
 	return port
 }
@@ -195,115 +199,129 @@ func createCertificateTestSet(t *testing.T) *CertificateTestSet {
 }
 
 // MetricValue represents a parsed Prometheus metric
+// Field order optimized for memory alignment (fieldalignment fix)
 type MetricValue struct {
-	Name   string
-	Labels map[string]string
-	Value  float64
+	Labels map[string]string // 8 bytes (pointer)
+	Name   string            // 16 bytes
+	Value  float64           // 8 bytes
 }
 
 // parsePrometheusMetrics parses Prometheus metrics format and extracts metric values
-// FIXED VERSION: Better handling of complex labels and scientific notation
+// Refactored to reduce cyclomatic complexity (gocyclo fix)
 func parsePrometheusMetrics(content string) []MetricValue {
-	var metrics []MetricValue
+	metrics := make([]MetricValue, 0, 100) // Pre-allocate with reasonable capacity (prealloc fix)
 	lines := strings.Split(content, "\n")
 
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Skip comments and empty lines
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+		metric := parseSingleMetric(line)
+		if metric != nil {
+			metrics = append(metrics, *metric)
 		}
-
-		// Find the metric name and value
-		// Handle both cases: metric_name{labels} value and metric_name value
-		var metricName string
-		var labelsStr string
-		var valueStr string
-
-		if strings.Contains(line, "{") {
-			// Has labels: metric_name{labels} value
-			openBrace := strings.Index(line, "{")
-			metricName = line[:openBrace]
-
-			// Find the closing brace by counting braces (handles nested quotes)
-			braceCount := 0
-			closeBrace := -1
-			inQuotes := false
-			var escapeNext bool
-
-			for i := openBrace; i < len(line); i++ {
-				char := line[i]
-				if escapeNext {
-					escapeNext = false
-					continue
-				}
-				if char == '\\' {
-					escapeNext = true
-					continue
-				}
-				if char == '"' {
-					inQuotes = !inQuotes
-					continue
-				}
-				if !inQuotes {
-					if char == '{' {
-						braceCount++
-					} else if char == '}' {
-						braceCount--
-						if braceCount == 0 {
-							closeBrace = i
-							break
-						}
-					}
-				}
-			}
-
-			if closeBrace == -1 {
-				continue // Malformed line
-			}
-
-			labelsStr = line[openBrace+1 : closeBrace]
-			remainingLine := strings.TrimSpace(line[closeBrace+1:])
-
-			// Extract value (everything after the closing brace)
-			fields := strings.Fields(remainingLine)
-			if len(fields) > 0 {
-				valueStr = fields[0]
-			}
-		} else {
-			// No labels: metric_name value
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				metricName = fields[0]
-				valueStr = fields[1]
-			}
-		}
-
-		if metricName == "" || valueStr == "" {
-			continue
-		}
-
-		// Parse value (handle scientific notation)
-		value, err := strconv.ParseFloat(valueStr, 64)
-		if err != nil {
-			continue
-		}
-
-		// Parse labels
-		labels := make(map[string]string)
-		if labelsStr != "" {
-			labels = parseLabels(labelsStr)
-		}
-
-		metrics = append(metrics, MetricValue{
-			Name:   metricName,
-			Labels: labels,
-			Value:  value,
-		})
 	}
 
 	return metrics
+}
+
+// parseSingleMetric parses a single metric line
+func parseSingleMetric(line string) *MetricValue {
+	line = strings.TrimSpace(line)
+
+	// Skip comments and empty lines
+	if line == "" || strings.HasPrefix(line, "#") {
+		return nil
+	}
+
+	// Parse metric name, labels, and value
+	metricName, labelsStr, valueStr := extractMetricParts(line)
+	if metricName == "" || valueStr == "" {
+		return nil
+	}
+
+	// Parse value (handle scientific notation)
+	value, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil {
+		return nil
+	}
+
+	// Parse labels
+	labels := make(map[string]string)
+	if labelsStr != "" {
+		labels = parseLabels(labelsStr)
+	}
+
+	return &MetricValue{
+		Name:   metricName,
+		Labels: labels,
+		Value:  value,
+	}
+}
+
+// extractMetricParts extracts the metric name, labels, and value from a line
+func extractMetricParts(line string) (metricName, labelsStr, valueStr string) {
+	if strings.Contains(line, "{") {
+		// Has labels: metric_name{labels} value
+		openBrace := strings.Index(line, "{")
+		if openBrace > 0 { // Fix offBy1 issue (gocritic fix)
+			metricName = line[:openBrace]
+		}
+
+		closeBrace := findClosingBrace(line, openBrace)
+		if closeBrace == -1 {
+			return "", "", ""
+		}
+
+		labelsStr = line[openBrace+1 : closeBrace]
+		remainingLine := strings.TrimSpace(line[closeBrace+1:])
+
+		// Extract value
+		fields := strings.Fields(remainingLine)
+		if len(fields) > 0 {
+			valueStr = fields[0]
+		}
+	} else {
+		// No labels: metric_name value
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			metricName = fields[0]
+			valueStr = fields[1]
+		}
+	}
+
+	return metricName, labelsStr, valueStr
+}
+
+// findClosingBrace finds the closing brace, handling nested quotes
+func findClosingBrace(line string, openBrace int) int {
+	braceCount := 0
+	inQuotes := false
+	escapeNext := false
+
+	for i := openBrace; i < len(line); i++ {
+		char := line[i]
+		if escapeNext {
+			escapeNext = false
+			continue
+		}
+		if char == '\\' {
+			escapeNext = true
+			continue
+		}
+		if char == '"' {
+			inQuotes = !inQuotes
+			continue
+		}
+		if !inQuotes {
+			if char == '{' {
+				braceCount++
+			} else if char == '}' {
+				braceCount--
+				if braceCount == 0 {
+					return i
+				}
+			}
+		}
+	}
+	return -1
 }
 
 // parseLabels parses the label string inside braces
@@ -400,26 +418,6 @@ func verifyMetricValue(t *testing.T, metrics []MetricValue, metricName string, e
 		}
 	}
 	t.Errorf("Metric %s not found or has unexpected labels", metricName)
-}
-
-// verifyMetricWithLabels checks if a metric with specific labels exists
-func verifyMetricWithLabels(t *testing.T, metrics []MetricValue, metricName string, expectedLabels map[string]string) {
-	for _, metric := range metrics {
-		if metric.Name == metricName {
-			// Check if all expected labels match
-			allMatch := true
-			for key, expectedValue := range expectedLabels {
-				if value, exists := metric.Labels[key]; !exists || value != expectedValue {
-					allMatch = false
-					break
-				}
-			}
-			if allMatch {
-				return
-			}
-		}
-	}
-	t.Errorf("Metric %s with labels %v not found", metricName, expectedLabels)
 }
 
 // getMetricCount returns the count of metrics with the given name
@@ -546,35 +544,28 @@ func parseDN(dn string) pkix.Name {
 	return name
 }
 
-// createCertificateWithCustomSubject creates a certificate with a custom subject string
-func createCertificateWithCustomSubject(t *testing.T, subjectStr string) []byte {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
+// Helper functions that are used in tests but don't need to be exported
+
+// hasMetric checks if a metric with the given name exists
+func hasMetric(metrics []MetricValue, metricName string) bool {
+	for _, metric := range metrics {
+		if metric.Name == metricName {
+			return true
+		}
+	}
+	return false
+}
+
+// getAvailableMetricNames returns a list of all metric names found
+func getAvailableMetricNames(metrics []MetricValue) []string {
+	names := make(map[string]bool)
+	for _, metric := range metrics {
+		names[metric.Name] = true
 	}
 
-	// Parse the subject string into a pkix.Name
-	subject := parseDN(subjectStr)
-
-	template := x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               subject, // Use custom subject
-		Issuer:                subject, // Self-signed
-		NotBefore:             time.Now().Add(-24 * time.Hour),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{"test.example.com"},
+	result := make([]string, 0, len(names))
+	for name := range names {
+		result = append(result, name)
 	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certDER,
-	})
+	return result
 }

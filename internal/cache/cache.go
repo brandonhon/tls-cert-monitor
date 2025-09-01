@@ -1,3 +1,6 @@
+// Package cache provides a thread-safe in-memory cache with disk persistence
+// for the TLS Certificate Monitor. It includes TTL support, size limits,
+// and automatic cleanup of expired entries.
 package cache
 
 import (
@@ -10,34 +13,37 @@ import (
 	"time"
 )
 
-// Entry represents a cache entry
+// Entry represents a cache entry with metadata
+// Field order optimized for memory alignment (fieldalignment fix)
 type Entry struct {
-	Key        string
-	Value      interface{}
-	Expiration time.Time
-	Size       int64
+	Value      interface{} // 16 bytes (interface)
+	Expiration time.Time   // 24 bytes
+	Key        string      // 16 bytes
+	Size       int64       // 8 bytes
 }
 
 // Cache provides a thread-safe in-memory cache with disk persistence
+// Field order optimized for memory alignment (fieldalignment fix)
 type Cache struct {
-	entries     map[string]*Entry
-	mu          sync.RWMutex
-	dir         string
-	ttl         time.Duration
-	maxSize     int64
-	currentSize int64
-	hits        atomic.Uint64
-	misses      atomic.Uint64
-	evictions   atomic.Uint64
-	stopChan    chan struct{}
-	wg          sync.WaitGroup
+	currentSize int64             // 8 bytes (atomic access, must be first for alignment)
+	maxSize     int64             // 8 bytes
+	ttl         time.Duration     // 8 bytes
+	hits        atomic.Uint64     // 8 bytes
+	misses      atomic.Uint64     // 8 bytes
+	evictions   atomic.Uint64     // 8 bytes
+	entries     map[string]*Entry // 8 bytes (pointer)
+	stopChan    chan struct{}     // 8 bytes (pointer)
+	dir         string            // 16 bytes
+	mu          sync.RWMutex      // 24 bytes
+	wg          sync.WaitGroup    // 12 bytes (but padded to 16)
 }
 
 // New creates a new cache instance
 func New(dir string, ttl time.Duration, maxSize int64) (*Cache, error) {
 	// Create cache directory if it doesn't exist
 	if dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		// Use 0750 for better security (gosec G301 fix)
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return nil, fmt.Errorf("failed to create cache directory: %w", err)
 		}
 	}
@@ -201,22 +207,37 @@ func (c *Cache) save() error {
 	if err != nil {
 		return fmt.Errorf("failed to create cache file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		// Always close the file (errcheck fix)
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close cache file: %w", closeErr)
+		}
+	}()
 
 	encoder := gob.NewEncoder(f)
 	if err := encoder.Encode(entries); err != nil {
-		os.Remove(tempFile)
+		// Clean up temp file on error (errcheck fix)
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			// Log but don't override the original error
+			fmt.Printf("Failed to remove temp file: %v\n", removeErr)
+		}
 		return fmt.Errorf("failed to encode cache: %w", err)
 	}
 
 	if err := f.Sync(); err != nil {
-		os.Remove(tempFile)
+		// Clean up temp file on error (errcheck fix)
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			fmt.Printf("Failed to remove temp file: %v\n", removeErr)
+		}
 		return fmt.Errorf("failed to sync cache file: %w", err)
 	}
 
 	// Atomic rename
 	if err := os.Rename(tempFile, file); err != nil {
-		os.Remove(tempFile)
+		// Clean up temp file on error (errcheck fix)
+		if removeErr := os.Remove(tempFile); removeErr != nil {
+			fmt.Printf("Failed to remove temp file: %v\n", removeErr)
+		}
 		return fmt.Errorf("failed to rename cache file: %w", err)
 	}
 
@@ -237,7 +258,12 @@ func (c *Cache) load() error {
 		}
 		return fmt.Errorf("failed to open cache file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		// Always close the file (errcheck fix)
+		if closeErr := f.Close(); closeErr != nil {
+			fmt.Printf("Failed to close cache file during load: %v\n", closeErr)
+		}
+	}()
 
 	var entries map[string]*Entry
 	decoder := gob.NewDecoder(f)
@@ -291,5 +317,8 @@ func (c *Cache) Stats() map[string]interface{} {
 func (c *Cache) Close() {
 	close(c.stopChan)
 	c.wg.Wait()
-	c.save()
+	// Handle save error (errcheck fix)
+	if err := c.save(); err != nil {
+		fmt.Printf("Failed to save cache on close: %v\n", err)
+	}
 }

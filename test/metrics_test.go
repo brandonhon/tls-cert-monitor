@@ -1,5 +1,3 @@
-// test/metrics_test.go
-
 package test
 
 import (
@@ -20,20 +18,77 @@ import (
 	"github.com/brandonhon/tls-cert-monitor/internal/scanner"
 	"github.com/brandonhon/tls-cert-monitor/internal/server"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
+// TestAllMetricsExposedFixed tests that all expected metrics are exposed
+// Refactored to reduce cyclomatic complexity (gocyclo fix)
 func TestAllMetricsExposedFixed(t *testing.T) {
 	// Setup test environment
+	tmpDir, certDir := setupTestEnvironment(t)
+
+	// Create and write test certificates
+	writeCertificates(t, certDir)
+
+	// Setup configuration
+	cfg := createTestConfig(tmpDir, certDir)
+
+	// Create components
+	registry, metricsCollector, healthChecker, log := createTestComponents(cfg)
+
+	// Run certificate scan
+	runCertificateScan(t, cfg, metricsCollector, log)
+
+	// Start HTTP server and fetch metrics
+	metricsOutput := startServerAndFetchMetrics(t, cfg, registry, metricsCollector, healthChecker, log)
+
+	// Parse metrics
+	parsedMetrics := parsePrometheusMetrics(metricsOutput)
+	t.Logf("Parsed %d metrics from HTTP response", len(parsedMetrics))
+
+	// Debug: Print all ssl_cert metrics found
+	debugSSLCertMetrics(t, parsedMetrics)
+
+	// Run test suites
+	t.Run("AllExpectedMetricsPresent", func(t *testing.T) {
+		testAllExpectedMetricsPresent(t, parsedMetrics)
+	})
+
+	t.Run("OperationalMetricsValues", func(t *testing.T) {
+		testOperationalMetricsValues(t, parsedMetrics)
+	})
+
+	if hasMetric(parsedMetrics, "ssl_cert_expiration_timestamp") {
+		t.Run("CertificateSpecificMetrics", func(t *testing.T) {
+			testCertificateSpecificMetrics(t, parsedMetrics, certDir)
+		})
+	}
+
+	t.Run("DuplicateDetection", func(t *testing.T) {
+		testDuplicateDetection(t, parsedMetrics)
+	})
+
+	if hasMetric(parsedMetrics, "ssl_cert_issuer_code") {
+		t.Run("IssuerClassification", func(t *testing.T) {
+			testIssuerClassification(t, parsedMetrics)
+		})
+	}
+}
+
+// setupTestEnvironment creates the test directories
+func setupTestEnvironment(t *testing.T) (string, string) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
 	if err := os.MkdirAll(certDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	return tmpDir, certDir
+}
 
-	// Create comprehensive certificate test set
+// writeCertificates writes test certificates to the directory
+func writeCertificates(t *testing.T, certDir string) {
 	certSet := createCertificateTestSet(t)
 
-	// Write certificates to files (no private keys)
 	writeCertToFile(t, filepath.Join(certDir, "valid.pem"), certSet.ValidCert)
 	writeCertToFile(t, filepath.Join(certDir, "weak_key.pem"), certSet.WeakKeyCert)
 	writeCertToFile(t, filepath.Join(certDir, "expired.pem"), certSet.ExpiredCert)
@@ -44,11 +99,12 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 	// Add some private key files that should be excluded
 	writeCertToFile(t, filepath.Join(certDir, "server.key"), []byte("dummy private key"))
 	writeCertToFile(t, filepath.Join(certDir, "private_key.pem"), []byte("dummy private key"))
+}
 
-	// Setup configuration with single worker to avoid race conditions
-	port := generateTestPort()
-	cfg := &config.Config{
-		Port:                   port,
+// createTestConfig creates the test configuration
+func createTestConfig(tmpDir, certDir string) *config.Config {
+	return &config.Config{
+		Port:                   generateTestPort(),
 		BindAddress:            "127.0.0.1",
 		CertificateDirectories: []string{certDir},
 		ScanInterval:           1 * time.Minute,
@@ -58,21 +114,26 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 		CacheTTL:               30 * time.Minute,
 		CacheMaxSize:           10485760,
 	}
+}
 
-	// Create components with custom registry for testing
+// createTestComponents creates test components
+func createTestComponents(cfg *config.Config) (*prometheus.Registry, *metrics.Collector, *health.Checker, *zap.Logger) {
 	registry := prometheus.NewRegistry()
 	metricsCollector := metrics.NewCollectorWithRegistry(registry)
 	healthChecker := health.New(cfg, metricsCollector)
 	log := logger.NewNop()
+	return registry, metricsCollector, healthChecker, log
+}
 
-	// Create scanner and run initial scan
+// runCertificateScan runs the certificate scan
+func runCertificateScan(t *testing.T, cfg *config.Config, metricsCollector *metrics.Collector, log *zap.Logger) {
 	certScanner, err := scanner.New(cfg, metricsCollector, log)
 	if err != nil {
 		t.Fatal("Failed to create scanner:", err)
 	}
 	defer certScanner.Close()
 
-	// Run scan to populate metrics - with retry logic
+	// Run scan with retry logic
 	ctx := context.Background()
 	var scanErr error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -89,255 +150,26 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 
 	// Add significant delay to ensure all goroutines complete
 	time.Sleep(1 * time.Second)
+}
 
-	// Verify metrics are in registry before starting server
-	metricFamilies, err := registry.Gather()
-	if err != nil {
-		t.Fatal("Failed to gather metrics from registry:", err)
-	}
+// startServerAndFetchMetrics starts the server and fetches metrics
+func startServerAndFetchMetrics(t *testing.T, cfg *config.Config, registry *prometheus.Registry,
+	metricsCollector *metrics.Collector, healthChecker *health.Checker, log *zap.Logger) string {
 
-	t.Logf("Registry has %d metric families after scan", len(metricFamilies))
-
-	// Log which ssl_cert metrics are present in the registry
-	for _, family := range metricFamilies {
-		name := family.GetName()
-		if name != "" && strings.Contains(name, "ssl_cert") {
-			t.Logf("Registry metric: %s (%d time series)", name, len(family.GetMetric()))
-		}
-	}
+	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 
 	// Start HTTP server
-	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
 	go func() {
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 			t.Errorf("Server start error: %v", err)
 		}
 	}()
 
-	// Wait longer for server to start
+	// Wait for server to start
 	time.Sleep(500 * time.Millisecond)
 
-	// Retry fetching metrics if first attempt fails
-	var metricsOutput string
-	var fetchErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", port))
-		if err != nil {
-			fetchErr = err
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			fetchErr = fmt.Errorf("metrics endpoint returned status %d", resp.StatusCode)
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fetchErr = err
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
-
-		metricsOutput = string(body)
-		fetchErr = nil
-		break
-	}
-
-	if fetchErr != nil {
-		t.Fatal("Failed to fetch metrics after retries:", fetchErr)
-	}
-
-	parsedMetrics := parsePrometheusMetrics(metricsOutput)
-	t.Logf("Parsed %d metrics from HTTP response", len(parsedMetrics))
-
-	// Debug: Print all ssl_cert metrics found
-	t.Log("SSL cert metrics found in HTTP response:")
-	for _, metric := range parsedMetrics {
-		if strings.Contains(metric.Name, "ssl_cert") {
-			t.Logf("  %s = %f (labels: %v)", metric.Name, metric.Value, metric.Labels)
-		}
-	}
-
-	// Test all expected metrics are present
-	t.Run("AllExpectedMetricsPresent", func(t *testing.T) {
-		expectedMetrics := []string{
-			"ssl_cert_expiration_timestamp",
-			"ssl_cert_san_count",
-			"ssl_cert_info",
-			"ssl_cert_duplicate_count",
-			"ssl_cert_issuer_code",
-			"ssl_cert_weak_key_total",
-			"ssl_cert_deprecated_sigalg_total",
-			"ssl_cert_files_total",
-			"ssl_certs_parsed_total",
-			"ssl_cert_parse_errors_total",
-			"ssl_cert_scan_duration_seconds",
-			"ssl_cert_last_scan_timestamp",
-		}
-
-		for _, metricName := range expectedMetrics {
-			found := false
-			for _, metric := range parsedMetrics {
-				if metric.Name == metricName {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("Metric %s not found in metrics output", metricName)
-
-				// Additional debugging for missing metrics
-				t.Logf("Available metrics: %v", getAvailableMetricNames(parsedMetrics))
-			}
-		}
-	})
-
-	// Test operational metrics have reasonable values
-	t.Run("OperationalMetricsValues", func(t *testing.T) {
-		// We created 6 certificate files + 2 private key files, but private keys should be excluded
-		// Let's check what we actually got and adjust expectations accordingly
-		var filesTotal, parsedTotal, weakKeyTotal float64
-
-		for _, metric := range parsedMetrics {
-			switch metric.Name {
-			case "ssl_cert_files_total":
-				filesTotal = metric.Value
-			case "ssl_certs_parsed_total":
-				parsedTotal = metric.Value
-			case "ssl_cert_weak_key_total":
-				weakKeyTotal = metric.Value
-			}
-		}
-
-		t.Logf("Found: files=%v, parsed=%v, weak_keys=%v", filesTotal, parsedTotal, weakKeyTotal)
-
-		// We expect 5 certificate files (based on what we actually create successfully)
-		verifyMetricValue(t, parsedMetrics, "ssl_cert_files_total", 5)
-
-		// All certificates should parse successfully
-		verifyMetricValue(t, parsedMetrics, "ssl_certs_parsed_total", 5)
-
-		// Should have no parse errors with our valid test certs (private keys excluded before parsing)
-		verifyMetricValue(t, parsedMetrics, "ssl_cert_parse_errors_total", 0)
-
-		// Should have exactly 1 weak key (the 1024-bit cert) - if 0, the weak cert may not be generated properly
-		if weakKeyTotal == 0 {
-			t.Log("Warning: No weak keys detected - weak key certificate may not be generated properly")
-		}
-		// Accept either 0 or 1 for now since test certificate generation might vary
-		if weakKeyTotal != 0 && weakKeyTotal != 1 {
-			t.Errorf("Expected 0 or 1 weak key, got %v", weakKeyTotal)
-		}
-
-		// Should have no deprecated signature algorithms (all our certs use modern algos)
-		verifyMetricValue(t, parsedMetrics, "ssl_cert_deprecated_sigalg_total", 0)
-	})
-
-	// Only test certificate-specific metrics if they're present
-	if hasMetric(parsedMetrics, "ssl_cert_expiration_timestamp") {
-		t.Run("CertificateSpecificMetrics", func(t *testing.T) {
-			// Count how many we actually have
-			expirationCount := getMetricCount(parsedMetrics, "ssl_cert_expiration_timestamp")
-			sanCount := getMetricCount(parsedMetrics, "ssl_cert_san_count")
-			infoCount := getMetricCount(parsedMetrics, "ssl_cert_info")
-
-			t.Logf("Actual metrics: expiration=%d, san=%d, info=%d", expirationCount, sanCount, infoCount)
-
-			// Should have expiration timestamps for all successfully processed certs (5)
-			if expirationCount != 5 {
-				t.Errorf("Expected 5 expiration metrics, got %d", expirationCount)
-			}
-
-			// Should have SAN count metrics for all certs (5)
-			if sanCount != 5 {
-				t.Errorf("Expected 5 SAN count metrics, got %d", sanCount)
-			}
-
-			// Should have cert info for all certs (5)
-			if infoCount != 5 {
-				t.Errorf("Expected 5 cert info metrics, got %d", infoCount)
-			}
-
-			// Verify multi-SAN certificate has correct SAN count
-			multiSANPath := filepath.Join(certDir, "multi_san.pem")
-			found := false
-			for _, metric := range parsedMetrics {
-				if metric.Name == "ssl_cert_san_count" {
-					if path, exists := metric.Labels["path"]; exists && path == multiSANPath {
-						// multi_san cert has 3 DNS names + 2 IP addresses = 5 SANs
-						if metric.Value != 5 {
-							t.Errorf("Multi-SAN cert should have 5 SANs, got %f", metric.Value)
-						}
-						found = true
-						break
-					}
-				}
-			}
-			if !found {
-				t.Error("Could not find SAN count metric for multi-SAN certificate")
-			}
-		})
-	} else {
-		t.Log("Skipping CertificateSpecificMetrics test - ssl_cert_expiration_timestamp not found")
-	}
-
-	// Test duplicate detection
-	t.Run("DuplicateDetection", func(t *testing.T) {
-		// Should detect duplicates between valid.pem and duplicate.pem
-		duplicateCount := getMetricCount(parsedMetrics, "ssl_cert_duplicate_count")
-		if duplicateCount == 0 {
-			t.Error("Expected to find duplicate certificate metrics")
-		}
-
-		// Verify the duplicate count is 2 for the duplicated certificate
-		found := false
-		for _, metric := range parsedMetrics {
-			if metric.Name == "ssl_cert_duplicate_count" && metric.Value == 2 {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("Expected to find duplicate count of 2")
-		}
-	})
-
-	// Test issuer classification if metrics are present
-	if hasMetric(parsedMetrics, "ssl_cert_issuer_code") {
-		t.Run("IssuerClassification", func(t *testing.T) {
-			issuerCount := getMetricCount(parsedMetrics, "ssl_cert_issuer_code")
-			if issuerCount == 0 {
-				t.Error("Expected to find issuer classification metrics")
-			}
-
-			// Should have different issuer codes for self-signed vs regular certs
-			foundSelfSigned := false
-			foundRegular := false
-
-			for _, metric := range parsedMetrics {
-				if metric.Name == "ssl_cert_issuer_code" {
-					if contains(metric.Labels["issuer"], "Self-Signed") {
-						foundSelfSigned = true
-					} else {
-						foundRegular = true
-					}
-				}
-			}
-
-			if !foundSelfSigned {
-				t.Error("Expected to find self-signed issuer classification")
-			}
-			if !foundRegular {
-				t.Error("Expected to find regular issuer classification")
-			}
-		})
-	} else {
-		t.Log("Skipping IssuerClassification test - ssl_cert_issuer_code not found")
-	}
+	// Fetch metrics with retry
+	metricsOutput := fetchMetricsWithRetry(t, cfg.Port)
 
 	// Shutdown server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -345,32 +177,228 @@ func TestAllMetricsExposedFixed(t *testing.T) {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		t.Errorf("Server shutdown error: %v", err)
 	}
+
+	return metricsOutput
 }
 
-// hasMetric checks if a metric with the given name exists
-func hasMetric(metrics []MetricValue, metricName string) bool {
-	for _, metric := range metrics {
-		if metric.Name == metricName {
-			return true
+// fetchMetricsWithRetry fetches metrics with retry logic
+func fetchMetricsWithRetry(t *testing.T, port int) string {
+	var metricsOutput string
+	var fetchErr error
+	ctx := context.Background()
+
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/metrics", port), nil)
+		if err != nil {
+			fetchErr = err
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fetchErr = err
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+		// Handle close error in loop (deferInLoop fix)
+		func() {
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Logf("Failed to close response body: %v", err)
+				}
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				fetchErr = fmt.Errorf("metrics endpoint returned status %d", resp.StatusCode)
+				return
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				fetchErr = err
+				return
+			}
+
+			metricsOutput = string(body)
+			fetchErr = nil
+		}()
+
+		if fetchErr == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	if fetchErr != nil {
+		t.Fatal("Failed to fetch metrics after retries:", fetchErr)
+	}
+
+	return metricsOutput
+}
+
+// debugSSLCertMetrics prints SSL cert metrics for debugging
+func debugSSLCertMetrics(t *testing.T, parsedMetrics []MetricValue) {
+	t.Log("SSL cert metrics found in HTTP response:")
+	for _, metric := range parsedMetrics {
+		if strings.Contains(metric.Name, "ssl_cert") {
+			t.Logf("  %s = %f (labels: %v)", metric.Name, metric.Value, metric.Labels)
 		}
 	}
-	return false
 }
 
-// getAvailableMetricNames returns a list of all metric names found
-func getAvailableMetricNames(metrics []MetricValue) []string {
-	names := make(map[string]bool)
-	for _, metric := range metrics {
-		names[metric.Name] = true
+// testAllExpectedMetricsPresent tests that all expected metrics are present
+func testAllExpectedMetricsPresent(t *testing.T, parsedMetrics []MetricValue) {
+	expectedMetrics := []string{
+		"ssl_cert_expiration_timestamp",
+		"ssl_cert_san_count",
+		"ssl_cert_info",
+		"ssl_cert_duplicate_count",
+		"ssl_cert_issuer_code",
+		"ssl_cert_weak_key_total",
+		"ssl_cert_deprecated_sigalg_total",
+		"ssl_cert_files_total",
+		"ssl_certs_parsed_total",
+		"ssl_cert_parse_errors_total",
+		"ssl_cert_scan_duration_seconds",
+		"ssl_cert_last_scan_timestamp",
 	}
 
-	result := make([]string, 0, len(names))
-	for name := range names {
-		result = append(result, name)
+	for _, metricName := range expectedMetrics {
+		found := false
+		for _, metric := range parsedMetrics {
+			if metric.Name == metricName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Metric %s not found in metrics output", metricName)
+			t.Logf("Available metrics: %v", getAvailableMetricNames(parsedMetrics))
+		}
 	}
-	return result
 }
 
+// testOperationalMetricsValues tests operational metrics values
+func testOperationalMetricsValues(t *testing.T, parsedMetrics []MetricValue) {
+	var filesTotal, parsedTotal, weakKeyTotal float64
+
+	for _, metric := range parsedMetrics {
+		switch metric.Name {
+		case "ssl_cert_files_total":
+			filesTotal = metric.Value
+		case "ssl_certs_parsed_total":
+			parsedTotal = metric.Value
+		case "ssl_cert_weak_key_total":
+			weakKeyTotal = metric.Value
+		}
+	}
+
+	t.Logf("Found: files=%v, parsed=%v, weak_keys=%v", filesTotal, parsedTotal, weakKeyTotal)
+
+	// We expect 5 certificate files (6 certs - 1 duplicate detection)
+	verifyMetricValue(t, parsedMetrics, "ssl_cert_files_total", 5)
+	verifyMetricValue(t, parsedMetrics, "ssl_certs_parsed_total", 5)
+	verifyMetricValue(t, parsedMetrics, "ssl_cert_parse_errors_total", 0)
+
+	// Accept either 0 or 1 weak key
+	if weakKeyTotal != 0 && weakKeyTotal != 1 {
+		t.Errorf("Expected 0 or 1 weak key, got %v", weakKeyTotal)
+	}
+
+	verifyMetricValue(t, parsedMetrics, "ssl_cert_deprecated_sigalg_total", 0)
+}
+
+// testCertificateSpecificMetrics tests certificate-specific metrics
+func testCertificateSpecificMetrics(t *testing.T, parsedMetrics []MetricValue, certDir string) {
+	expirationCount := getMetricCount(parsedMetrics, "ssl_cert_expiration_timestamp")
+	sanCount := getMetricCount(parsedMetrics, "ssl_cert_san_count")
+	infoCount := getMetricCount(parsedMetrics, "ssl_cert_info")
+
+	t.Logf("Actual metrics: expiration=%d, san=%d, info=%d", expirationCount, sanCount, infoCount)
+
+	if expirationCount != 5 {
+		t.Errorf("Expected 5 expiration metrics, got %d", expirationCount)
+	}
+
+	if sanCount != 5 {
+		t.Errorf("Expected 5 SAN count metrics, got %d", sanCount)
+	}
+
+	if infoCount != 5 {
+		t.Errorf("Expected 5 cert info metrics, got %d", infoCount)
+	}
+
+	// Verify multi-SAN certificate
+	multiSANPath := filepath.Join(certDir, "multi_san.pem")
+	found := false
+	for _, metric := range parsedMetrics {
+		if metric.Name == "ssl_cert_san_count" {
+			if path, exists := metric.Labels["path"]; exists && path == multiSANPath {
+				if metric.Value != 5 {
+					t.Errorf("Multi-SAN cert should have 5 SANs, got %f", metric.Value)
+				}
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Error("Could not find SAN count metric for multi-SAN certificate")
+	}
+}
+
+// testDuplicateDetection tests duplicate certificate detection
+func testDuplicateDetection(t *testing.T, parsedMetrics []MetricValue) {
+	duplicateCount := getMetricCount(parsedMetrics, "ssl_cert_duplicate_count")
+	if duplicateCount == 0 {
+		t.Error("Expected to find duplicate certificate metrics")
+	}
+
+	// Verify the duplicate count is 2 for the duplicated certificate
+	found := false
+	for _, metric := range parsedMetrics {
+		if metric.Name == "ssl_cert_duplicate_count" && metric.Value == 2 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected to find duplicate count of 2")
+	}
+}
+
+// testIssuerClassification tests issuer classification
+func testIssuerClassification(t *testing.T, parsedMetrics []MetricValue) {
+	issuerCount := getMetricCount(parsedMetrics, "ssl_cert_issuer_code")
+	if issuerCount == 0 {
+		t.Error("Expected to find issuer classification metrics")
+	}
+
+	foundSelfSigned := false
+	foundRegular := false
+
+	for _, metric := range parsedMetrics {
+		if metric.Name == "ssl_cert_issuer_code" {
+			if issuer, exists := metric.Labels["issuer"]; exists {
+				if strings.Contains(issuer, "Self-Signed") {
+					foundSelfSigned = true
+				} else {
+					foundRegular = true
+				}
+			}
+		}
+	}
+
+	if !foundSelfSigned {
+		t.Error("Expected to find self-signed issuer classification")
+	}
+	if !foundRegular {
+		t.Error("Expected to find regular issuer classification")
+	}
+}
+
+// TestMetricsWithEmptyDirectoryFixed tests metrics with empty directory
 func TestMetricsWithEmptyDirectoryFixed(t *testing.T) {
 	// Test behavior when no certificates are found
 	tmpDir := t.TempDir()
@@ -383,65 +411,17 @@ func TestMetricsWithEmptyDirectoryFixed(t *testing.T) {
 	writeCertToFile(t, filepath.Join(certDir, "private.key"), []byte("dummy private key"))
 	writeCertToFile(t, filepath.Join(certDir, "server_key.pem"), []byte("dummy private key"))
 
-	port := generateTestPort()
-	cfg := &config.Config{
-		Port:                   port,
-		BindAddress:            "127.0.0.1",
-		CertificateDirectories: []string{certDir},
-		ScanInterval:           1 * time.Minute,
-		Workers:                1, // Single worker for deterministic behavior
-		LogLevel:               "debug",
-		CacheDir:               filepath.Join(tmpDir, "cache"),
-		CacheTTL:               30 * time.Minute,
-		CacheMaxSize:           10485760,
-	}
+	cfg := createTestConfig(tmpDir, certDir)
+	registry, metricsCollector, healthChecker, log := createTestComponents(cfg)
 
-	registry := prometheus.NewRegistry()
-	metricsCollector := metrics.NewCollectorWithRegistry(registry)
-	healthChecker := health.New(cfg, metricsCollector)
-	log := logger.NewNop()
+	// Run scan
+	runCertificateScan(t, cfg, metricsCollector, log)
 
-	// Create scanner and run scan
-	certScanner, err := scanner.New(cfg, metricsCollector, log)
-	if err != nil {
-		t.Fatal("Failed to create scanner:", err)
-	}
-	defer certScanner.Close()
+	// Start server and fetch metrics
+	metricsOutput := startServerAndFetchMetrics(t, cfg, registry, metricsCollector, healthChecker, log)
+	parsedMetrics := parsePrometheusMetrics(metricsOutput)
 
-	ctx := context.Background()
-	if err := certScanner.Scan(ctx); err != nil {
-		t.Fatal("Failed to run scan:", err)
-	}
-
-	// Wait for scan to complete
-	time.Sleep(500 * time.Millisecond)
-
-	// Start HTTP server
-	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
-	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			t.Errorf("Server start error: %v", err)
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(300 * time.Millisecond)
-
-	// Fetch metrics
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", port))
-	if err != nil {
-		t.Fatal("Failed to fetch metrics:", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal("Failed to read metrics response:", err)
-	}
-
-	parsedMetrics := parsePrometheusMetrics(string(body))
-
-	// Verify metrics show empty state correctly (private keys excluded, so 0 certificate files)
+	// Verify metrics show empty state correctly
 	verifyMetricValue(t, parsedMetrics, "ssl_cert_files_total", 0)
 	verifyMetricValue(t, parsedMetrics, "ssl_certs_parsed_total", 0)
 	verifyMetricValue(t, parsedMetrics, "ssl_cert_parse_errors_total", 0)
@@ -450,15 +430,9 @@ func TestMetricsWithEmptyDirectoryFixed(t *testing.T) {
 	// Should still have scan duration and timestamp
 	verifyMetricExists(t, parsedMetrics, "ssl_cert_scan_duration_seconds")
 	verifyMetricExists(t, parsedMetrics, "ssl_cert_last_scan_timestamp")
-
-	// Shutdown server
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		t.Errorf("Server shutdown error: %v", err)
-	}
 }
 
+// TestMetricsWithInvalidCertificatesFixed tests metrics with invalid certificates
 func TestMetricsWithInvalidCertificatesFixed(t *testing.T) {
 	// Test behavior with invalid certificate files
 	tmpDir := t.TempDir()
@@ -480,63 +454,15 @@ func TestMetricsWithInvalidCertificatesFixed(t *testing.T) {
 	writeCertToFile(t, filepath.Join(certDir, "server.key"), []byte("dummy private key"))
 	writeCertToFile(t, filepath.Join(certDir, "private_key.pem"), []byte("dummy private key"))
 
-	port := generateTestPort()
-	cfg := &config.Config{
-		Port:                   port,
-		BindAddress:            "127.0.0.1",
-		CertificateDirectories: []string{certDir},
-		ScanInterval:           1 * time.Minute,
-		Workers:                1, // Single worker for deterministic behavior
-		LogLevel:               "debug",
-		CacheDir:               filepath.Join(tmpDir, "cache"),
-		CacheTTL:               30 * time.Minute,
-		CacheMaxSize:           10485760,
-	}
+	cfg := createTestConfig(tmpDir, certDir)
+	registry, metricsCollector, healthChecker, log := createTestComponents(cfg)
 
-	registry := prometheus.NewRegistry()
-	metricsCollector := metrics.NewCollectorWithRegistry(registry)
-	healthChecker := health.New(cfg, metricsCollector)
-	log := logger.NewNop()
+	// Run scan
+	runCertificateScan(t, cfg, metricsCollector, log)
 
-	// Create scanner and run scan
-	certScanner, err := scanner.New(cfg, metricsCollector, log)
-	if err != nil {
-		t.Fatal("Failed to create scanner:", err)
-	}
-	defer certScanner.Close()
-
-	ctx := context.Background()
-	if err := certScanner.Scan(ctx); err != nil {
-		t.Fatal("Failed to run scan:", err)
-	}
-
-	// Wait for scan to complete
-	time.Sleep(500 * time.Millisecond)
-
-	// Start HTTP server
-	srv := server.NewWithRegistry(cfg, metricsCollector, healthChecker, log, registry)
-	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			t.Errorf("Server start error: %v", err)
-		}
-	}()
-
-	// Wait for server to start
-	time.Sleep(300 * time.Millisecond)
-
-	// Fetch metrics
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", port))
-	if err != nil {
-		t.Fatal("Failed to fetch metrics:", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal("Failed to read metrics response:", err)
-	}
-
-	parsedMetrics := parsePrometheusMetrics(string(body))
+	// Start server and fetch metrics
+	metricsOutput := startServerAndFetchMetrics(t, cfg, registry, metricsCollector, healthChecker, log)
+	parsedMetrics := parsePrometheusMetrics(metricsOutput)
 
 	// Should find 3 certificate files (2 invalid + 1 valid, private keys excluded)
 	verifyMetricValue(t, parsedMetrics, "ssl_cert_files_total", 3)
@@ -546,11 +472,4 @@ func TestMetricsWithInvalidCertificatesFixed(t *testing.T) {
 
 	// Should have 2 parse errors
 	verifyMetricValue(t, parsedMetrics, "ssl_cert_parse_errors_total", 2)
-
-	// Shutdown server
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		t.Errorf("Server shutdown error: %v", err)
-	}
 }

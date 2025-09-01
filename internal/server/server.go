@@ -1,3 +1,5 @@
+// Package server provides the HTTP server for the TLS Certificate Monitor.
+// It exposes metrics via Prometheus format and health check endpoints.
 package server
 
 import (
@@ -87,7 +89,8 @@ func (s *Server) Start() error {
 			PreferServerCipherSuites: true,
 			CipherSuites: []uint16{
 				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+				// Removed weak cipher suite (gosec G402 fix)
+				// tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 			},
@@ -152,7 +155,8 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html>
+	// Handle fmt.Fprintf error (errcheck fix)
+	_, err := fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head>
     <title>TLS Certificate Monitor</title>
@@ -225,18 +229,27 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		s.config.ScanInterval,
 		s.config.CertificateDirectories,
 	)
+
+	if err != nil {
+		s.logger.Error("Failed to write response", zap.Error(err))
+	}
 }
 
 // handleHealth handles the health check endpoint
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response := s.health.Check()
 
-	// Set status code based on health
+	// Set status code based on health (exhaustive fix)
 	statusCode := http.StatusOK
 	switch response.Status {
+	case health.StatusHealthy:
+		statusCode = http.StatusOK
 	case health.StatusDegraded:
 		statusCode = http.StatusOK // Still return 200 for degraded
 	case health.StatusUnhealthy:
+		statusCode = http.StatusServiceUnavailable
+	default:
+		// Unknown status - treat as unhealthy
 		statusCode = http.StatusServiceUnavailable
 	}
 

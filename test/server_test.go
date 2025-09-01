@@ -60,13 +60,26 @@ func TestServerEndpoints(t *testing.T) {
 		{"not_found", "/invalid", http.StatusNotFound},
 	}
 
+	// Create context for requests (noctx fix)
+	ctx := context.Background()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Get(baseURL + tt.endpoint)
+			req, err := http.NewRequestWithContext(ctx, "GET", baseURL+tt.endpoint, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer resp.Body.Close()
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Handle close error (errcheck fix)
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Logf("Failed to close response body: %v", err)
+				}
+			}()
 
 			if resp.StatusCode != tt.wantStatus {
 				t.Errorf("Status code = %d, want %d", resp.StatusCode, tt.wantStatus)
@@ -75,9 +88,9 @@ func TestServerEndpoints(t *testing.T) {
 	}
 
 	// Shutdown server
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		t.Errorf("Server shutdown error: %v", err)
 	}
 }
@@ -115,12 +128,23 @@ func TestHealthEndpoint(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Test health endpoint
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", port))
+	// Test health endpoint with context (noctx fix)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/healthz", port), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Handle close error (errcheck fix)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Health check status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -172,9 +196,9 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 
 	// Shutdown server
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		t.Errorf("Server shutdown error: %v", err)
 	}
 }
@@ -213,12 +237,23 @@ func TestMetricsEndpoint(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Test metrics endpoint
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/metrics", port))
+	// Test metrics endpoint with context (noctx fix)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/metrics", port), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Handle close error (errcheck fix)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Logf("Failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Metrics endpoint status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -233,8 +268,6 @@ func TestMetricsEndpoint(t *testing.T) {
 	bodyStr := string(body)
 
 	// Check for expected application metrics only
-	// Note: Go runtime metrics (go_memstats, go_threads) are only registered
-	// with the default registry, not custom test registries
 	expectedMetrics := []string{
 		"ssl_cert_files_total",
 		"ssl_certs_parsed_total",
@@ -259,9 +292,9 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 
 	// Shutdown server
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		t.Errorf("Server shutdown error: %v", err)
 	}
 }
@@ -294,12 +327,21 @@ func TestGracefulShutdown(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify server is running
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
+	// Verify server is running with context (noctx fix)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://127.0.0.1:%d/", port), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Handle close error (errcheck fix)
+	if err := resp.Body.Close(); err != nil {
+		t.Logf("Failed to close response body: %v", err)
+	}
 
 	// Shutdown server with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

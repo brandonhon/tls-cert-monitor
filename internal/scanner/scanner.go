@@ -1,5 +1,6 @@
-// internal/scanner/scanner.go
-
+// Package scanner provides certificate scanning functionality for the TLS Certificate Monitor.
+// It discovers, parses, and analyzes SSL/TLS certificates from configured directories,
+// tracking security issues and updating Prometheus metrics.
 package scanner
 
 import (
@@ -25,32 +26,34 @@ import (
 )
 
 // Scanner scans directories for SSL/TLS certificates
+// Field order optimized for memory alignment (fieldalignment fix)
 type Scanner struct {
-	config   *config.Config
-	metrics  *metrics.Collector
-	logger   *zap.Logger
-	cache    *cache.Cache
-	watcher  *fsnotify.Watcher
-	mu       sync.RWMutex
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	watcher  *fsnotify.Watcher  // 8 bytes
+	config   *config.Config     // 8 bytes
+	metrics  *metrics.Collector // 8 bytes
+	logger   *zap.Logger        // 8 bytes
+	cache    *cache.Cache       // 8 bytes
+	stopChan chan struct{}      // 8 bytes
+	mu       sync.RWMutex       // 24 bytes
+	wg       sync.WaitGroup     // 12 bytes (padded to 16)
 }
 
 // CertificateInfo contains certificate details
+// Field order optimized for memory alignment (fieldalignment fix)
 type CertificateInfo struct {
-	Path               string
-	Subject            string
-	Issuer             string
-	SerialNumber       string
-	NotBefore          time.Time
-	NotAfter           time.Time
-	SignatureAlgorithm string
-	KeySize            int
-	IsWeakKey          bool
-	IsExpired          bool
-	IsDeprecatedAlg    bool
-	SANCount           int
-	Fingerprint        string
+	NotBefore          time.Time // 24 bytes
+	NotAfter           time.Time // 24 bytes
+	Path               string    // 16 bytes
+	Subject            string    // 16 bytes
+	Issuer             string    // 16 bytes
+	SerialNumber       string    // 16 bytes
+	SignatureAlgorithm string    // 16 bytes
+	Fingerprint        string    // 16 bytes
+	KeySize            int       // 8 bytes
+	SANCount           int       // 8 bytes
+	IsWeakKey          bool      // 1 byte
+	IsExpired          bool      // 1 byte
+	IsDeprecatedAlg    bool      // 1 byte
 }
 
 // New creates a new certificate scanner
@@ -84,8 +87,7 @@ func (s *Scanner) Scan(ctx context.Context) error {
 	s.logger.Info("Starting certificate scan")
 	startTime := time.Now()
 
-	// MOVED: Reset certificate metrics BEFORE starting workers to avoid race condition
-	// This ensures we start with a clean slate
+	// Reset certificate metrics BEFORE starting workers to avoid race condition
 	s.metrics.ResetCertificateMetrics()
 
 	var (
@@ -187,7 +189,6 @@ func (s *Scanner) Scan(ctx context.Context) error {
 	wg.Wait()
 
 	// NOW update all certificate-specific metrics AFTER all workers are done
-	// This ensures no race condition with ResetCertificateMetrics
 	s.logger.Debug("Updating certificate-specific metrics", zap.Int("certificates", len(allCertInfos)))
 	for _, certInfo := range allCertInfos {
 		s.updateMetrics(certInfo)
@@ -295,7 +296,10 @@ func (s *Scanner) UpdateConfig(cfg *config.Config) error {
 // Close shuts down the scanner
 func (s *Scanner) Close() {
 	close(s.stopChan)
-	s.watcher.Close()
+	// Handle watcher close error (errcheck fix)
+	if err := s.watcher.Close(); err != nil {
+		s.logger.Error("Failed to close file watcher", zap.Error(err))
+	}
 	s.cache.Close()
 	s.wg.Wait()
 }
@@ -366,11 +370,23 @@ func (s *Scanner) extractCertInfo(path string, cert *x509.Certificate) *Certific
 		}
 	}
 
-	// Check for deprecated signature algorithms
+	// Check for deprecated signature algorithms (exhaustive fix)
 	isDeprecatedAlg := false
 	switch cert.SignatureAlgorithm {
-	case x509.MD5WithRSA, x509.SHA1WithRSA, x509.DSAWithSHA1, x509.ECDSAWithSHA1:
+	case x509.MD5WithRSA, x509.SHA1WithRSA, x509.DSAWithSHA1, x509.ECDSAWithSHA1,
+		x509.MD2WithRSA: // Added missing deprecated algorithms
 		isDeprecatedAlg = true
+	case x509.UnknownSignatureAlgorithm,
+		x509.SHA256WithRSA, x509.SHA384WithRSA, x509.SHA512WithRSA,
+		x509.DSAWithSHA256,
+		x509.ECDSAWithSHA256, x509.ECDSAWithSHA384, x509.ECDSAWithSHA512,
+		x509.SHA256WithRSAPSS, x509.SHA384WithRSAPSS, x509.SHA512WithRSAPSS,
+		x509.PureEd25519:
+		// Modern algorithms - not deprecated
+		isDeprecatedAlg = false
+	default:
+		// Unknown algorithm - treat as not deprecated
+		isDeprecatedAlg = false
 	}
 
 	// Count SANs

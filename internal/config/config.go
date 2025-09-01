@@ -14,27 +14,27 @@ import (
 )
 
 // Config represents the application configuration.
-// Field order is optimized to minimize memory padding.
+// Field order is optimized to minimize memory padding (fieldalignment fix).
 type Config struct {
-	// Group 8-byte aligned fields first
+	// 8-byte aligned fields first
 	CacheMaxSize int64         `mapstructure:"cache_max_size" yaml:"cache_max_size"`
 	ScanInterval time.Duration `mapstructure:"scan_interval" yaml:"scan_interval"`
 	CacheTTL     time.Duration `mapstructure:"cache_ttl" yaml:"cache_ttl"`
 
-	// int fields (8 bytes on 64-bit, 4 bytes on 32-bit)
-	Port    int `mapstructure:"port" yaml:"port"`
-	Workers int `mapstructure:"workers" yaml:"workers"`
-
-	// Slice (24 bytes header: pointer + len + cap)
+	// Slice (24 bytes header)
 	CertificateDirectories []string `mapstructure:"certificate_directories" yaml:"certificate_directories"`
 
-	// String fields (16 bytes each: pointer + len)
+	// String fields (16 bytes each)
 	BindAddress string `mapstructure:"bind_address" yaml:"bind_address"`
 	TLSCert     string `mapstructure:"tls_cert" yaml:"tls_cert"`
 	TLSKey      string `mapstructure:"tls_key" yaml:"tls_key"`
 	LogFile     string `mapstructure:"log_file" yaml:"log_file"`
 	LogLevel    string `mapstructure:"log_level" yaml:"log_level"`
 	CacheDir    string `mapstructure:"cache_dir" yaml:"cache_dir"`
+
+	// int fields (platform dependent, but after strings for better alignment)
+	Port    int `mapstructure:"port" yaml:"port"`
+	Workers int `mapstructure:"workers" yaml:"workers"`
 
 	// Boolean fields last (1 byte each)
 	DryRun    bool `mapstructure:"dry_run" yaml:"dry_run"`

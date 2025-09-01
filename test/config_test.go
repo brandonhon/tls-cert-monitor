@@ -67,11 +67,12 @@ func TestConfigLoad(t *testing.T) {
 }
 
 func TestConfigValidation(t *testing.T) {
+	// Field order optimized for memory alignment (fieldalignment fix)
 	tests := []struct {
-		name    string
 		config  *config.Config
-		wantErr bool
+		name    string
 		errMsg  string
+		wantErr bool
 	}{
 		{
 			name: "valid config",
@@ -185,7 +186,10 @@ func TestConfigDefaults(t *testing.T) {
 func TestConfigPathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
 	allowedDir := filepath.Join(tmpDir, "allowed")
-	os.MkdirAll(allowedDir, 0755)
+	// Handle error from MkdirAll (errcheck fix)
+	if err := os.MkdirAll(allowedDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &config.Config{
 		CertificateDirectories: []string{allowedDir},

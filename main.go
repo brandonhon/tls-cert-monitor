@@ -1,3 +1,6 @@
+// Package main is the entry point for the TLS Certificate Monitor application.
+// It initializes all components, handles configuration, and manages the lifecycle
+// of the monitoring service.
 package main
 
 import (
@@ -51,11 +54,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer log.Sync()
+	// Store sync error for later handling (exitAfterDefer fix)
+	var syncErr error
+	defer func() {
+		// Handle log.Sync error (errcheck fix)
+		if err := log.Sync(); err != nil {
+			syncErr = err
+			fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
+		}
+	}()
 
-	// Dry run mode - validate and exit
+	// Dry run mode - validate and exit (exitAfterDefer fix - moved outside defer)
 	if *dryRun || cfg.DryRun {
 		log.Info("Dry run mode - configuration validated successfully")
+		// Sync logs before exit
+		if err := log.Sync(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
+		}
 		os.Exit(0)
 	}
 
@@ -83,23 +98,28 @@ func main() {
 
 	// Start configuration watcher for hot reload
 	configWatcher := config.NewWatcher(cfg, *configFile, log)
-	go configWatcher.Watch(ctx, func(newCfg *config.Config) {
-		log.Info("Configuration changed, reloading...")
+	go func() {
+		// Handle Watch error (errcheck fix)
+		if err := configWatcher.Watch(ctx, func(newCfg *config.Config) {
+			log.Info("Configuration changed, reloading...")
 
-		// Update scanner with new config
-		if err := certScanner.UpdateConfig(newCfg); err != nil {
-			log.Error("Failed to update scanner configuration", zap.Error(err))
-			return
+			// Update scanner with new config
+			if err := certScanner.UpdateConfig(newCfg); err != nil {
+				log.Error("Failed to update scanner configuration", zap.Error(err))
+				return
+			}
+
+			// Trigger rescan
+			if err := certScanner.Scan(ctx); err != nil {
+				log.Error("Rescan after config change failed", zap.Error(err))
+			}
+
+			// Update health checker
+			healthChecker.UpdateConfig(newCfg)
+		}); err != nil {
+			log.Error("Configuration watcher error", zap.Error(err))
 		}
-
-		// Trigger rescan
-		if err := certScanner.Scan(ctx); err != nil {
-			log.Error("Rescan after config change failed", zap.Error(err))
-		}
-
-		// Update health checker
-		healthChecker.UpdateConfig(newCfg)
-	})
+	}()
 
 	// Start certificate file watcher
 	go certScanner.WatchFiles(ctx)
@@ -165,4 +185,9 @@ func main() {
 	certScanner.Close()
 
 	log.Info("Shutdown complete")
+
+	// Check if there was a sync error
+	if syncErr != nil {
+		os.Exit(1)
+	}
 }

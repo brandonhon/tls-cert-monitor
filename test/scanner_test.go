@@ -1,5 +1,3 @@
-// test/scanner_test.go
-
 package test
 
 import (
@@ -14,12 +12,16 @@ import (
 	"github.com/brandonhon/tls-cert-monitor/internal/metrics"
 	"github.com/brandonhon/tls-cert-monitor/internal/scanner"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 func TestCertificateScanning(t *testing.T) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	os.MkdirAll(certDir, 0755)
+	// Handle error from MkdirAll (errcheck fix)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Generate test certificates
 	goodCert := generateTestCertificate(t, 2048, time.Now().Add(365*24*time.Hour))
@@ -66,19 +68,19 @@ func TestCertificateScanning(t *testing.T) {
 	}
 
 	// Verify metrics - should only count certificate files, not private keys
-	metrics := metricsCollector.GetMetrics()
+	metricsMap := metricsCollector.GetMetrics()
 
 	// Should only find 3 certificate files (private keys excluded)
-	if metrics["cert_files_total"] != 3 {
-		t.Errorf("Expected 3 certificate files, got %v", metrics["cert_files_total"])
+	if metricsMap["cert_files_total"] != 3 {
+		t.Errorf("Expected 3 certificate files, got %v", metricsMap["cert_files_total"])
 	}
 
-	if metrics["certs_parsed_total"] != 3 {
-		t.Errorf("Expected 3 parsed certificates, got %v", metrics["certs_parsed_total"])
+	if metricsMap["certs_parsed_total"] != 3 {
+		t.Errorf("Expected 3 parsed certificates, got %v", metricsMap["certs_parsed_total"])
 	}
 
-	if metrics["weak_key_total"] != 1 {
-		t.Errorf("Expected 1 weak key, got %v", metrics["weak_key_total"])
+	if metricsMap["weak_key_total"] != 1 {
+		t.Errorf("Expected 1 weak key, got %v", metricsMap["weak_key_total"])
 	}
 }
 
@@ -99,7 +101,7 @@ func TestCertificateFileDetection(t *testing.T) {
 		{"ca-cert.pem", true},
 		{"chain.pem", true},
 		{"bundle.pem", true},
-		{"cacert.pem", true}, // The scanner looks for "cacert" pattern too
+		{"cacert.pem", true},
 
 		// Private key files - should be excluded
 		{"private.key", false},
@@ -148,7 +150,7 @@ func TestCertificateFileDetection(t *testing.T) {
 	}
 
 	// Verify that only certificate files were processed
-	metrics := metricsCollector.GetMetrics()
+	metricsMap := metricsCollector.GetMetrics()
 
 	// Count expected certificate files
 	expectedCertFiles := 0
@@ -158,10 +160,10 @@ func TestCertificateFileDetection(t *testing.T) {
 		}
 	}
 
-	t.Logf("Expected %d certificate files, got %v", expectedCertFiles, metrics["cert_files_total"])
+	t.Logf("Expected %d certificate files, got %v", expectedCertFiles, metricsMap["cert_files_total"])
 
-	if metrics["cert_files_total"] != float64(expectedCertFiles) {
-		t.Errorf("Expected %d certificate files, got %v", expectedCertFiles, metrics["cert_files_total"])
+	if metricsMap["cert_files_total"] != float64(expectedCertFiles) {
+		t.Errorf("Expected %d certificate files, got %v", expectedCertFiles, metricsMap["cert_files_total"])
 
 		// Debug: show which files are being detected
 		t.Log("Certificate files that should be detected:")
@@ -181,7 +183,10 @@ func TestCertificateFileDetection(t *testing.T) {
 func TestPrivateKeyExclusion(t *testing.T) {
 	tmpDir := t.TempDir()
 	certDir := filepath.Join(tmpDir, "certs")
-	os.MkdirAll(certDir, 0755)
+	// Handle error from MkdirAll (errcheck fix)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a valid certificate
 	validCert := generateTestCertificate(t, 2048, time.Now().Add(365*24*time.Hour))
@@ -228,19 +233,19 @@ func TestPrivateKeyExclusion(t *testing.T) {
 	}
 
 	// Should only process the one valid certificate, not any private keys
-	metrics := metricsCollector.GetMetrics()
+	metricsMap := metricsCollector.GetMetrics()
 
-	if metrics["cert_files_total"] != 1 {
-		t.Errorf("Expected 1 certificate file (private keys excluded), got %v", metrics["cert_files_total"])
+	if metricsMap["cert_files_total"] != 1 {
+		t.Errorf("Expected 1 certificate file (private keys excluded), got %v", metricsMap["cert_files_total"])
 	}
 
-	if metrics["certs_parsed_total"] != 1 {
-		t.Errorf("Expected 1 parsed certificate, got %v", metrics["certs_parsed_total"])
+	if metricsMap["certs_parsed_total"] != 1 {
+		t.Errorf("Expected 1 parsed certificate, got %v", metricsMap["certs_parsed_total"])
 	}
 
 	// Should have no parse errors since private keys are excluded before parsing
-	if metrics["cert_parse_errors_total"] != 0 {
-		t.Errorf("Expected 0 parse errors, got %v", metrics["cert_parse_errors_total"])
+	if metricsMap["cert_parse_errors_total"] != 0 {
+		t.Errorf("Expected 0 parse errors, got %v", metricsMap["cert_parse_errors_total"])
 	}
 }
 
@@ -288,8 +293,8 @@ func TestWeakKeyDetection(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			metrics := metricsCollector.GetMetrics()
-			weakKeys := metrics["weak_key_total"]
+			metricsMap := metricsCollector.GetMetrics()
+			weakKeys := metricsMap["weak_key_total"]
 
 			if tt.isWeak && weakKeys != 1 {
 				t.Errorf("Expected weak key to be detected, but wasn't")
@@ -301,6 +306,8 @@ func TestWeakKeyDetection(t *testing.T) {
 	}
 }
 
+// TestIssuerClassification tests certificate issuer classification
+// Refactored to reduce cyclomatic complexity (gocyclo fix)
 func TestIssuerClassification(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -321,100 +328,124 @@ func TestIssuerClassification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			certDir := filepath.Join(tmpDir, "certs")
-			os.MkdirAll(certDir, 0755)
-
-			// Create a certificate with custom issuer
-			cert := createCertificateWithIssuer(t, tt.issuer)
-			certPath := filepath.Join(certDir, "test.pem")
-			writeCertToFile(t, certPath, cert)
-
-			cfg := &config.Config{
-				CertificateDirectories: []string{certDir},
-				Workers:                1,
-				LogLevel:               "debug",
-				CacheDir:               filepath.Join(tmpDir, "cache"),
-				CacheTTL:               30 * time.Minute,
-				CacheMaxSize:           10485760,
-				ScanInterval:           1 * time.Minute,
-			}
-
-			registry := prometheus.NewRegistry()
-			metricsCollector := metrics.NewCollectorWithRegistry(registry)
-			log := logger.NewNop()
-
-			s, err := scanner.New(cfg, metricsCollector, log)
-			if err != nil {
-				t.Fatal("Failed to create scanner:", err)
-			}
-			defer s.Close()
-
-			ctx := context.Background()
-			if err := s.Scan(ctx); err != nil {
-				t.Fatal("Failed to run scan:", err)
-			}
-
-			// Give time for async operations
-			time.Sleep(100 * time.Millisecond)
-
-			// Check issuer code metric
-			families, err := registry.Gather()
-			if err != nil {
-				t.Fatal("Failed to gather metrics:", err)
-			}
-
-			foundExpectedCode := false
-			for _, family := range families {
-				if family.GetName() == "ssl_cert_issuer_code" {
-					for _, metric := range family.GetMetric() {
-						if metric.Gauge != nil && metric.Gauge.Value != nil {
-							actualCode := int(*metric.Gauge.Value)
-							if actualCode == tt.expectedCode {
-								foundExpectedCode = true
-
-								// Also check that we have the new labels
-								hasCommonName := false
-								hasFileName := false
-								for _, label := range metric.GetLabel() {
-									if label.GetName() == "common_name" && label.GetValue() != "" {
-										hasCommonName = true
-										t.Logf("Found common_name: %s", label.GetValue())
-									}
-									if label.GetName() == "file_name" && label.GetValue() != "" {
-										hasFileName = true
-										t.Logf("Found file_name: %s", label.GetValue())
-									}
-								}
-
-								if !hasCommonName {
-									t.Error("Expected common_name label to be present")
-								}
-								if !hasFileName {
-									t.Error("Expected file_name label to be present")
-								}
-								break
-							}
-						}
-					}
-				}
-			}
-
-			if !foundExpectedCode {
-				t.Errorf("Expected issuer code %d for issuer '%s', but was not found", tt.expectedCode, tt.issuer)
-
-				// Debug: show what codes were found
-				t.Logf("Found issuer codes:")
-				for _, family := range families {
-					if family.GetName() == "ssl_cert_issuer_code" {
-						for _, metric := range family.GetMetric() {
-							if metric.Gauge != nil && metric.Gauge.Value != nil {
-								t.Logf("  Code: %d", int(*metric.Gauge.Value))
-							}
-						}
-					}
-				}
-			}
+			testSingleIssuerClassification(t, tt.issuer, tt.expectedCode)
 		})
+	}
+}
+
+// testSingleIssuerClassification tests a single issuer classification
+// Extracted to reduce cyclomatic complexity
+func testSingleIssuerClassification(t *testing.T, issuer string, expectedCode int) {
+	tmpDir := t.TempDir()
+	certDir := filepath.Join(tmpDir, "certs")
+	// Handle error from MkdirAll (errcheck fix)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		t.Fatal("Failed to create cert directory:", err)
+	}
+
+	// Create a certificate with custom issuer
+	cert := createCertificateWithIssuer(t, issuer)
+	certPath := filepath.Join(certDir, "test.pem")
+	writeCertToFile(t, certPath, cert)
+
+	cfg := &config.Config{
+		CertificateDirectories: []string{certDir},
+		Workers:                1,
+		LogLevel:               "debug",
+		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheTTL:               30 * time.Minute,
+		CacheMaxSize:           10485760,
+		ScanInterval:           1 * time.Minute,
+	}
+
+	registry := prometheus.NewRegistry()
+	metricsCollector := metrics.NewCollectorWithRegistry(registry)
+	log := logger.NewNop()
+
+	s, err := scanner.New(cfg, metricsCollector, log)
+	if err != nil {
+		t.Fatal("Failed to create scanner:", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	scanErr := s.Scan(ctx) // Avoid shadowing err (govet fix)
+	if scanErr != nil {
+		t.Fatal("Failed to run scan:", scanErr)
+	}
+
+	// Give time for async operations
+	time.Sleep(100 * time.Millisecond)
+
+	// Check issuer code metric
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal("Failed to gather metrics:", err)
+	}
+
+	if !verifyIssuerCode(t, families, expectedCode, issuer) {
+		t.Errorf("Expected issuer code %d for issuer '%s', but was not found", expectedCode, issuer)
+		debugIssuerCodes(t, families)
+	}
+}
+
+// verifyIssuerCode checks if the expected issuer code is present
+func verifyIssuerCode(t *testing.T, families []*dto.MetricFamily, expectedCode int, issuer string) bool {
+	for _, family := range families {
+		if family.GetName() == "ssl_cert_issuer_code" {
+			for _, metric := range family.GetMetric() {
+				if metric.Gauge != nil && metric.Gauge.Value != nil {
+					actualCode := int(*metric.Gauge.Value)
+					if actualCode == expectedCode {
+						// Also check that we have the new labels
+						verifyIssuerLabels(t, metric)
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// verifyIssuerLabels checks that the metric has the required labels
+func verifyIssuerLabels(t *testing.T, metric *dto.Metric) {
+	hasCommonName := false
+	hasFileName := false
+
+	for _, label := range metric.GetLabel() {
+		switch label.GetName() {
+		case "common_name":
+			if label.GetValue() != "" {
+				hasCommonName = true
+				t.Logf("Found common_name: %s", label.GetValue())
+			}
+		case "file_name":
+			if label.GetValue() != "" {
+				hasFileName = true
+				t.Logf("Found file_name: %s", label.GetValue())
+			}
+		}
+	}
+
+	if !hasCommonName {
+		t.Error("Expected common_name label to be present")
+	}
+	if !hasFileName {
+		t.Error("Expected file_name label to be present")
+	}
+}
+
+// debugIssuerCodes logs found issuer codes for debugging
+func debugIssuerCodes(t *testing.T, families []*dto.MetricFamily) {
+	t.Logf("Found issuer codes:")
+	for _, family := range families {
+		if family.GetName() == "ssl_cert_issuer_code" {
+			for _, metric := range family.GetMetric() {
+				if metric.Gauge != nil && metric.Gauge.Value != nil {
+					t.Logf("  Code: %d", int(*metric.Gauge.Value))
+				}
+			}
+		}
 	}
 }
