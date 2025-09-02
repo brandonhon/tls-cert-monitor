@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-50 dark:bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TLS-Cert-Monitor - A Go-based monitoring tool that scans directories for TLS/SSL certificates and exposes detailed metrics via Prometheus.">
+    <meta property="og:title" content="TLS Cert Monitor">
+    <meta property="og:description" content="Monitor TLS/SSL certificates, expiration dates, and security health with Prometheus metrics.">
+    <meta property="og:image" content="https://your-org.github.io/tls-cert-monitor/preview.png">
+    <meta property="og:url" content="https://your-org.github.io/tls-cert-monitor">
+    <meta name="twitter:card" content="summary_large_image">
+    <title>TLS Certificate Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Dark mode toggle
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        function toggleTheme() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.theme = 'light';
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.theme = 'dark';
+            }
+        }
+
+        // Fetch live metrics
+        async function loadMetrics() {
+            const metricsBox = document.getElementById("metrics-preview");
+            try {
+                const response = await fetch("/metrics");
+                if (!response.ok) throw new Error("Metrics unavailable");
+                const text = await response.text();
+                metricsBox.textContent = text;
+            } catch (err) {
+                metricsBox.textContent = "⚠️ Unable to load metrics preview.";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", loadMetrics);
+    </script>
+</head>
+<body class="text-gray-800 dark:text-gray-200 transition-colors duration-300">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-5 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-green-600">🔒 TLS Cert Monitor</h1>
+            <div class="flex items-center space-x-4">
+                <a href="https://github.com/your-org/tls-cert-monitor" target="_blank" class="px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg shadow hover:bg-gray-700 transition">
+                    ⭐ GitHub
+                </a>
+                <button onclick="toggleTheme()" class="p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                    🌙 / ☀️
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="max-w-6xl mx-auto px-5 py-16 text-center">
+        <h2 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">Monitor Your TLS/SSL Certificates</h2>
+        <p class="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            A Go-based monitoring tool that scans directories for TLS/SSL certificates and exposes detailed Prometheus metrics for proactive security monitoring.
+        </p>
+        <div class="mt-6 flex justify-center space-x-4">
+            <a href="https://github.com/your-org/tls-cert-monitor" target="_blank" class="px-5 py-3 bg-green-600 text-white rounded-lg font-medium shadow hover:bg-green-700 transition">
+                🚀 Get Started
+            </a>
+            <a href="#features" class="px-5 py-3 bg-gray-100 dark:bg-gray-800 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                Learn More →
+            </a>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="max-w-6xl mx-auto px-5 py-12">
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">✨ Features</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">📁 Auto Certificate Discovery</h4>
+                <p class="text-gray-600 dark:text-gray-300">Scans specified directories and automatically detects all TLS/SSL certificates.</p>
+            </div>
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">📊 Prometheus Metrics</h4>
+                <p class="text-gray-600 dark:text-gray-300">Exports expiration dates, key strengths, issuer details, and health checks.</p>
+            </div>
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">⚡ High Performance</h4>
+                <p class="text-gray-600 dark:text-gray-300">Optimized for large infrastructures with concurrency support for scanning.</p>
+            </div>
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">⚙️ YAML Config</h4>
+                <p class="text-gray-600 dark:text-gray-300">Configure scan intervals, workers, and monitored directories easily.</p>
+            </div>
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">🔔 Expiration Alerts</h4>
+                <p class="text-gray-600 dark:text-gray-300">Integrates with Prometheus Alertmanager to notify before certs expire.</p>
+            </div>
+            <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                <h4 class="font-semibold text-green-600">🔐 Secure by Default</h4>
+                <p class="text-gray-600 dark:text-gray-300">TLS/SSL enabled APIs with hardened defaults and minimal dependencies.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Options -->
+    <section class="max-w-6xl mx-auto px-5 py-12">
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">🚀 Installation</h3>
+        <div class="space-y-6">
+            <div>
+                <h4 class="font-semibold text-green-600 mb-2">Go Install</h4>
+                <pre class="bg-gray-900 text-green-400 p-4 rounded-lg shadow overflow-x-auto"><code>go install github.com/your-org/tls-cert-monitor@latest</code></pre>
+            </div>
+            <div>
+                <h4 class="font-semibold text-green-600 mb-2">Docker</h4>
+                <pre class="bg-gray-900 text-green-400 p-4 rounded-lg shadow overflow-x-auto"><code>docker run -d \
+  -v /etc/ssl:/certs \
+  -p 8080:8080 \
+  ghcr.io/your-org/tls-cert-monitor:latest</code></pre>
+            </div>
+            <div>
+                <h4 class="font-semibold text-green-600 mb-2">Kubernetes Deployment</h4>
+                <pre class="bg-gray-900 text-green-400 p-4 rounded-lg shadow overflow-x-auto"><code>kubectl apply -f https://raw.githubusercontent.com/your-org/tls-cert-monitor/main/deploy/k8s.yaml</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Metrics Preview -->
+    <section class="max-w-6xl mx-auto px-5 py-12">
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">📡 Live Metrics Preview</h3>
+        <pre id="metrics-preview" class="bg-gray-900 text-green-400 p-4 rounded-lg shadow overflow-x-auto h-64">Loading metrics...</pre>
+    </section>
+
+    <!-- Grafana Dashboard Embed -->
+    <section class="max-w-6xl mx-auto px-5 py-12">
+        <h3 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">📊 Grafana Dashboard</h3>
+        <iframe src="https://play.grafana.org/d/000000002" class="w-full h-[450px] rounded-lg shadow" frameborder="0"></iframe>
+        <p class="text-gray-600 dark:text-gray-300 text-sm mt-3">
+            Example Grafana dashboard. Replace with your own dashboard URL.
+        </p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white dark:bg-gray-800 py-6 mt-12 shadow-inner">
+        <div class="max-w-6xl mx-auto px-5 flex flex-col items-center">
+            <p class="text-gray-500 dark:text-gray-400 text-sm">© 2025 tls-cert-monitor — Built with Go & Prometheus</p>
+            <a href="https://github.com/your-org/tls-cert-monitor" target="_blank" class="mt-3 px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg hover:bg-gray-700 transition">
+                ⭐ Star us on GitHub
+            </a>
+        </div>
+    </footer>
+</body>
+</html>
