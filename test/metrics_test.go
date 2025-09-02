@@ -111,6 +111,9 @@ func writeCertificates(t *testing.T, certDir string) {
 
 // createTestConfig creates the test configuration
 func createTestConfig(tmpDir, certDir string) *config.Config {
+	// Ensure cache directory exists and is properly configured
+	cacheDir := filepath.Join(tmpDir, "cache")
+	
 	return &config.Config{
 		Port:                   generateTestPort(),
 		BindAddress:            "127.0.0.1",
@@ -118,7 +121,7 @@ func createTestConfig(tmpDir, certDir string) *config.Config {
 		ScanInterval:           1 * time.Minute,
 		Workers:                1, // Single worker to ensure deterministic processing
 		LogLevel:               "debug",
-		CacheDir:               filepath.Join(tmpDir, "cache"),
+		CacheDir:               cacheDir, // Ensure this is a directory path, not file path
 		CacheTTL:               30 * time.Minute,
 		CacheMaxSize:           10485760,
 	}

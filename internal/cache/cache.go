@@ -269,13 +269,18 @@ func (c *Cache) load() error {
 		return fmt.Errorf("invalid cache file path: %s", file)
 	}
 
+	// Check if cache file exists before attempting to open
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		// Cache file doesn't exist yet - this is normal for first run
+		return nil
+	}
+
 	// Use secure file opening (gosec G304 fix)
 	f, err := openSecureFile(file)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // No cache file yet
-		}
-		return fmt.Errorf("failed to open cache file: %w", err)
+		// If we can't open the cache file, it's not critical - start with empty cache
+		fmt.Printf("Warning: Failed to load cache from disk (starting with empty cache): %v\n", err)
+		return nil // Don't treat as fatal error
 	}
 	defer func() {
 		// Always close the file (errcheck fix)
@@ -287,7 +292,9 @@ func (c *Cache) load() error {
 	var entries map[string]*Entry
 	decoder := gob.NewDecoder(f)
 	if err := decoder.Decode(&entries); err != nil {
-		return fmt.Errorf("failed to decode cache: %w", err)
+		// If we can't decode the cache file, it might be corrupted - start fresh
+		fmt.Printf("Warning: Failed to decode cache file (starting with empty cache): %v\n", err)
+		return nil // Don't treat as fatal error
 	}
 
 	// Remove expired entries and calculate size
@@ -350,6 +357,12 @@ func isValidCacheFile(filePath, baseDir string) bool {
 	// Clean the paths to resolve any ".." components
 	cleanFile := filepath.Clean(filePath)
 	cleanBase := filepath.Clean(baseDir)
+
+	// Ensure baseDir exists and is a directory
+	if info, err := os.Stat(cleanBase); err != nil || !info.IsDir() {
+		// If base directory doesn't exist, it's not valid (but don't error - cache will handle)
+		return false
+	}
 
 	// Check if the file is within the base directory
 	rel, err := filepath.Rel(cleanBase, cleanFile)
