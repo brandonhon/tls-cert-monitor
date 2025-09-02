@@ -49,6 +49,7 @@ logs/
 # Cache files
 cache.json
 *.cache
+cache.gob
 
 # Configuration files (keep examples)
 config.yaml
