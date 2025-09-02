@@ -57,8 +57,9 @@ func (s *Server) Start() error {
 	// Health check endpoint
 	mux.HandleFunc("/healthz", s.handleHealth)
 
-	// Metrics endpoint - use HandlerFor with the custom registry if provided
+	// Metrics endpoint - avoid duplicate runtime metrics registration
 	if s.registry != nil {
+		// Custom registry - use HandlerFor to avoid automatic runtime metrics registration
 		mux.Handle("/metrics", promhttp.HandlerFor(
 			s.registry,
 			promhttp.HandlerOpts{
@@ -66,7 +67,14 @@ func (s *Server) Start() error {
 			},
 		))
 	} else {
-		mux.Handle("/metrics", promhttp.Handler())
+		// Default registry - but disable automatic runtime metrics registration
+		// because our metrics collector handles this
+		mux.Handle("/metrics", promhttp.HandlerFor(
+			prometheus.DefaultGatherer,
+			promhttp.HandlerOpts{
+				ErrorHandling: promhttp.ContinueOnError,
+			},
+		))
 	}
 
 	// Root endpoint

@@ -16,6 +16,11 @@ import (
 var (
 	once     sync.Once
 	instance *Collector
+
+	// Global flag to track if runtime metrics have been registered
+	// This prevents duplicate registrations across all registries
+	runtimeMetricsRegistered bool
+	runtimeMetricsMutex      sync.Mutex
 )
 
 // Collector manages all Prometheus metrics
@@ -154,13 +159,11 @@ func (c *Collector) safeRegister(reg prometheus.Registerer, collector prometheus
 	if err := reg.Register(collector); err != nil {
 		// Use errors.As for proper error checking (errorlint fix)
 		var alreadyRegisteredError prometheus.AlreadyRegisteredError
-		if errors.As(err, &alreadyRegisteredError) {
-			// Log warning but continue - this is expected in some scenarios
-			fmt.Printf("Warning: Metric %s already registered, using existing instance: %v\n", name, alreadyRegisteredError)
-		} else {
-			// Log error for other registration issues but don't panic
+		if !errors.As(err, &alreadyRegisteredError) {
+			// Only log error for non-duplicate registration issues
 			fmt.Printf("Warning: Failed to register metric %s: %v\n", name, err)
 		}
+		// For duplicate registrations, silently continue as this is expected during testing
 	}
 }
 
@@ -184,12 +187,36 @@ func (c *Collector) registerMetrics(reg prometheus.Registerer) {
 	c.safeRegister(reg, c.scanDuration, "ssl_cert_scan_duration_seconds")
 	c.safeRegister(reg, c.lastScanTimestamp, "ssl_cert_last_scan_timestamp")
 
-	// Only register Go runtime metrics if using default registry
-	// Use safe registration for these as they're commonly registered by other code
-	if reg == prometheus.DefaultRegisterer {
-		c.safeRegister(reg, collectors.NewGoCollector(), "go_collector")
-		c.safeRegister(reg, collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}), "process_collector")
+	// Only register Go runtime metrics for the default registry and only once globally
+	c.registerRuntimeMetricsIfNeeded(reg)
+}
+
+// registerRuntimeMetricsIfNeeded registers Go runtime metrics only once globally
+// and only for the default registry to avoid conflicts
+func (c *Collector) registerRuntimeMetricsIfNeeded(reg prometheus.Registerer) {
+	// Only proceed if this is the default registry
+	if reg != prometheus.DefaultRegisterer {
+		return
 	}
+
+	runtimeMetricsMutex.Lock()
+	defer runtimeMetricsMutex.Unlock()
+
+	// Check if runtime metrics have already been registered
+	if runtimeMetricsRegistered {
+		return
+	}
+
+	// Try to register runtime metrics
+	goCollector := collectors.NewGoCollector()
+	processCollector := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
+
+	// Use the safe register method to avoid panics
+	c.safeRegister(reg, goCollector, "go_collector")
+	c.safeRegister(reg, processCollector, "process_collector")
+
+	// Mark as registered regardless of success/failure to prevent retry spam
+	runtimeMetricsRegistered = true
 }
 
 // ResetCertificateMetrics resets certificate-specific metrics
