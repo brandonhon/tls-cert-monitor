@@ -375,6 +375,8 @@ config-dev: certs ## Create development configuration file
 	@echo 'bind_address: "0.0.0.0"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
 	@echo "certificate_directories:" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
 	@echo "  - \"$(EXAMPLE_DIR)/certs\"" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
+	@echo "exclude_directories:" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
+	@echo "  - \"$(EXAMPLE_DIR)/certs/booger\"" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
 	@echo 'scan_interval: "1m"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
 	@echo "workers: 4" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
 	@echo 'log_level: "info"    # debug, info, warn, error' >> $(EXAMPLE_DIR)/configs/config.dev.yaml

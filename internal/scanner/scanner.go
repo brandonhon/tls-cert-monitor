@@ -123,6 +123,17 @@ func (s *Scanner) Scan(ctx context.Context) error {
 
 			// Skip directories
 			if d.IsDir() {
+				// Check if this directory should be excluded
+				if s.config.IsPathExcluded(path) {
+					s.logger.Debug("Skipping excluded directory", zap.String("path", path))
+					return fs.SkipDir // Skip this directory and all its contents
+				}
+				return nil
+			}
+
+			// Check if file path is excluded
+			if s.config.IsPathExcluded(path) {
+				s.logger.Debug("Skipping excluded file", zap.String("path", path))
 				return nil
 			}
 
@@ -210,6 +221,9 @@ func (s *Scanner) Scan(ctx context.Context) error {
 	s.metrics.SetScanDuration(time.Since(startTime).Seconds())
 	s.metrics.SetLastScanTimestamp(float64(time.Now().Unix()))
 
+	// Set hostname metric - get hostname once per scan
+	s.metrics.SetHostnameInfo()
+
 	// Update duplicate metrics
 	for fingerprint, count := range duplicates {
 		if count > 1 {
@@ -233,8 +247,13 @@ func (s *Scanner) WatchFiles(ctx context.Context) {
 	s.wg.Add(1)
 	defer s.wg.Done()
 
-	// Add directories to watcher
+	// Add directories to watcher (only non-excluded ones)
 	for _, dir := range s.config.CertificateDirectories {
+		if s.config.IsPathExcluded(dir) {
+			s.logger.Debug("Skipping watching excluded directory", zap.String("dir", dir))
+			continue
+		}
+
 		if err := s.watcher.Add(dir); err != nil {
 			s.logger.Error("Failed to watch directory", zap.String("dir", dir), zap.Error(err))
 			continue
@@ -249,6 +268,12 @@ func (s *Scanner) WatchFiles(ctx context.Context) {
 		case event, ok := <-s.watcher.Events:
 			if !ok {
 				return
+			}
+
+			// Skip excluded paths
+			if s.config.IsPathExcluded(event.Name) {
+				s.logger.Debug("Skipping excluded file event", zap.String("path", event.Name))
+				continue
 			}
 
 			// Check if it's a certificate file
@@ -636,24 +661,7 @@ func (s *Scanner) handleFileChange(path string) {
 
 // isPathAllowed validates that the path is within configured certificate directories
 func (s *Scanner) isPathAllowed(path string) bool {
-	cleanPath := filepath.Clean(path)
-
-	for _, dir := range s.config.CertificateDirectories {
-		cleanDir := filepath.Clean(dir)
-
-		// Check if path is within the allowed directory
-		rel, err := filepath.Rel(cleanDir, cleanPath)
-		if err != nil {
-			continue
-		}
-
-		// Check for path traversal - path should not start with ".." or be absolute
-		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
-			return true
-		}
-	}
-
-	return false
+	return s.config.IsPathAllowed(path)
 }
 
 // readCertificateFileSecurely reads a certificate file with security validation

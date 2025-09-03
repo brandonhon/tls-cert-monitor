@@ -6,6 +6,7 @@ package metrics
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,6 +33,7 @@ type Collector struct {
 	certInfo           *prometheus.GaugeVec
 	certDuplicateCount *prometheus.GaugeVec
 	certIssuerCode     *prometheus.GaugeVec
+	hostnameInfo       *prometheus.GaugeVec
 
 	// Simple gauges (8 bytes each)
 	weakKeyTotal         prometheus.Gauge
@@ -99,6 +101,13 @@ func createCollector(reg prometheus.Registerer) *Collector {
 				Help: "Numeric issuer classification",
 			},
 			[]string{"issuer", "common_name", "file_name"},
+		),
+		hostnameInfo: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "ssl_cert_monitor_hostname_info",
+				Help: "Hostname information for the TLS certificate monitor instance",
+			},
+			[]string{"hostname"},
 		),
 
 		// Security metrics
@@ -175,6 +184,7 @@ func (c *Collector) registerMetrics(reg prometheus.Registerer) {
 	c.safeRegister(reg, c.certInfo, "ssl_cert_info")
 	c.safeRegister(reg, c.certDuplicateCount, "ssl_cert_duplicate_count")
 	c.safeRegister(reg, c.certIssuerCode, "ssl_cert_issuer_code")
+	c.safeRegister(reg, c.hostnameInfo, "ssl_cert_monitor_hostname_info")
 
 	// Security metrics
 	c.safeRegister(reg, c.weakKeyTotal, "ssl_cert_weak_key_total")
@@ -229,6 +239,7 @@ func (c *Collector) ResetCertificateMetrics() {
 	c.certInfo.Reset()
 	c.certDuplicateCount.Reset()
 	c.certIssuerCode.Reset()
+	// Note: We don't reset hostname info as it should persist across scans
 }
 
 // SetCertExpiration sets certificate expiration metric
@@ -259,6 +270,19 @@ func (c *Collector) SetCertIssuerCode(issuer string, code float64) {
 // SetCertIssuerCodeWithLabels sets issuer code metric with additional labels
 func (c *Collector) SetCertIssuerCodeWithLabels(issuer, commonName, fileName string, code float64) {
 	c.certIssuerCode.WithLabelValues(issuer, commonName, fileName).Set(code)
+}
+
+// SetHostnameInfo sets the hostname information metric
+func (c *Collector) SetHostnameInfo() {
+	hostname, err := os.Hostname()
+	if err != nil {
+		// Log error but use fallback hostname
+		fmt.Printf("Warning: Failed to get hostname: %v, using 'unknown'\n", err)
+		hostname = "unknown"
+	}
+
+	// Set the hostname info metric to 1 with the hostname as a label
+	c.hostnameInfo.WithLabelValues(hostname).Set(1)
 }
 
 // SetWeakKeyTotal sets weak key total metric

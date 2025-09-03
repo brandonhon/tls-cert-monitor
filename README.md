@@ -139,6 +139,12 @@ hot_reload: true
 # Dry run mode (validate config only)
 dry_run: false
 
+# Directory exclusion - skip these paths during scanning
+exclude_directories:
+  - "/etc/ssl/certs/private"    # Skip private key directories
+  - "/etc/ssl/certs/backup"     # Skip backup directories
+  - "/var/log"                  # Skip log directories
+
 # File patterns (automatically detected)
 # Extensions: .pem, .crt, .cer, .cert, .der, .p7b, .p7c, .pfx, .p12
 # Patterns: cert, certificate, chain, bundle, ca-cert, cacert

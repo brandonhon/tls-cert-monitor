@@ -13,6 +13,15 @@ certificate_directories:
   - "/app/certs"
   # Add more directories as needed
 
+# Directories to exclude from scanning (optional)
+# These paths will be skipped even if they are within certificate_directories
+exclude_directories:
+  - "/app/certs/old"
+  - "/app/certs/new"
+  - "/app/certs/working"
+  - "/app/certs/.git"
+  # Add any subdirectories you want to exclude
+
 # Scan interval (how often to scan for certificates)
 scan_interval: "5m"
 

@@ -54,12 +54,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	// Store sync error for later handling (exitAfterDefer fix)
-	var syncErr error
+	// Store sync error for later handling and handle stdout/stderr sync gracefully
 	defer func() {
-		// Handle log.Sync error (errcheck fix)
-		if err := log.Sync(); err != nil {
-			syncErr = err
+		if err := syncLogger(log, cfg.LogFile); err != nil {
+			// Only log to stderr if it's a real error, not stdout/stderr sync issues
 			fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
 		}
 	}()
@@ -68,7 +66,7 @@ func main() {
 	if *dryRun || cfg.DryRun {
 		log.Info("Dry run mode - configuration validated successfully")
 		// Sync logs before exit
-		if err := log.Sync(); err != nil {
+		if err := syncLogger(log, cfg.LogFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to sync logger: %v\n", err)
 		}
 		return // Fixed gocritic exitAfterDefer - use return instead of os.Exit
@@ -186,9 +184,33 @@ func main() {
 	certScanner.Close()
 
 	log.Info("Shutdown complete")
+}
 
-	// Check if there was a sync error and exit with appropriate code
-	if syncErr != nil {
-		return
+// syncLogger safely syncs the logger, handling stdout/stderr sync issues gracefully
+func syncLogger(log *zap.Logger, logFile string) error {
+	err := log.Sync()
+	if err != nil {
+		// Check if this is the common stdout/stderr sync error that can be safely ignored
+		if isStdoutSyncError(err, logFile) {
+			// This is expected when logging to stdout/stderr - not a real error
+			return nil
+		}
+		// This is a real sync error for file-based logging
+		return err
 	}
+	return nil
+}
+
+// isStdoutSyncError checks if the sync error is the harmless stdout/stderr sync issue
+func isStdoutSyncError(err error, logFile string) bool {
+	// If no log file is specified, we're logging to stdout
+	if logFile == "" {
+		// Check for the specific error messages related to stdout/stderr sync
+		errStr := err.Error()
+		return errStr == "sync /dev/stdout: invalid argument" ||
+			errStr == "sync /dev/stderr: invalid argument" ||
+			errStr == "sync /dev/stdout: inappropriate ioctl for device" ||
+			errStr == "sync /dev/stderr: inappropriate ioctl for device"
+	}
+	return false
 }

@@ -14,6 +14,14 @@ certificate_directories:
   - "/etc/pki/tls/certs"
   # Add more directories as needed
 
+# Directories to exclude from scanning (optional)
+# These paths will be skipped even if they are within certificate_directories
+exclude_directories:
+  - "/etc/ssl/certs/private"
+  - "/etc/ssl/certs/backup"
+  - "/etc/pki/tls/certs/archived"
+  # Add directories you want to exclude from certificate scanning
+
 # Scan interval (how often to scan for certificates)
 scan_interval: "5m"
 

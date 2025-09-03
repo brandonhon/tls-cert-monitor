@@ -23,6 +23,7 @@ type Config struct {
 
 	// Slice (24 bytes header)
 	CertificateDirectories []string `mapstructure:"certificate_directories" yaml:"certificate_directories"`
+	ExcludeDirectories     []string `mapstructure:"exclude_directories" yaml:"exclude_directories"`
 
 	// String fields (16 bytes each)
 	BindAddress string `mapstructure:"bind_address" yaml:"bind_address"`
@@ -47,6 +48,7 @@ func Defaults() *Config {
 		Port:                   3200,
 		BindAddress:            "0.0.0.0",
 		CertificateDirectories: []string{"/etc/ssl/certs"},
+		ExcludeDirectories:     []string{}, // Empty by default
 		ScanInterval:           5 * time.Minute,
 		Workers:                4,
 		LogLevel:               "info",
@@ -68,6 +70,7 @@ func Load(configFile string) (*Config, error) {
 	v.SetDefault("port", cfg.Port)
 	v.SetDefault("bind_address", cfg.BindAddress)
 	v.SetDefault("certificate_directories", cfg.CertificateDirectories)
+	v.SetDefault("exclude_directories", cfg.ExcludeDirectories)
 	v.SetDefault("scan_interval", cfg.ScanInterval)
 	v.SetDefault("workers", cfg.Workers)
 	v.SetDefault("log_level", cfg.LogLevel)
@@ -114,6 +117,11 @@ func (c *Config) processPaths() {
 		c.CertificateDirectories[i] = filepath.Clean(os.ExpandEnv(dir))
 	}
 
+	// Process exclude directories
+	for i, dir := range c.ExcludeDirectories {
+		c.ExcludeDirectories[i] = filepath.Clean(os.ExpandEnv(dir))
+	}
+
 	// Process TLS paths
 	if c.TLSCert != "" {
 		c.TLSCert = filepath.Clean(os.ExpandEnv(c.TLSCert))
@@ -143,6 +151,11 @@ func (c *Config) Validate() error {
 
 	// Validate certificate directories
 	if err := c.validateCertificateDirectories(); err != nil {
+		return err
+	}
+
+	// Validate exclude directories
+	if err := c.validateExcludeDirectories(); err != nil {
 		return err
 	}
 
@@ -188,6 +201,27 @@ func (c *Config) validateCertificateDirectories() error {
 		if !info.IsDir() {
 			return fmt.Errorf("certificate path is not a directory: %s", dir)
 		}
+	}
+
+	return nil
+}
+
+// validateExcludeDirectories validates exclude directory settings
+func (c *Config) validateExcludeDirectories() error {
+	for _, dir := range c.ExcludeDirectories {
+		// Clean the path to prevent traversal
+		cleanPath := filepath.Clean(dir)
+		if cleanPath != dir {
+			return fmt.Errorf("invalid exclude directory path: %s", dir)
+		}
+
+		// Exclude directories don't need to exist, but if they do exist, they should be directories
+		if info, err := os.Stat(dir); err == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("exclude path is not a directory: %s", dir)
+			}
+		}
+		// If directory doesn't exist, that's fine - we just won't exclude anything
 	}
 
 	return nil
@@ -243,9 +277,16 @@ func (c *Config) validateOperationalSettings() error {
 }
 
 // IsPathAllowed checks if a path is within the configured certificate directories
+// and not within any exclude directories
 func (c *Config) IsPathAllowed(path string) bool {
 	cleanPath := filepath.Clean(path)
 
+	// First check if path is excluded
+	if c.IsPathExcluded(cleanPath) {
+		return false
+	}
+
+	// Then check if path is within allowed directories
 	for _, dir := range c.CertificateDirectories {
 		cleanDir := filepath.Clean(dir)
 
@@ -256,6 +297,28 @@ func (c *Config) IsPathAllowed(path string) bool {
 		}
 
 		// Check for path traversal
+		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// IsPathExcluded checks if a path is within any of the configured exclude directories
+func (c *Config) IsPathExcluded(path string) bool {
+	cleanPath := filepath.Clean(path)
+
+	for _, excludeDir := range c.ExcludeDirectories {
+		cleanExcludeDir := filepath.Clean(excludeDir)
+
+		// Check if path is within the exclude directory
+		rel, err := filepath.Rel(cleanExcludeDir, cleanPath)
+		if err != nil {
+			continue
+		}
+
+		// If the path is within the exclude directory (not trying to escape via ..)
 		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
 			return true
 		}

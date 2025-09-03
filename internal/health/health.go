@@ -442,16 +442,28 @@ type DiskUsage struct {
 }
 
 // getDiskUsage gets disk usage for a path
+// Fixed gosec G115: integer overflow conversion warnings
 func (c *Checker) getDiskUsage(path string) DiskUsage {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return DiskUsage{}
 	}
 
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bavail * uint64(stat.Bsize)
+	// Safe conversion to prevent integer overflow (gosec G115 fix)
+	// Check if stat.Bsize is negative before conversion
+	if stat.Bsize < 0 {
+		return DiskUsage{}
+	}
+
+	blockSize := uint64(stat.Bsize)
+	total := stat.Blocks * blockSize
+	free := stat.Bavail * blockSize
 	used := total - free
-	usedPercent := float64(used) / float64(total) * 100
+
+	var usedPercent float64
+	if total > 0 {
+		usedPercent = float64(used) / float64(total) * 100
+	}
 
 	return DiskUsage{
 		Total:       total,
