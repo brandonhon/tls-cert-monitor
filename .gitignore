@@ -66,7 +66,7 @@ tmp/
 temp/
 
 # Docker
-.dockerignore
+#.dockerignore
 docker/cache
 docker/logs
 
