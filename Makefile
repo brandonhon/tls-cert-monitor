@@ -62,6 +62,7 @@ BUILD_DIR := build
 DIST_DIR  := dist
 COVERAGE_DIR := coverage
 CACHE_DIR := cache
+VENDOR := vendor
 EXAMPLE_DIR := $(PWD)/test/fixtures
 
 # ----------------------------
@@ -377,11 +378,11 @@ deps: ## Download Go module dependencies
 .PHONY: clean
 clean: ## Clean build artifacts
 	@echo "🧹 Cleaning up..."
-	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR)
+	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR) 
 	@echo "✅ Cleanup complete!"
 
 .PHONY: clean-all
 clean-all: ## Clean build artifacts + example files
 	@echo "🧹 Deep cleaning project (build, dist, cache, coverage, and example files)..."
-	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR) $(EXAMPLE_DIR)/*
+	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR) $(EXAMPLE_DIR)/* $(VENDOR)
 	@echo "✅ Full cleanup complete!"

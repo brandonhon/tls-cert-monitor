@@ -214,4 +214,9 @@ for i in 1 2 3; do
         -name "$friendly_name" 2>/dev/null
 done
 
+echo "🔓 Setting world-readable permissions on all certs..."
+chmod 644 "$EXAMPLE_DIR"/certs/*.pem 2>/dev/null || true
+chmod 644 "$EXAMPLE_DIR"/certs/pfx/*.pfx 2>/dev/null || true
+chmod 644 "$EXAMPLE_DIR"/certs/exclude/*.pem 2>/dev/null || true
+
 echo "✅ All test certificates successfully generated in: $CERTS_DIR"

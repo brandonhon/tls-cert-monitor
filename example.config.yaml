@@ -22,6 +22,18 @@ exclude_directories:
   - "/etc/pki/tls/certs/archived"
   # Add directories you want to exclude from certificate scanning
 
+# P12/PFX certificate passwords
+# List of passwords to try when decrypting P12/PFX certificate files
+# Common passwords are included by default, add your specific ones here
+p12_passwords:
+  - ""                    # Empty password (no password)
+  - "changeit"           # Java keystore default
+  - "password"           # Common default
+  - "123456"             # Common weak password
+  # Add your organization-specific P12 passwords here
+  # - "your-p12-password"
+  # - "another-password"
+
 # Scan interval (how often to scan for certificates)
 scan_interval: "5m"
 

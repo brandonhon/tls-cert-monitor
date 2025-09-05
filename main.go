@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -116,7 +117,12 @@ func main() {
 			// Update health checker
 			healthChecker.UpdateConfig(newCfg)
 		}); err != nil {
-			log.Error("Configuration watcher error", zap.Error(err))
+			// Don't log context cancellation as an error - it's expected during shutdown
+			if !errors.Is(err, context.Canceled) {
+				log.Error("Configuration watcher error", zap.Error(err))
+			} else {
+				log.Debug("Configuration watcher stopped due to shutdown")
+			}
 		}
 	}()
 
@@ -131,10 +137,16 @@ func main() {
 		for {
 			select {
 			case <-ctx.Done():
+				log.Debug("Periodic scanner stopped due to context cancellation")
 				return
 			case <-ticker.C:
 				log.Debug("Running periodic certificate scan")
 				if err := certScanner.Scan(ctx); err != nil {
+					// Check if error is due to context cancellation
+					if errors.Is(err, context.Canceled) {
+						log.Debug("Periodic scan cancelled due to shutdown")
+						return
+					}
 					log.Error("Periodic scan failed", zap.Error(err))
 				}
 			}
@@ -172,16 +184,22 @@ func main() {
 	// Cancel context to stop all goroutines
 	cancel()
 
+	// Give goroutines a moment to react to context cancellation
+	time.Sleep(100 * time.Millisecond)
+
 	// Shutdown server with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Server shutdown error", zap.Error(err))
+	} else {
+		log.Info("HTTP server stopped")
 	}
 
 	// Final cleanup
 	certScanner.Close()
+	log.Info("Certificate scanner stopped")
 
 	log.Info("Shutdown complete")
 }

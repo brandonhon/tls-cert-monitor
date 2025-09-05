@@ -28,6 +28,11 @@ certificate_directories:
 exclude_directories:
   - "$EXAMPLE_DIR/certs/exclude"
 
+p12_passwords:
+  - "changeit"
+  - "password"
+  - "123456"
+
 scan_interval: "1m"
 workers: 4
 log_level: "info"    # debug, info, warn, error
