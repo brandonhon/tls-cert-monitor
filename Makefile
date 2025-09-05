@@ -64,6 +64,18 @@ COVERAGE_DIR := coverage
 CACHE_DIR := cache
 EXAMPLE_DIR := $(PWD)/test/fixtures
 
+# ----------------------------
+# PFX Generation Defaults
+# ----------------------------
+# Windows PFX generation defaults
+CSP_NAME := Microsoft Enhanced RSA and AES Cryptographic Provider
+MACALG := sha1
+MACSALT := 20
+KEYPBE := PBE-SHA1-3DES
+CERTPBE := PBE-SHA1-3DES
+ITERATIONS := 2000
+
+
 # Default target
 .PHONY: all
 all: clean fmt lint test build
@@ -277,116 +289,11 @@ compose-clean: ## docker compose down --volumes --remove-orphans --rmi all
 # ----------------------------
 .PHONY: certs
 certs: ## Generate example certificates for testing
-	@echo "🔐 Generating example certificates..."
-	@mkdir -p $(EXAMPLE_DIR)/certs
-	@command -v openssl >/dev/null 2>&1 || { \
-		echo "❌ OpenSSL not found. Please install OpenSSL."; \
-		exit 1; \
-	}
-
-	@echo "🔧 Generating Root CA..."
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/ca.key 2048 2>/dev/null
-	@openssl req -new -x509 -key $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/ca-cert.pem -days 365 -subj "/CN=Test CA" 2>/dev/null
-
-	@echo "🔧 Generating 1-year valid certificates..."
-	@for i in 1 2 3; do \
-		openssl genrsa -out $(EXAMPLE_DIR)/certs/1yr_valid_$$i.key 2048 2>/dev/null && \
-		openssl req -new -key $(EXAMPLE_DIR)/certs/1yr_valid_$$i.key -out $(EXAMPLE_DIR)/certs/1yr_valid_$$i.csr -subj "/CN=valid$$i.example.com" 2>/dev/null && \
-		openssl x509 -req -in $(EXAMPLE_DIR)/certs/1yr_valid_$$i.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/1yr_valid_$$i.pem -days 365 -CAcreateserial 2>/dev/null && \
-		rm -f $(EXAMPLE_DIR)/certs/1yr_valid_$$i.csr || { echo "❌ Failed to generate 1yr_valid_$$i"; exit 1; }; \
-	done
-
-	@echo "🔧 Creating duplicate certificates..."
-	@cp $(EXAMPLE_DIR)/certs/1yr_valid_1.pem $(EXAMPLE_DIR)/certs/1yr_valid_dup_1.pem
-	@cp $(EXAMPLE_DIR)/certs/1yr_valid_1.pem $(EXAMPLE_DIR)/certs/1yr_valid_dup_2.pem
-	@cp $(EXAMPLE_DIR)/certs/1yr_valid_1.key $(EXAMPLE_DIR)/certs/1yr_valid_dup_1.key
-	@cp $(EXAMPLE_DIR)/certs/1yr_valid_1.key $(EXAMPLE_DIR)/certs/1yr_valid_dup_2.key
-
-	@echo "🔧 Generating short expiration certificates..."
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/valid_short_1.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/valid_short_1.key -out $(EXAMPLE_DIR)/certs/valid_short_1.csr -subj "/CN=short1.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/valid_short_1.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/valid_short_1.pem -days 5 -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/valid_short_1.csr || { echo "❌ Failed to generate valid_short_1"; exit 1; }
-
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/valid_short_2.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/valid_short_2.key -out $(EXAMPLE_DIR)/certs/valid_short_2.csr -subj "/CN=short2.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/valid_short_2.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/valid_short_2.pem -days 180 -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/valid_short_2.csr || { echo "❌ Failed to generate valid_short_2"; exit 1; }
-
-	@echo "🔧 Generating weak key certificates..."
-	@for i in 1 2; do \
-		openssl genrsa -out $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.key 512 2>/dev/null && \
-		openssl req -new -key $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.key -out $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.csr -subj "/CN=weakkey$$i.example.com" 2>/dev/null && \
-		openssl x509 -req -in $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.pem -days 365 -CAcreateserial 2>/dev/null && \
-		rm -f $(EXAMPLE_DIR)/certs/1yr_weak_key_$$i.csr || { echo "❌ Failed to generate 1yr_weak_key_$$i"; exit 1; }; \
-	done
-
-	@echo "🔧 Generating weak algorithm certificates..."
-	@for i in 1 2; do \
-		openssl genrsa -out $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.key 2048 2>/dev/null && \
-		openssl req -new -md5 -key $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.key -out $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.csr -subj "/CN=weakalgo$$i.example.com" 2>/dev/null && \
-		openssl x509 -req -md5 -in $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.pem -days 365 -CAcreateserial 2>/dev/null && \
-		rm -f $(EXAMPLE_DIR)/certs/1yr_weak_algo_$$i.csr || { echo "❌ Failed to generate 1yr_weak_algo_$$i"; exit 1; }; \
-	done
-
-	@echo "🔧 Generating fake DigiCert CA and certificate..."
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/fake_digicert_ca.key 2048 2>/dev/null && \
-	openssl req -new -x509 -key $(EXAMPLE_DIR)/certs/fake_digicert_ca.key -out $(EXAMPLE_DIR)/certs/fake_digicert_ca.pem -days 365 -subj "/O=DigiCert Inc/CN=DigiCert Root CA" 2>/dev/null && \
-	openssl genrsa -out $(EXAMPLE_DIR)/certs/digicert.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/digicert.key -out $(EXAMPLE_DIR)/certs/digicert.csr -subj "/CN=digicert.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/digicert.csr -CA $(EXAMPLE_DIR)/certs/fake_digicert_ca.pem -CAkey $(EXAMPLE_DIR)/certs/fake_digicert_ca.key -out $(EXAMPLE_DIR)/certs/digicert.pem -days 365 -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/digicert.csr || { echo "❌ Failed to generate fake DigiCert"; exit 1; }
-
-	@echo "🔧 Generating fake Amazon CA and certificate..."
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/fake_amazon_ca.key 2048 2>/dev/null && \
-	openssl req -new -x509 -key $(EXAMPLE_DIR)/certs/fake_amazon_ca.key -out $(EXAMPLE_DIR)/certs/fake_amazon_ca.pem -days 365 -subj "/O=Amazon Trust Services/CN=Amazon Root CA" 2>/dev/null && \
-	openssl genrsa -out $(EXAMPLE_DIR)/certs/amazon.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/amazon.key -out $(EXAMPLE_DIR)/certs/amazon.csr -subj "/CN=amazon.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/amazon.csr -CA $(EXAMPLE_DIR)/certs/fake_amazon_ca.pem -CAkey $(EXAMPLE_DIR)/certs/fake_amazon_ca.key -out $(EXAMPLE_DIR)/certs/amazon.pem -days 365 -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/amazon.csr || { echo "❌ Failed to generate fake Amazon"; exit 1; }
-
-	@echo "🔧 Generating certificates with SANs..."
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/san_1.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/san_1.key -out $(EXAMPLE_DIR)/certs/san_1.csr -subj "/CN=san1.example.com" -addext "subjectAltName=DNS:san1.example.com,DNS:www.san1.example.com,DNS:alt1.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/san_1.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/san_1.pem -days 365 -extfile <(echo "subjectAltName=DNS:san1.example.com,DNS:www.san1.example.com,DNS:alt1.example.com") -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/san_1.csr || { echo "❌ Failed to generate san_1"; exit 1; }
-
-	@openssl genrsa -out $(EXAMPLE_DIR)/certs/san_2.key 2048 2>/dev/null && \
-	openssl req -new -key $(EXAMPLE_DIR)/certs/san_2.key -out $(EXAMPLE_DIR)/certs/san_2.csr -subj "/CN=san2.example.com" -addext "subjectAltName=DNS:san2.example.com,DNS:alt2.example.com,DNS:www.alt2.example.com,DNS:dev.alt2.example.com,DNS:test.alt2.example.com,DNS:x.alt2.example.com,DNS:y.alt2.example.com,DNS:z.alt2.example.com" 2>/dev/null && \
-	openssl x509 -req -in $(EXAMPLE_DIR)/certs/san_2.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/san_2.pem -days 365 -extfile <(echo "subjectAltName=DNS:san2.example.com,DNS:alt2.example.com,DNS:www.alt2.example.com,DNS:dev.alt2.example.com,DNS:test.alt2.example.com,DNS:x.alt2.example.com,DNS:y.alt2.example.com,DNS:z.alt2.example.com") -CAcreateserial 2>/dev/null && \
-	rm -f $(EXAMPLE_DIR)/certs/san_2.csr || { echo "❌ Failed to generate san_2"; exit 1; }
-
-	@echo "🔧 Generating P12 certificates..."
-	@for i in 1 2; do \
-		openssl genrsa -out $(EXAMPLE_DIR)/certs/p12_cert_$$i.key 2048 2>/dev/null && \
-		openssl req -new -key $(EXAMPLE_DIR)/certs/p12_cert_$$i.key -out $(EXAMPLE_DIR)/certs/p12_cert_$$i.csr -subj "/CN=p12cert$$i.example.com" 2>/dev/null && \
-		openssl x509 -req -in $(EXAMPLE_DIR)/certs/p12_cert_$$i.csr -CA $(EXAMPLE_DIR)/certs/ca-cert.pem -CAkey $(EXAMPLE_DIR)/certs/ca.key -out $(EXAMPLE_DIR)/certs/p12_cert_$$i.pem -days 365 -CAcreateserial 2>/dev/null && \
-		openssl pkcs12 -export -out $(EXAMPLE_DIR)/certs/p12_cert_$$i.p12 -inkey $(EXAMPLE_DIR)/certs/p12_cert_$$i.key -in $(EXAMPLE_DIR)/certs/p12_cert_$$i.pem -passout pass:changeit 2>/dev/null && \
-		rm -f $(EXAMPLE_DIR)/certs/p12_cert_$$i.csr || { echo "❌ Failed to generate p12_cert_$$i"; exit 1; }; \
-	done
-
-	@echo "✅ Example certificates generated in $(EXAMPLE_DIR)/certs/"
+	@EXAMPLE_DIR="$(EXAMPLE_DIR)" bash ./scripts/generate-test-certs.sh
 
 .PHONY: config-dev
-config-dev: certs ## Create development configuration file
-	@echo "🛠️ Creating development configuration..."
-	@mkdir -p $(EXAMPLE_DIR)/configs
-	@echo "port: 3200" > $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo 'bind_address: "0.0.0.0"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "certificate_directories:" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "  - \"$(EXAMPLE_DIR)/certs\"" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "exclude_directories:" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "  - \"$(EXAMPLE_DIR)/certs/booger\"" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo 'scan_interval: "1m"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "workers: 4" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo 'log_level: "info"    # debug, info, warn, error' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "dry_run: false" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "hot_reload: true" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo 'cache_dir: "./cache"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo 'cache_ttl: "1h"' >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "cache_max_size: 104857600  # 100MB" >> $(EXAMPLE_DIR)/configs/config.dev.yaml
-	@echo "✅ Development configuration created: $(EXAMPLE_DIR)/configs/config.dev.yaml"
-	@echo "📝 Use with: ./build/$(BINARY_NAME) -config=$(EXAMPLE_DIR)/configs/config.dev.yaml"
+config-dev: ## Create development configuration file
+	@EXAMPLE_DIR="$(EXAMPLE_DIR)" bash ./scripts/generate-config-dev.sh
 
 # ----------------------------
 # Linting Targets
