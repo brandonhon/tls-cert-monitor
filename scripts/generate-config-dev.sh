@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Resolve the project root directory based on script location
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-EXAMPLE_DIR="$BASE_DIR/test/fixtures"
+EXAMPLE_DIR="$BASE_DIR/tests/fixtures"
 CONFIG_DIR="$EXAMPLE_DIR/configs"
 CONFIG_FILE="$CONFIG_DIR/config.dev.yaml"
 BINARY_NAME="tls-cert-monitor"

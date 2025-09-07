@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CERTS_DIR="$BASE_DIR/test/fixtures/certs"
+CERTS_DIR="$BASE_DIR/tests/fixtures/certs"
 EXCLUDE_DIR="$CERTS_DIR/exclude"
 PFX_DIR="$CERTS_DIR/pfx"
 

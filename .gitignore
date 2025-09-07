@@ -215,5 +215,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.tomlw
 
-# other
+# Fixtures
+tests/fixtures
+
+# Other
 ClaudePrompt.md
