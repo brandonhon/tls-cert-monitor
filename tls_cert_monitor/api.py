@@ -1,0 +1,576 @@
+"""
+FastAPI application for TLS Certificate Monitor.
+"""
+
+import os
+import shutil
+from typing import Any, Dict
+
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+from tls_cert_monitor.cache import CacheManager
+from tls_cert_monitor.config import Config
+from tls_cert_monitor.logger import get_logger
+from tls_cert_monitor.metrics import MetricsCollector
+from tls_cert_monitor.scanner import CertificateScanner
+
+
+def create_app(
+    scanner: CertificateScanner, metrics: MetricsCollector, cache: CacheManager, config: Config
+) -> FastAPI:
+    """
+    Create and configure FastAPI application.
+
+    Args:
+        scanner: Certificate scanner instance
+        metrics: Metrics collector instance
+        cache: Cache manager instance
+        config: Configuration instance
+
+    Returns:
+        Configured FastAPI application
+    """
+    app = FastAPI(
+        title="TLS Certificate Monitor",
+        description="Cross-platform TLS certificate monitoring application",
+        version="1.0.0",
+        docs_url="/docs" if not config.dry_run else None,
+        redoc_url="/redoc" if not config.dry_run else None,
+    )
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    logger = get_logger("api")
+
+    @app.get("/metrics", response_class=PlainTextResponse)
+    async def get_metrics():
+        """
+        Prometheus metrics endpoint.
+
+        Returns metrics in Prometheus text format.
+        """
+        try:
+            metrics_data = metrics.get_metrics()
+            return Response(content=metrics_data, media_type=metrics.get_content_type())
+        except Exception as e:
+            logger.error(f"Failed to generate metrics: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate metrics")
+
+    @app.get("/healthz", response_class=JSONResponse)
+    async def get_health():
+        """
+        Health status endpoint.
+
+        Returns comprehensive health information in JSON format.
+        """
+        try:
+            # Get health status from all components
+            scanner_health = await scanner.get_health_status()
+            cache_health = await cache.get_health_status()
+            metrics_health = metrics.get_registry_status()
+
+            # Get system health
+            system_health = await _get_system_health(config)
+
+            health_status = {
+                **scanner_health,
+                **cache_health,
+                **metrics_health,
+                **system_health,
+                "status": "healthy",
+            }
+
+            return JSONResponse(content=health_status)
+
+        except Exception as e:
+            logger.error(f"Failed to get health status: {e}")
+            error_response = {"status": "error", "error": str(e)}
+            return JSONResponse(content=error_response, status_code=500)
+
+    @app.get("/scan", response_class=JSONResponse)
+    async def trigger_scan():
+        """
+        Trigger a manual certificate scan.
+
+        Returns scan results.
+        """
+        if config.dry_run:
+            return JSONResponse(
+                content={"message": "Scan not performed - dry run mode enabled"}, status_code=200
+            )
+
+        try:
+            logger.info("Manual scan triggered via API")
+            scan_results = await scanner.scan_once()
+            return JSONResponse(content=scan_results)
+
+        except Exception as e:
+            logger.error(f"Manual scan failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
+
+    @app.get("/config", response_class=JSONResponse)
+    async def get_config():
+        """
+        Get current configuration (excluding sensitive data).
+
+        Returns sanitized configuration.
+        """
+        try:
+            config_dict = config.dict()
+
+            # Remove sensitive information
+            sensitive_keys = ["p12_passwords", "tls_key"]
+            for key in sensitive_keys:
+                if key in config_dict:
+                    config_dict[key] = "***REDACTED***"
+
+            return JSONResponse(content=config_dict)
+
+        except Exception as e:
+            logger.error(f"Failed to get configuration: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get configuration")
+
+    @app.get("/cache/stats", response_class=JSONResponse)
+    async def get_cache_stats():
+        """
+        Get cache statistics.
+
+        Returns cache performance metrics.
+        """
+        try:
+            stats = await cache.get_stats()
+            return JSONResponse(content=stats)
+
+        except Exception as e:
+            logger.error(f"Failed to get cache stats: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get cache stats")
+
+    @app.post("/cache/clear", response_class=JSONResponse)
+    async def clear_cache():
+        """
+        Clear the cache.
+
+        Returns success message.
+        """
+        if config.dry_run:
+            return JSONResponse(
+                content={"message": "Cache not cleared - dry run mode enabled"}, status_code=200
+            )
+
+        try:
+            await cache.clear()
+            logger.info("Cache cleared via API")
+            return JSONResponse(content={"message": "Cache cleared successfully"})
+
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            raise HTTPException(status_code=500, detail="Failed to clear cache")
+
+    @app.get("/", response_class=Response)
+    async def root():
+        """
+        Root endpoint with HTML interface showing all available endpoints.
+        """
+        # Get server info
+        protocol = "https" if config.tls_cert and config.tls_key else "http"
+        server_url = f"{protocol}://{config.bind_address}:{config.port}"
+
+        # Build HTML page
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TLS Certificate Monitor</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 1000px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+            line-height: 1.6;
+        }}
+        h1 {{
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }}
+        h2 {{
+            color: #555;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }}
+        .container {{
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }}
+        .endpoint {{
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 5px solid #4CAF50;
+            border-radius: 0 8px 8px 0;
+            transition: background-color 0.3s ease;
+        }}
+        .endpoint:hover {{
+            background: #f0f8f0;
+        }}
+        .endpoint-title {{
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }}
+        .endpoint-description {{
+            color: #666;
+            margin-bottom: 10px;
+        }}
+        .endpoint-method {{
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
+        }}
+        .endpoint-method.post {{
+            background: #FF9800;
+        }}
+        a {{
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: 500;
+        }}
+        a:hover {{
+            text-decoration: underline;
+        }}
+        code {{
+            background: #e8e8e8;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+            font-size: 14px;
+        }}
+        .config-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }}
+        .config-item {{
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 3px solid #4CAF50;
+        }}
+        .config-label {{
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }}
+        .config-value {{
+            font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+            background: #fff;
+            padding: 6px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }}
+        .status-indicator {{
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }}
+        .status-running {{
+            background: #4CAF50;
+        }}
+        .status-warning {{
+            background: #FF9800;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }}
+    </style>
+</head>
+<body>
+    <h1>🔒 TLS Certificate Monitor</h1>
+    
+    <div class="container">
+        <h2>📊 Monitoring Endpoints</h2>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method">GET</span>
+                <a href="/metrics" target="_blank">/metrics</a>
+            </div>
+            <div class="endpoint-description">
+                Prometheus metrics endpoint for certificate monitoring, security analysis, and application performance
+            </div>
+            <small>Content-Type: text/plain; version=0.0.4; charset=utf-8</small>
+        </div>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method">GET</span>
+                <a href="/healthz" target="_blank">/healthz</a>
+            </div>
+            <div class="endpoint-description">
+                Health check endpoint with detailed system status, cache information, and disk usage
+            </div>
+            <small>Content-Type: application/json</small>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>🔧 Management Endpoints</h2>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method">GET</span>
+                <a href="/scan" target="_blank">/scan</a>
+            </div>
+            <div class="endpoint-description">
+                Trigger a manual certificate scan and get detailed results
+            </div>
+            <small>Returns scan results including parsed certificates, errors, and timing</small>
+        </div>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method">GET</span>
+                <a href="/config" target="_blank">/config</a>
+            </div>
+            <div class="endpoint-description">
+                View current configuration (sensitive data redacted)
+            </div>
+            <small>Shows all configuration settings except passwords and keys</small>
+        </div>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method">GET</span>
+                <a href="/cache/stats" target="_blank">/cache/stats</a>
+            </div>
+            <div class="endpoint-description">
+                Cache performance statistics and hit rates
+            </div>
+            <small>Includes hit rate, entry count, and memory usage</small>
+        </div>
+        
+        <div class="endpoint">
+            <div class="endpoint-title">
+                <span class="endpoint-method post">POST</span>
+                <a href="#" onclick="clearCache(); return false;">/cache/clear</a>
+            </div>
+            <div class="endpoint-description">
+                Clear the application cache (requires POST request)
+            </div>
+            <small>Click to clear cache via JavaScript POST request</small>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>⚙️ Current Configuration</h2>
+        <div class="config-grid">
+            <div class="config-item">
+                <div class="config-label">Server Status</div>
+                <div class="config-value">
+                    <span class="status-indicator status-running"></span>Running
+                </div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Server Address</div>
+                <div class="config-value">{server_url}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">TLS Enabled</div>
+                <div class="config-value">{'Yes' if config.tls_cert and config.tls_key else 'No'}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Workers</div>
+                <div class="config-value">{config.workers}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Scan Interval</div>
+                <div class="config-value">{config.scan_interval}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Hot Reload</div>
+                <div class="config-value">{'Enabled' if config.hot_reload else 'Disabled'}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Cache Directory</div>
+                <div class="config-value">{config.cache_dir}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Log Level</div>
+                <div class="config-value">{config.log_level}</div>
+            </div>
+        </div>
+        
+        <h3>📂 Monitored Directories</h3>
+        <div style="margin-top: 15px;">
+            {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{directory}</code></div>' for directory in config.certificate_directories)}
+        </div>
+        
+        {f'''
+        <h3>🚫 Excluded Directories</h3>
+        <div style="margin-top: 15px;">
+            {"".join(f'<div style="background: #fef2f2; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ef4444;"><code>{directory}</code></div>' for directory in config.exclude_directories)}
+        </div>
+        ''' if config.exclude_directories else ''}
+    </div>
+    
+    <div class="footer">
+        <p>TLS Certificate Monitor v1.0.0 | 
+           <a href="/docs" target="_blank">API Documentation</a> | 
+           <a href="https://github.com/your-org/tls-cert-monitor" target="_blank">GitHub</a>
+        </p>
+    </div>
+    
+    <script>
+        async function clearCache() {{
+            if (confirm('Are you sure you want to clear the cache?')) {{
+                try {{
+                    const response = await fetch('/cache/clear', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json'
+                        }}
+                    }});
+                    const result = await response.json();
+                    alert('Cache cleared: ' + result.message);
+                }} catch (error) {{
+                    alert('Error clearing cache: ' + error.message);
+                }}
+            }}
+        }}
+        
+        // Auto-refresh page every 5 minutes to show updated status
+        setTimeout(() => {{
+            location.reload();
+        }}, 300000);
+    </script>
+</body>
+</html>
+        """
+
+        return Response(content=html_content, media_type="text/html")
+
+    # Add startup and shutdown events
+    @app.on_event("startup")
+    async def startup_event():
+        """Application startup event."""
+        logger.info("TLS Certificate Monitor API started")
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Application shutdown event."""
+        logger.info("TLS Certificate Monitor API shutting down")
+
+    return app
+
+
+async def _get_system_health(config: Config) -> Dict[str, Any]:
+    """
+    Get system health information.
+
+    Args:
+        config: Configuration instance
+
+    Returns:
+        System health data
+    """
+    health_data = {}
+
+    try:
+        # Configuration file status
+        config_file_exists = False
+        config_file_writable = False
+
+        if hasattr(config, "_config_file_path") and config._config_file_path:
+            config_file_path = config._config_file_path
+            config_file_exists = os.path.exists(config_file_path)
+            if config_file_exists:
+                config_file_writable = os.access(config_file_path, os.W_OK)
+
+        health_data.update(
+            {
+                "config_file": getattr(config, "_config_file_path", "default"),
+                "config_file_exists": config_file_exists,
+                "config_file_writable": config_file_writable,
+                "hot_reload_enabled": config.hot_reload,
+            }
+        )
+
+        # Log file status
+        log_file_writable = True
+        if config.log_file:
+            log_dir = os.path.dirname(config.log_file)
+            if log_dir:
+                log_file_writable = os.access(log_dir, os.W_OK)
+            else:
+                log_file_writable = os.access(".", os.W_OK)
+
+        health_data["log_file_writable"] = log_file_writable
+
+        # Certificate directories disk space
+        for directory in config.certificate_directories:
+            try:
+                if os.path.exists(directory):
+                    usage = shutil.disk_usage(directory)
+                    health_data[f'diskspace_{directory.replace("/", "_").replace("\\", "_")}'] = {
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                        "percent_used": round((usage.used / usage.total) * 100, 2),
+                    }
+            except Exception as e:
+                health_data[
+                    f'diskspace_{directory.replace("/", "_").replace("\\", "_")}_error'
+                ] = str(e)
+
+        # Overall disk space summary
+        try:
+            total_disk_usage = []
+            for directory in config.certificate_directories:
+                if os.path.exists(directory):
+                    usage = shutil.disk_usage(directory)
+                    total_disk_usage.append(
+                        {"directory": directory, "free": usage.free, "total": usage.total}
+                    )
+
+            if total_disk_usage:
+                min_free = min(usage["free"] for usage in total_disk_usage)
+                health_data["diskspace"] = {
+                    "status": "ok" if min_free > 1024**3 else "warning",  # 1GB threshold
+                    "min_free_bytes": min_free,
+                    "directories_checked": len(total_disk_usage),
+                }
+        except Exception:
+            health_data["diskspace"] = {"status": "error", "error": "Failed to check disk space"}
+
+    except Exception as e:
+        health_data["system_health_error"] = str(e)
+
+    return health_data

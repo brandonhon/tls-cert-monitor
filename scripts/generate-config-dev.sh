@@ -23,24 +23,25 @@ port: 3200
 bind_address: "0.0.0.0"
 
 certificate_directories:
-  - "$EXAMPLE_DIR/certs"
+  - "tests/fixtures/certs"
 
 exclude_directories:
-  - "$EXAMPLE_DIR/certs/exclude"
+  - "tests/fixtures/certs/exclude"
 
 p12_passwords:
-  - "changeit"
-  - "password"
-  - "123456"
+  - ""                   # Empty password (no password)
+  - "changeit"           # Java keystore default
+  - "password"           # Common default
+  - "123456"             # Common weak password
 
-scan_interval: "1m"
+scan_interval: "5m"
 workers: 4
-log_level: "info"    # debug, info, warn, error
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 dry_run: false
 hot_reload: true
 cache_dir: "./cache"
 cache_ttl: "1h"
-cache_max_size: 104857600  # 100MB
+cache_max_size: 104857600  # 100MB in bytes
 EOF
 
 # Success messages

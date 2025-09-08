@@ -6,383 +6,361 @@
 # Shell & Environment Setup
 # ----------------------------
 SHELL := /bin/bash
+.DEFAULT_GOAL := help
 
 # ----------------------------
-# Build Variables
+# Project Variables
 # ----------------------------
-BINARY_NAME := tls-cert-monitor
-# VERSION will eventually become a branch name
-VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-BUILD_TIME  := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
-GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-GO_VERSION  := $(shell go version | cut -d' ' -f3)
+PROJECT_NAME := tls-cert-monitor
+PYTHON := python3
+VENV_DIR := .venv
+VENV_PYTHON := $(VENV_DIR)/bin/python
+VENV_PIP := $(VENV_DIR)/bin/pip
+REQUIREMENTS := requirements.txt
+DEV_REQUIREMENTS := requirements-dev.txt
 
-# ----------------------------
-# Docker Variables
-# ----------------------------
-DOCKER           ?= docker
-DOCKERFILE       ?= ./Dockerfile
+# Source directories
+SRC_DIR := tls_cert_monitor
+TESTS_DIR := tests
+SCRIPTS_DIR := scripts
 
-# Image naming: override these in CI or locally:
-#   make docker-build REGISTRY=ghcr.io REPO=your-org IMAGE_NAME=tls-cert-monitor
-REGISTRY         ?= ghcr.io         # or docker.io, ECR registry, etc.
-REPO             ?= brandonhon        # org/user or ECR repo namespace
-IMAGE_NAME       ?= $(BINARY_NAME)  # default to Go binary name
-
-IMAGE            := $(strip $(REGISTRY))/$(strip $(REPO))/$(strip $(IMAGE_NAME)):$(strip $(VERSION))
-LATEST_IMAGE     := $(strip $(REGISTRY))/$(strip $(REPO))/$(strip $(IMAGE_NAME)):latest
-
-# Multi-arch buildx platforms
-PLATFORMS        ?= linux/amd64,linux/arm64
-
-# Container runtime defaults
-CONTAINER_NAME   ?= $(IMAGE_NAME)
-PORT             ?= 3200
-ENV_FILE         ?= .env
-BUILD_OPTS		 ?= --pull
-RUN_OPTS     	 ?= --restart=unless-stopped
-
-# ----------------------------
-# Go Tools & Commands
-# ----------------------------
-GOCMD      := go
-GOBUILD    := $(GOCMD) build
-GOCLEAN    := $(GOCMD) clean
-GOTEST     := $(GOCMD) test
-GOMOD      := $(GOCMD) mod
-GOFMT      := gofmt
-GOLINT     := golangci-lint
-GOSEC      := gosec
-
-# ----------------------------
-# Build Flags & Directories
-# ----------------------------
-LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -X main.gitCommit=$(GIT_COMMIT)"
+# Build and distribution
 BUILD_DIR := build
-DIST_DIR  := dist
+DIST_DIR := dist
 COVERAGE_DIR := coverage
-CACHE_DIR := cache
-VENDOR := vendor
-EXAMPLE_DIR := $(PWD)/test/fixtures
+
+# Configuration
+CONFIG_FILE := config.yaml
+EXAMPLE_CONFIG := config.example.yaml
 
 # ----------------------------
-# PFX Generation Defaults
+# Color Output
 # ----------------------------
-# Windows PFX generation defaults
-CSP_NAME := Microsoft Enhanced RSA and AES Cryptographic Provider
-MACALG := sha1
-MACSALT := 20
-KEYPBE := PBE-SHA1-3DES
-CERTPBE := PBE-SHA1-3DES
-ITERATIONS := 2000
-
-
-# Default target
-.PHONY: all
-all: clean fmt lint test build
+BLUE := \033[1;34m
+GREEN := \033[1;32m
+YELLOW := \033[1;33m
+RED := \033[1;31m
+NC := \033[0m # No Color
 
 # ----------------------------
 # Help Target
 # ----------------------------
 .PHONY: help
-help: ## Show available commands
+help: ## Show this help message
 	@echo ""
-	@printf "🔹 \033[1;36mTLS Certificate Monitor - Available Commands\033[0m 🔹\n\n"
+	@printf "$(BLUE)🔹 TLS Certificate Monitor - Available Commands 🔹$(NC)\n\n"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| sort \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[1;32m%-20s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
-	@printf "💡 Run \033[1;33mmake <target>\033[0m to execute a command.\n\n"
+	@printf "$(YELLOW)💡 Run 'make <target>' to execute a command.$(NC)\n\n"
 
 # ----------------------------
-# Build Targets
+# Virtual Environment
 # ----------------------------
-.PHONY: build
-build: deps ## Build the binary for current platform
-	@echo "🔨 Building $(BINARY_NAME)..."
-	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
-	@echo "✅ Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
+.PHONY: venv
+venv: $(VENV_DIR)/pyvenv.cfg ## Create virtual environment
 
-.PHONY: build-race
-build-race: deps ## Build binary with race detection enabled
-	@echo "🔨 Building $(BINARY_NAME) with race detection..."
-	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -race $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-race .
-	@echo "✅ Binary built: $(BUILD_DIR)/$(BINARY_NAME)-race"
+$(VENV_DIR)/pyvenv.cfg:
+	@echo "$(BLUE)🐍 Creating virtual environment...$(NC)"
+	$(PYTHON) -m venv $(VENV_DIR)
+	$(VENV_PIP) install --upgrade pip setuptools wheel
+	@echo "$(GREEN)✅ Virtual environment created$(NC)"
 
-.PHONY: build-all
-build-all: deps ## Build binaries for all platforms
-	@echo "🌎 Building for all supported platforms..."
-	@$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME) .
+.PHONY: venv-clean
+venv-clean: ## Remove virtual environment
+	@echo "$(BLUE)🧹 Removing virtual environment...$(NC)"
+	rm -rf $(VENV_DIR)
+	@echo "$(GREEN)✅ Virtual environment removed$(NC)"
 
 # ----------------------------
-# Docker Targets
+# Dependencies
 # ----------------------------
-.PHONY: docker-info
-docker-info: ## Show resolved Docker image information
-	@echo "🐳 Docker info"
-	@echo "  REGISTRY:       $(REGISTRY)"
-	@echo "  REPO:           $(REPO)"
-	@echo "  IMAGE_NAME:     $(IMAGE_NAME)"
-	@echo "  IMAGE_TAG:      $(VERSION)"
-	@echo "  IMAGE:          $(IMAGE)"
-	@echo "  LATEST_IMAGE:   $(LATEST_IMAGE)"
-	@echo "  PLATFORMS:      $(PLATFORMS)"
+.PHONY: install
+install: venv ## Install dependencies in virtual environment
+	@echo "$(BLUE)📦 Installing dependencies...$(NC)"
+	$(VENV_PIP) install -r $(REQUIREMENTS)
+	@echo "$(GREEN)✅ Dependencies installed$(NC)"
 
-.PHONY: docker-login
-docker-login: ## Login to REGISTRY (expects DOCKER_USERNAME/DOCKER_PASSWORD or GHCR_TOKEN)
-	@if [ -n "$$GHCR_TOKEN" ]; then \
-		echo "🔑 Logging in to $(REGISTRY) via GHCR_TOKEN..."; \
-		echo "$$GHCR_TOKEN" | $(DOCKER) login $(REGISTRY) -u $$DOCKER_USERNAME --password-stdin; \
-	elif [ -n "$$DOCKER_USERNAME" ] && [ -n "$$DOCKER_PASSWORD" ]; then \
-		echo "🔑 Logging in to $(REGISTRY) as $$DOCKER_USERNAME..."; \
-		echo "$$DOCKER_PASSWORD" | $(DOCKER) login $(REGISTRY) -u "$$DOCKER_USERNAME" --password-stdin; \
+.PHONY: install-dev
+install-dev: venv ## Install development dependencies
+	@echo "$(BLUE)📦 Installing development dependencies...$(NC)"
+	$(VENV_PIP) install -r $(REQUIREMENTS)
+	$(VENV_PIP) install -r $(DEV_REQUIREMENTS)
+	@echo "$(GREEN)✅ Development dependencies installed$(NC)"
+
+.PHONY: install-system
+install-system: ## Install dependencies system-wide (no venv)
+	@echo "$(BLUE)📦 Installing dependencies system-wide...$(NC)"
+	$(PYTHON) -m pip install -r $(REQUIREMENTS)
+	@echo "$(GREEN)✅ Dependencies installed system-wide$(NC)"
+
+.PHONY: install-dev-system
+install-dev-system: ## Install development dependencies system-wide
+	@echo "$(BLUE)📦 Installing development dependencies system-wide...$(NC)"
+	$(PYTHON) -m pip install -r $(REQUIREMENTS)
+	$(PYTHON) -m pip install -r $(DEV_REQUIREMENTS)
+	@echo "$(GREEN)✅ Development dependencies installed system-wide$(NC)"
+
+.PHONY: freeze
+freeze: ## Freeze current dependencies to requirements.txt
+	@if [ -d "$(VENV_DIR)" ]; then \
+		echo "$(BLUE)❄️  Freezing venv dependencies...$(NC)"; \
+		$(VENV_PIP) freeze > $(REQUIREMENTS); \
 	else \
-		echo "❌ Missing credentials. Provide GHCR_TOKEN or DOCKER_USERNAME/DOCKER_PASSWORD"; \
-		exit 1; \
+		echo "$(BLUE)❄️  Freezing system dependencies...$(NC)"; \
+		$(PYTHON) -m pip freeze > $(REQUIREMENTS); \
 	fi
-
-.PHONY: docker-build
-docker-build: ## Build image for local arch
-	@echo "🐳 Building image: $(IMAGE)"
-	$(DOCKER) build $(BUILD_OPTS) \
-		--file $(DOCKERFILE) \
-		--tag $(IMAGE) \
-		--label org.opencontainers.image.title="$(IMAGE_NAME)" \
-		--label org.opencontainers.image.version="$(VERSION)" \
-		--label org.opencontainers.image.revision="$(GIT_COMMIT)" \
-		--label org.opencontainers.image.created="$(BUILD_TIME)" \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		.
-	@echo "✅ Built $(IMAGE)"
-
-.PHONY: docker-build-nocache
-docker-build-nocache: ## Build image without cache
-	$(DOCKER) build --no-cache $(BUILD_OPTS) -f $(DOCKERFILE) -t $(IMAGE) .
-
-.PHONY: docker-tag
-docker-tag: ## Tag image also as :latest
-	@echo "🏷️  Tagging $(IMAGE) as $(LATEST_IMAGE)"
-	$(DOCKER) tag $(IMAGE) $(LATEST_IMAGE)
-
-.PHONY: docker-push
-docker-push: ## Push image (and :latest if present)
-	@echo "📤 Pushing $(IMAGE)"
-	$(DOCKER) push $(IMAGE)
-	-@$(DOCKER) image inspect $(LATEST_IMAGE) >/dev/null 2>&1 && { \
-		echo "📤 Pushing $(LATEST_IMAGE)"; \
-		$(DOCKER) push $(LATEST_IMAGE); \
-	} || true
-
-.PHONY: docker-buildx
-docker-buildx: ## Multi-arch build (buildx) without pushing
-	@echo "🌐 Building multi-arch image (no push): $(IMAGE)"
-	$(DOCKER) buildx create --name tls-monitor-builder --use >/dev/null 2>&1 || true
-	$(DOCKER) buildx build \
-		--platform $(PLATFORMS) \
-		--file $(DOCKERFILE) \
-		--tag $(IMAGE) \
-		--label org.opencontainers.image.version="$(VERSION)" \
-		--label org.opencontainers.image.revision="$(GIT_COMMIT)" \
-		--label org.opencontainers.image.created="$(BUILD_TIME)" \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		--output type=docker \
-		.
-
-.PHONY: docker-buildx-push
-docker-buildx-push: ## Multi-arch buildx and push (CI-friendly)
-	@echo "🌐 Building + pushing multi-arch image: $(IMAGE)"
-	$(DOCKER) buildx create --name tls-monitor-builder --use >/dev/null 2>&1 || true
-	$(DOCKER) buildx build \
-		--platform $(PLATFORMS) \
-		--file $(DOCKERFILE) \
-		--tag $(IMAGE) \
-		--push \
-		--label org.opencontainers.image.version="$(VERSION)" \
-		--label org.opencontainers.image.revision="$(GIT_COMMIT)" \
-		--label org.opencontainers.image.created="$(BUILD_TIME)" \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		.
-
-.PHONY: docker-run
-docker-run: ## Run container locally (maps PORT, optional .env)
-	@echo "🚀 Running $(CONTAINER_NAME) on port $(PORT)"
-	-@$(DOCKER) rm -f $(CONTAINER_NAME) >/dev/null 2>&1 || true
-	$(DOCKER) run -d --name $(CONTAINER_NAME) \
-		-p $(PORT):$(PORT) \
-		-v $(EXAMPLE_DIR)/certs:/app/certs:ro \
-		$$( [ -f $(ENV_FILE) ] && echo "--env-file $(ENV_FILE)" ) \
-		$(IMAGE)
-# 	@$(DOCKER) ps --filter "name=$(CONTAINER_NAME)"
-	@echo ""
-	@echo "tls-cert-monitor available at: http://localhost:3200/"
-
-.PHONY: docker-logs
-docker-logs: ## Tail container logs
-	$(DOCKER) logs -f $(CONTAINER_NAME)
-
-.PHONY: docker-stop
-docker-stop: ## Stop container
-	-$(DOCKER) stop $(CONTAINER_NAME) || true
-
-.PHONY: docker-rm
-docker-rm: docker-stop ## Remove container
-	-$(DOCKER) rm $(CONTAINER_NAME) || true
-
-.PHONY: docker-rmi
-docker-rmi: ## Remove built image(s)
-	-$(DOCKER) rmi $(IMAGE) || true
-	-$(DOCKER) rmi $(LATEST_IMAGE) || true
-
-.PHONY: docker-clean
-docker-clean: docker-rm docker-rmi ## Remove container and images
-	@echo "🧹 Docker artifacts removed"
+	@echo "$(GREEN)✅ Dependencies frozen to $(REQUIREMENTS)$(NC)"
 
 # ----------------------------
-# Docker Compose
+# Code Quality
 # ----------------------------
-.PHONY: compose-up
-compose-up: ## docker compose up -d (uses docker-compose.dev.yaml w/profile monitoring)
-	@if [ -f docker-compose.dev.yml ] || [ -f compose.dev.yml ]; then \
-		echo "📦 docker compose -f docker-compose.dev.yml --profile monitoring up -d"; \
-		$(DOCKER) compose -f docker-compose.dev.yml --profile monitoring up -d; \
-		echo "tls-cert-monitor available at: http://localhost:3200/"; \
-		echo "Prometheus available at: http://localhost:9090/"; \
-		echo "Grafana available at: http://localhost:3000/"; \
+.PHONY: format
+format: ## Format code with black and isort
+	@echo "$(BLUE)🎨 Formatting code...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m black $(SRC_DIR) $(TESTS_DIR) main.py; \
+		$(VENV_PYTHON) -m isort $(SRC_DIR) $(TESTS_DIR) main.py; \
 	else \
-		echo "❌ No docker-compose.dev.yml or compose.dev.yml found"; \
-		exit 1; \
+		$(PYTHON) -m black $(SRC_DIR) $(TESTS_DIR) main.py; \
+		$(PYTHON) -m isort $(SRC_DIR) $(TESTS_DIR) main.py; \
 	fi
-
-.PHONY: compose-down
-compose-down: ## docker compose down
-	@if [ -f docker-compose.dev.yml ] || [ -f compose.dev.yml ]; then \
-		echo "📦 docker compose -f docker-compose.dev.yml --profile monitoring down"; \
-		$(DOCKER) compose -f docker-compose.dev.yml --profile monitoring down; \
-	else \
-		echo "❌ No docker-compose.dev.yml or compose.dev.yml found"; \
-		exit 1; \
-	fi
-
-.PHONY: compose-clean
-compose-clean: ## docker compose down --volumes --remove-orphans --rmi all
-	@if [ -f docker-compose.dev.yml ] || [ -f compose.dev.yml ]; then \
-		echo "🧹 Cleaning up Docker environment..."; \
-		echo "📦 docker compose -f docker-compose.dev.yml --profile monitoring down --volumes --remove-orphans --rmi all"; \
-		$(DOCKER) compose -f docker-compose.dev.yml --profile monitoring down --volumes --remove-orphans --rmi all; \
-		rm -rf ./docker/cache ./docker/logs; \
-		echo "✅ Docker environment cleaned up successfully!"; \
-	else \
-		echo "❌ No docker-compose.dev.yml or compose.dev.yml found"; \
-		exit 1; \
-	fi
-
-
-# ----------------------------
-# Development Helpers
-# ----------------------------
-.PHONY: certs
-certs: ## Generate example certificates for testing
-	@EXAMPLE_DIR="$(EXAMPLE_DIR)" bash ./scripts/generate-test-certs.sh
-
-.PHONY: config-dev
-config-dev: ## Create development configuration file
-	@EXAMPLE_DIR="$(EXAMPLE_DIR)" bash ./scripts/generate-config-dev.sh
-
-# ----------------------------
-# Linting Targets
-# ----------------------------
-.PHONY: fmt
-fmt: ## Format code
-	@echo "📄 Formatting all code..."
-	go fmt ./...
+	@echo "$(GREEN)✅ Code formatted$(NC)"
 
 .PHONY: lint
-lint: ## Run linters (warnings won't fail)
-	@echo "🔍 Running linters..."
-	@command -v $(GOLINT) >/dev/null 2>&1 || { \
-		echo "❌ $(GOLINT) not found. Install it using:"; \
-		echo "   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
-		exit 1; \
-	}
-	@$(GOLINT) run --config=./.golangci.yml ./...
+lint: ## Run linting with flake8 and pylint
+	@echo "$(BLUE)🔍 Running linters...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m flake8 $(SRC_DIR) $(TESTS_DIR) main.py; \
+		$(VENV_PYTHON) -m pylint $(SRC_DIR) main.py; \
+	else \
+		$(PYTHON) -m flake8 $(SRC_DIR) $(TESTS_DIR) main.py; \
+		$(PYTHON) -m pylint $(SRC_DIR) main.py; \
+	fi
+	@echo "$(GREEN)✅ Linting completed$(NC)"
 
-.PHONY: lint-ci
-lint-ci: ## Run strict linting for CI (warnings fail build)
-	@echo "🔍 Running strict linting (CI mode)..."
-	@$(GOLINT) run --config ./.golangci.yml ./...
+.PHONY: type-check
+type-check: ## Run type checking with mypy
+	@echo "$(BLUE)🔍 Running type checker...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m mypy $(SRC_DIR) main.py; \
+	else \
+		$(PYTHON) -m mypy $(SRC_DIR) main.py; \
+	fi
+	@echo "$(GREEN)✅ Type checking completed$(NC)"
 
-.PHONY: lint-fix
-lint-fix: ## Automatically fix common linting issues
-	@echo "🛠️  Auto-fixing lint issues..."
-	$(GOLINT) run --fix --config ./.golangci.yml ./...
-	@echo "✅ Auto-fix completed!"
+.PHONY: security
+security: ## Run security checks with bandit
+	@echo "$(BLUE)🔐 Running security checks...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m bandit -r $(SRC_DIR) main.py; \
+	else \
+		$(PYTHON) -m bandit -r $(SRC_DIR) main.py; \
+	fi
+	@echo "$(GREEN)✅ Security checks completed$(NC)"
+
+.PHONY: check
+check: format lint type-check security ## Run all code quality checks
 
 # ----------------------------
-# Testing Targets
+# Testing
 # ----------------------------
 .PHONY: test
-test: ## Run integration tests 
-	@echo "🧪 Running integration tests..."
-	$(GOTEST) -tags=integration ./test/... 
-	@echo "✅ Tests completed."
-
-.PHONY: test-verbose
-test-verbose: ## Run tests with verbose
-	@echo "🧪 Running tests with verbose..."
-	$(GOTEST) -v -tags=integration ./test/... 
-	@echo "✅ Tests completed."
+test: ## Run tests with pytest
+	@echo "$(BLUE)🧪 Running tests...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m pytest $(TESTS_DIR) -v; \
+	else \
+		$(PYTHON) -m pytest $(TESTS_DIR) -v; \
+	fi
+	@echo "$(GREEN)✅ Tests completed$(NC)"
 
 .PHONY: test-coverage
-test-coverage: ## Run tests with coverage
-	@echo "🧪 Running tests..."
-	$(GOTEST) -tags=integration ./test/... -coverprofile=$(COVERAGE_DIR)/coverage.out
-	@echo "✅ Tests completed. Coverage report at $(COVERAGE_DIR)/coverage.out"
+test-coverage: ## Run tests with coverage report
+	@echo "$(BLUE)🧪 Running tests with coverage...$(NC)"
+	@mkdir -p $(COVERAGE_DIR)
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m pytest $(TESTS_DIR) \
+			--cov=$(SRC_DIR) \
+			--cov-report=html:$(COVERAGE_DIR)/html \
+			--cov-report=xml:$(COVERAGE_DIR)/coverage.xml \
+			--cov-report=term-missing; \
+	else \
+		$(PYTHON) -m pytest $(TESTS_DIR) \
+			--cov=$(SRC_DIR) \
+			--cov-report=html:$(COVERAGE_DIR)/html \
+			--cov-report=xml:$(COVERAGE_DIR)/coverage.xml \
+			--cov-report=term-missing; \
+	fi
+	@echo "$(GREEN)✅ Coverage report generated in $(COVERAGE_DIR)/$(NC)"
 
-.PHONY: test-race
-test-race: ## Run tests with race detector
-	$(GOTEST) -tags=integration -race ./test/...
+.PHONY: test-watch
+test-watch: ## Run tests in watch mode
+	@echo "$(BLUE)👀 Running tests in watch mode...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m pytest-watch $(TESTS_DIR) -- -v; \
+	else \
+		$(PYTHON) -m pytest-watch $(TESTS_DIR) -- -v; \
+	fi
 
 # ----------------------------
-# Security Targets
+# Running the Application
 # ----------------------------
-.PHONY: sec
-sec: ## Run security checks using gosec
-	@if ! command -v $(GOSEC) >/dev/null 2>&1; then \
-		echo "❌ gosec not found. Install it using:"; \
-		echo "   go install github.com/securego/gosec/v2/cmd/gosec@latest"; \
+.PHONY: run
+run: ## Run the application with virtual environment
+	@echo "$(BLUE)🚀 Starting TLS Certificate Monitor (venv)...$(NC)"
+	@if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "$(RED)❌ Virtual environment not found. Run 'make install' first.$(NC)"; \
 		exit 1; \
 	fi
-	$(GOSEC) ./...
+	$(VENV_PYTHON) main.py $(ARGS)
+
+.PHONY: run-system
+run-system: ## Run the application with system Python
+	@echo "$(BLUE)🚀 Starting TLS Certificate Monitor (system)...$(NC)"
+	$(PYTHON) main.py $(ARGS)
+
+.PHONY: run-config
+run-config: $(CONFIG_FILE) ## Run with configuration file
+	@echo "$(BLUE)🚀 Starting with config file...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) main.py --config $(CONFIG_FILE); \
+	else \
+		$(PYTHON) main.py --config $(CONFIG_FILE); \
+	fi
+
+.PHONY: run-dev
+run-dev: ## Run in development mode with hot reload
+	@echo "$(BLUE)🚀 Starting in development mode...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 3200; \
+	else \
+		$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 3200; \
+	fi
 
 # ----------------------------
-# Dependency Management
+# Configuration
 # ----------------------------
-.PHONY: deps
-deps: ## Download Go module dependencies
-	@echo "📦 Downloading dependencies..."
-	$(GOMOD) tidy
-	$(GOMOD) vendor
-	@echo "✅ Dependencies ready!"
+$(CONFIG_FILE):
+	@if [ ! -f "$(CONFIG_FILE)" ] && [ -f "$(EXAMPLE_CONFIG)" ]; then \
+		echo "$(BLUE)📝 Creating config file from example...$(NC)"; \
+		cp $(EXAMPLE_CONFIG) $(CONFIG_FILE); \
+		echo "$(GREEN)✅ Config file created: $(CONFIG_FILE)$(NC)"; \
+	fi
+
+.PHONY: config
+config: $(CONFIG_FILE) ## Create configuration file from example
 
 # ----------------------------
-# Cleanup Targets
+# Build and Distribution
+# ----------------------------
+.PHONY: build
+build: clean ## Build distribution packages
+	@echo "$(BLUE)🔨 Building distribution packages...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PYTHON) setup.py sdist bdist_wheel; \
+	else \
+		$(PYTHON) setup.py sdist bdist_wheel; \
+	fi
+	@echo "$(GREEN)✅ Build completed$(NC)"
+
+.PHONY: install-local
+install-local: build ## Install package locally
+	@echo "$(BLUE)📦 Installing package locally...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PIP) install -e .; \
+	else \
+		$(PYTHON) -m pip install -e .; \
+	fi
+	@echo "$(GREEN)✅ Package installed locally$(NC)"
+
+# ----------------------------
+# Docker Support
+# ----------------------------
+.PHONY: docker-build
+docker-build: ## Build Docker image
+	@echo "$(BLUE)🐳 Building Docker image...$(NC)"
+	docker build -t $(PROJECT_NAME):latest .
+	@echo "$(GREEN)✅ Docker image built$(NC)"
+
+.PHONY: docker-run
+docker-run: ## Run Docker container
+	@echo "$(BLUE)🐳 Running Docker container...$(NC)"
+	docker run --rm -p 3200:3200 \
+		-v $(PWD)/certs:/app/certs:ro \
+		-v $(PWD)/config.yaml:/app/config.yaml:ro \
+		$(PROJECT_NAME):latest
+
+# ----------------------------
+# Utilities
 # ----------------------------
 .PHONY: clean
-clean: ## Clean build artifacts
-	@echo "🧹 Cleaning up..."
-	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR) 
-	@echo "✅ Cleanup complete!"
+clean: ## Clean build artifacts and cache
+	@echo "$(BLUE)🧹 Cleaning build artifacts...$(NC)"
+	rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR)
+	rm -rf *.egg-info
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	find . -type f -name "*.pyd" -delete
+	find . -type f -name ".coverage" -delete
+	@echo "$(GREEN)✅ Cleanup completed$(NC)"
 
 .PHONY: clean-all
-clean-all: ## Clean build artifacts + example files
-	@echo "🧹 Deep cleaning project (build, dist, cache, coverage, and example files)..."
-	@rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR) $(CACHE_DIR) $(EXAMPLE_DIR)/* $(VENDOR)
-	@echo "✅ Full cleanup complete!"
+clean-all: clean venv-clean ## Clean everything including virtual environment
+	@echo "$(GREEN)✅ Full cleanup completed$(NC)"
+
+.PHONY: deps-update
+deps-update: ## Update all dependencies to latest versions
+	@echo "$(BLUE)⬆️  Updating dependencies...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PIP) install --upgrade pip; \
+		$(VENV_PIP) list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1 | xargs -n1 $(VENV_PIP) install --upgrade; \
+	else \
+		$(PYTHON) -m pip install --upgrade pip; \
+		$(PYTHON) -m pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1 | xargs -n1 $(PYTHON) -m pip install --upgrade; \
+	fi
+	@echo "$(GREEN)✅ Dependencies updated$(NC)"
+
+.PHONY: check-deps
+check-deps: ## Check for dependency vulnerabilities
+	@echo "$(BLUE)🔍 Checking dependencies for vulnerabilities...$(NC)"
+	@if [ -d "$(VENV_DIR)" ]; then \
+		$(VENV_PIP) install safety; \
+		$(VENV_PYTHON) -m safety check; \
+	else \
+		$(PYTHON) -m pip install safety; \
+		$(PYTHON) -m safety check; \
+	fi
+	@echo "$(GREEN)✅ Dependency check completed$(NC)"
+
+# ----------------------------
+# Development Setup
+# ----------------------------
+.PHONY: setup-dev
+setup-dev: install-dev config ## Setup complete development environment
+	@echo "$(GREEN)✅ Development environment setup completed$(NC)"
+	@echo "$(YELLOW)💡 You can now run 'make run' to start the application$(NC)"
+
+.PHONY: setup-dev-system
+setup-dev-system: install-dev-system config ## Setup development environment with system Python
+	@echo "$(GREEN)✅ Development environment setup completed (system Python)$(NC)"
+	@echo "$(YELLOW)💡 You can now run 'make run-system' to start the application$(NC)"
+
+# ----------------------------
+# Information
+# ----------------------------
+.PHONY: info
+info: ## Show project information
+	@echo "$(BLUE)📊 Project Information$(NC)"
+	@echo "  Project Name: $(PROJECT_NAME)"
+	@echo "  Python: $(shell $(PYTHON) --version 2>&1)"
+	@echo "  Virtual Environment: $(if $(wildcard $(VENV_DIR)),$(GREEN)Active$(NC),$(RED)Not created$(NC))"
+	@echo "  Source Directory: $(SRC_DIR)"
+	@echo "  Tests Directory: $(TESTS_DIR)"
+	@echo "  Configuration: $(if $(wildcard $(CONFIG_FILE)),$(GREEN)$(CONFIG_FILE)$(NC),$(RED)Not found$(NC))"
+	@echo ""
+
+# Prevent make from treating files as targets
+.PHONY: $(REQUIREMENTS) $(DEV_REQUIREMENTS)
