@@ -26,7 +26,7 @@ from tls_cert_monitor.scanner import CertificateScanner
 class TLSCertMonitor:
     """Main application class for TLS Certificate Monitor."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, dry_run: bool = False):
         self.config: Optional[Config] = None
         self.scanner: Optional[CertificateScanner] = None
         self.metrics: Optional[MetricsCollector] = None
@@ -34,6 +34,7 @@ class TLSCertMonitor:
         self.hot_reload: Optional[HotReloadManager] = None
         self.app: Optional[FastAPI] = None
         self.config_path = config_path
+        self.dry_run = dry_run
         self._shutdown_event = asyncio.Event()
 
     async def initialize(self):
@@ -81,9 +82,18 @@ class TLSCertMonitor:
             raise
 
     async def run(self):
-        """Run the application server."""
+        """Run the application server or perform dry-run scan."""
         if not self.app:
             await self.initialize()
+
+        # Handle dry-run mode
+        if self.dry_run:
+            self.logger.info("Running in dry-run mode - scanning certificates only")
+            # Perform one scan and exit
+            await self.scanner.scan_once()
+            self.logger.info("Dry-run scan completed")
+            await self.shutdown()
+            return
 
         config_dict = {
             "app": self.app,
@@ -155,7 +165,8 @@ class TLSCertMonitor:
     help="Path to configuration file",
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
-def main(config: Optional[Path], version: bool):
+@click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
+def main(config: Optional[Path], version: bool, dry_run: bool):
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
     if version:
@@ -164,7 +175,7 @@ def main(config: Optional[Path], version: bool):
         return
 
     try:
-        monitor = TLSCertMonitor(str(config) if config else None)
+        monitor = TLSCertMonitor(str(config) if config else None, dry_run=dry_run)
         asyncio.run(monitor.run())
     except KeyboardInterrupt:
         print("\nShutdown requested by user")

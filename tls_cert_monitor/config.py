@@ -5,7 +5,7 @@ Configuration management for TLS Certificate Monitor.
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -16,7 +16,7 @@ class Config(BaseModel):
 
     # Server settings
     port: int = Field(default=3200, ge=1, le=65535)
-    bind_address: str = Field(default="0.0.0.0")
+    bind_address: str = Field(default="0.0.0.0")  # nosec B104
 
     # TLS settings for metrics endpoint
     tls_cert: Optional[str] = None
@@ -55,7 +55,7 @@ class Config(BaseModel):
 
     @field_validator("log_level")
     @classmethod
-    def validate_log_level(cls, v):
+    def validate_log_level(cls, v: str) -> str:
         """Validate log level."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
@@ -64,7 +64,7 @@ class Config(BaseModel):
 
     @field_validator("certificate_directories")
     @classmethod
-    def validate_cert_directories(cls, v):
+    def validate_cert_directories(cls, v: List[str]) -> List[str]:
         """Validate certificate directories exist."""
         for directory in v:
             path = Path(directory)
@@ -74,7 +74,7 @@ class Config(BaseModel):
 
     @field_validator("scan_interval", "cache_ttl")
     @classmethod
-    def validate_duration(cls, v):
+    def validate_duration(cls, v: str) -> str:
         """Validate duration format (e.g., '5m', '1h', '30s')."""
         if not v:
             raise ValueError("Duration cannot be empty")
@@ -124,7 +124,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
     Returns:
         Config object
     """
-    config_data = {}
+    config_data: Dict[str, Any] = {}
 
     # Load from file if provided
     if config_path:
@@ -144,7 +144,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
 
 def _get_env_overrides() -> dict:
     """Get configuration overrides from environment variables."""
-    env_mapping = {
+    env_mapping: Dict[str, tuple[str, Callable[[str], Any]]] = {
         "TLS_MONITOR_PORT": ("port", int),
         "TLS_MONITOR_BIND_ADDRESS": ("bind_address", str),
         "TLS_MONITOR_TLS_CERT": ("tls_cert", str),
@@ -189,7 +189,7 @@ def create_example_config(output_path: str = "config.example.yaml") -> None:
     """Create an example configuration file."""
     example_config = {
         "port": 3200,
-        "bind_address": "0.0.0.0",
+        "bind_address": "0.0.0.0",  # nosec B104  # Intentional for production - allows external access
         "certificate_directories": ["/etc/ssl/certs", "/etc/pki/tls/certs"],
         "exclude_directories": ["/etc/ssl/certs/private", "/etc/ssl/certs/backup"],
         "p12_passwords": ["", "changeit", "password", "123456"],

@@ -3,9 +3,6 @@ Tests for metrics collection.
 """
 
 import time
-from datetime import datetime, timedelta
-
-import pytest
 
 from tls_cert_monitor.metrics import (
     MetricsCollector,

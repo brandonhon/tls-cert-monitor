@@ -1,0 +1,124 @@
+# TLS Certificate Monitor Configuration - Windows Example
+# This configuration file is tailored for Windows environments
+
+# Server settings
+port: 3200
+bind_address: "0.0.0.0"
+
+# TLS settings for metrics endpoint (optional)
+# tls_cert: "C:\\certs\\server.crt"
+# tls_key: "C:\\certs\\server.key"
+
+# Certificate monitoring - Windows common certificate locations
+certificate_directories:
+  # Windows Certificate Store locations (if certificates are exported to files)
+  - "C:\\ProgramData\\Microsoft\\Crypto\\RSA\\MachineKeys"
+  - "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Roaming\\Microsoft\\SystemCertificates"
+  
+  # IIS certificate locations
+  - "C:\\inetpub\\certs"
+  - "C:\\Windows\\System32\\inetsrv\\config\\certs"
+  
+  # Common application certificate directories
+  - "C:\\Program Files\\Common Files\\SSL"
+  - "C:\\certs"
+  - "C:\\certificates"
+  - "C:\\ssl"
+  
+  # Exchange Server certificates (if applicable)
+  - "C:\\Program Files\\Microsoft\\Exchange Server\\V15\\Bin"
+  
+  # Apache/Nginx on Windows
+  - "C:\\Apache24\\conf\\ssl"
+  - "C:\\nginx\\conf\\ssl"
+  
+  # Java application certificates
+  - "C:\\Program Files\\Java\\jre*\\lib\\security"
+  - "C:\\Program Files (x86)\\Java\\jre*\\lib\\security"
+  
+  # Custom application directories (add your specific paths)
+  # - "C:\\MyApp\\certificates"
+  # - "D:\\ssl-certs"
+
+# Directories to exclude from scanning (optional)
+# These paths will be skipped even if they are within certificate_directories
+exclude_directories:
+  - "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Roaming\\Microsoft\\SystemCertificates\\Disallowed"
+  - "C:\\ProgramData\\Microsoft\\Crypto\\RSA\\MachineKeys\\archived"
+  - "C:\\certs\\backup"
+  - "C:\\certificates\\old"
+  # Add directories you want to exclude from certificate scanning
+
+# P12/PFX certificate passwords
+# List of passwords to try when decrypting P12/PFX certificate files
+# Windows environments often use these common passwords
+p12_passwords:
+  - ""                    # Empty password (no password)
+  - "changeit"           # Java keystore default
+  - "password"           # Common default
+  - "123456"             # Common weak password
+  - "admin"              # Common Windows admin password
+  - "Password1"          # Common Windows complexity password
+  - "P@ssw0rd"           # Common Windows complexity password
+  - "certificate"        # Self-descriptive password
+  # Add your organization-specific P12 passwords here
+  # - "YourCompanyP12Password"
+  # - "ExchangeServerCert"
+  # - "IISCertPassword"
+
+# Scan interval (how often to scan for certificates)
+scan_interval: "5m"
+
+# Performance settings
+# Adjust based on your Windows server specifications
+workers: 4
+
+# Logging
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+# Windows-style log file path (optional)
+# log_file: "C:\\logs\\tls-monitor.log"  # If not set, logs to stdout
+# Alternative locations:
+# log_file: "C:\\ProgramData\\TLSCertMonitor\\logs\\tls-monitor.log"
+# log_file: "%APPDATA%\\TLSCertMonitor\\logs\\tls-monitor.log"
+
+# Operation modes
+dry_run: false
+hot_reload: true
+
+# Cache settings - Windows paths
+cache_dir: ".\\cache"              # Relative path
+# cache_dir: "C:\\ProgramData\\TLSCertMonitor\\cache"  # Absolute path option
+# cache_dir: "%TEMP%\\tls-monitor-cache"               # Temp directory option
+cache_ttl: "1h"
+cache_max_size: 104857600  # 100MB in bytes
+
+# Windows-specific notes:
+# 
+# 1. File Paths:
+#    - Use forward slashes (/) or double backslashes (\\) in paths
+#    - Avoid single backslashes as they are escape characters in YAML
+#    - Environment variables like %APPDATA% or %TEMP% are supported
+#
+# 2. Windows Certificate Store:
+#    - This tool scans file-based certificates, not the Windows Certificate Store directly
+#    - Export certificates from Windows Certificate Store to files if needed:
+#      - Open certmgr.msc or certlm.msc
+#      - Export certificates as .cer, .crt, .pem, .p12, or .pfx files
+#
+# 3. Common Certificate Locations on Windows:
+#    - IIS: Store certificates in C:\inetpub\certs or similar
+#    - Exchange: Usually in Exchange installation directory
+#    - Java apps: Often in %JAVA_HOME%\lib\security
+#    - Custom apps: Check application documentation
+#
+# 4. Permissions:
+#    - Ensure the service account has read access to certificate directories
+#    - Some system certificate directories require administrator privileges
+#
+# 5. Service Installation:
+#    - Consider running as a Windows Service using tools like NSSM or sc.exe
+#    - Set appropriate service account with necessary permissions
+#
+# 6. Firewall:
+#    - Ensure port 3200 (or your chosen port) is open in Windows Firewall
+#    - Add firewall rule: netsh advfirewall firewall add rule name="TLS Cert Monitor" dir=in action=allow protocol=TCP localport=3200

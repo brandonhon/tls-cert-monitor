@@ -13,11 +13,11 @@ services:
       - /etc/ssl/certs:/etc/ssl/certs:ro
       - /etc/pki/tls/certs:/etc/pki/tls/certs:ro
     environment:
-      - TLS_MONITOR_LOG_LEVEL=info
+      - TLS_MONITOR_LOG_LEVEL=INFO
       - TLS_MONITOR_HOT_RELOAD=true
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3200/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--method=GET", "-O", "/dev/null", "http://localhost:3200/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3

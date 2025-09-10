@@ -24,11 +24,11 @@ class CustomFormatter(logging.Formatter):
         "RESET": "\033[0m",  # Reset
     }
 
-    def __init__(self, use_color: bool = True):
+    def __init__(self, use_color: bool = True) -> None:
         self.use_color = use_color
         super().__init__()
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format log record with optional colors."""
         # Create format string
         if self.use_color and record.levelname in self.COLORS:
@@ -59,7 +59,7 @@ class CustomFormatter(logging.Formatter):
 class StructuredFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         import json
         from datetime import datetime
@@ -155,17 +155,19 @@ def get_logger(name: str) -> logging.Logger:
 
 
 # Logging helpers for certificate operations
-def log_cert_scan_start(logger: logging.Logger, directory: str, file_count: int):
+def log_cert_scan_start(logger: logging.Logger, directory: str, file_count: int) -> None:
     """Log certificate scan start."""
     logger.info(
-        f"Starting certificate scan", extra={"directory": directory, "file_count": file_count}
+        "Starting certificate scan", extra={"directory": directory, "file_count": file_count}
     )
 
 
-def log_cert_parsed(logger: logging.Logger, cert_path: str, common_name: str, expires_in_days: int):
+def log_cert_parsed(
+    logger: logging.Logger, cert_path: str, common_name: str, expires_in_days: int
+) -> None:
     """Log successful certificate parsing."""
     logger.debug(
-        f"Certificate parsed successfully",
+        "Certificate parsed successfully",
         extra={
             "cert_path": cert_path,
             "common_name": common_name,
@@ -176,7 +178,7 @@ def log_cert_parsed(logger: logging.Logger, cert_path: str, common_name: str, ex
 
 def log_cert_error(
     logger: logging.Logger, cert_path: str, error: Exception, error_type: str = "parse_error"
-):
+) -> None:
     """Log certificate processing error."""
     logger.error(
         f"Certificate processing failed: {error}",
@@ -186,10 +188,10 @@ def log_cert_error(
 
 def log_cert_scan_complete(
     logger: logging.Logger, directory: str, duration: float, parsed: int, errors: int
-):
+) -> None:
     """Log certificate scan completion."""
     logger.info(
-        f"Certificate scan completed",
+        "Certificate scan completed",
         extra={
             "directory": directory,
             "scan_duration": duration,
@@ -199,9 +201,11 @@ def log_cert_scan_complete(
     )
 
 
-def log_cache_operation(logger: logging.Logger, operation: str, key: str, hit: bool = None):
+def log_cache_operation(
+    logger: logging.Logger, operation: str, key: str, hit: Optional[bool] = None
+) -> None:
     """Log cache operations."""
-    extra = {"cache_operation": operation, "cache_key": key}
+    extra: dict = {"cache_operation": operation, "cache_key": key}
     if hit is not None:
         extra["cache_hit"] = hit
 
@@ -212,20 +216,20 @@ def log_cache_operation(logger: logging.Logger, operation: str, key: str, hit: b
     elif operation == "set":
         logger.debug(f"Cache set for key: {key}", extra=extra)
     elif operation == "invalidate":
-        logger.info(f"Cache invalidated for key: {key}", extra=extra)
+        logger.debug(f"Cache invalidated for key: {key}", extra=extra)
 
 
-def log_hot_reload(logger: logging.Logger, file_path: str, event_type: str):
+def log_hot_reload(logger: logging.Logger, file_path: str, event_type: str) -> None:
     """Log hot reload events."""
-    logger.info(
+    logger.debug(
         f"Hot reload triggered: {event_type}",
         extra={"file_path": file_path, "reload_event": event_type},
     )
 
 
 def log_metrics_collection(
-    logger: logging.Logger, metric_name: str, value: float, labels: dict = None
-):
+    logger: logging.Logger, metric_name: str, value: float, labels: Optional[dict] = None
+) -> None:
     """Log metrics collection."""
     extra = {"metric_name": metric_name, "metric_value": value}
     if labels:
@@ -234,6 +238,6 @@ def log_metrics_collection(
     logger.debug(f"Metric collected: {metric_name}={value}", extra=extra)
 
 
-def log_system_info(logger: logging.Logger, info: dict):
+def log_system_info(logger: logging.Logger, info: dict) -> None:
     """Log system information."""
     logger.info("System information", extra=info)

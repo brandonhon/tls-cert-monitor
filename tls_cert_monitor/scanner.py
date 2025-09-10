@@ -9,10 +9,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from OpenSSL import crypto
 
@@ -95,7 +94,7 @@ class CertificateScanner:
         # Reset metrics for new scan
         self.metrics.reset_scan_metrics()
 
-        scan_results = {"directories": {}, "summary": {}, "timestamp": start_time}
+        scan_results: Dict[str, Any] = {"directories": {}, "summary": {}, "timestamp": start_time}
 
         for directory in self.config.certificate_directories:
             dir_start_time = time.time()
@@ -215,10 +214,11 @@ class CertificateScanner:
                 parse_errors += 1
             else:
                 certificates_parsed += 1
-                certificates.append(result)
+                cert_result: Dict[str, Any] = result  # type: ignore[assignment]
+                certificates.append(cert_result)
 
                 # Update certificate metrics
-                self.metrics.update_certificate_metrics(result)
+                self.metrics.update_certificate_metrics(cert_result)
 
         return {
             "directory": directory,
@@ -245,7 +245,7 @@ class CertificateScanner:
         }
 
         try:
-            for root, dirs, files in os.walk(directory):
+            for root, _, files in os.walk(directory):
                 root_path = Path(root).resolve()
 
                 # Skip excluded directories
@@ -286,7 +286,7 @@ class CertificateScanner:
             cached_result = await self.cache.get(cache_key)
 
             if cached_result is not None:
-                return cached_result
+                return cached_result  # type: ignore[no-any-return]
 
             # Process in thread pool
             try:
@@ -348,7 +348,7 @@ class CertificateScanner:
             return cert_data
 
         except Exception as e:
-            raise Exception(f"Failed to parse {file_path}: {e}")
+            raise RuntimeError(f"Failed to parse {file_path}: {e}") from e
 
     def _parse_pem_der_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """Parse PEM or DER certificate file."""
@@ -363,7 +363,7 @@ class CertificateScanner:
             try:
                 cert = x509.load_der_x509_certificate(cert_data)
             except ValueError as e:
-                raise ValueError(f"Could not parse as PEM or DER: {e}")
+                raise ValueError(f"Could not parse as PEM or DER: {e}") from e
 
         return self._extract_certificate_info(cert)
 
@@ -379,14 +379,12 @@ class CertificateScanner:
 
                 # Try with cryptography library
                 try:
-                    private_key, cert, additional_certs = pkcs12.load_key_and_certificates(
-                        p12_data, password_bytes
-                    )
+                    _, cert, _ = pkcs12.load_key_and_certificates(p12_data, password_bytes)
                     if cert:
                         return self._extract_certificate_info(cert)
                 except Exception:
                     # Try with pyOpenSSL as fallback
-                    p12 = crypto.load_pkcs12(p12_data, password_bytes)
+                    p12 = crypto.load_pkcs12(p12_data, password_bytes)  # pylint: disable=no-member
                     if p12.get_certificate():
                         # Convert to cryptography certificate
                         cert_pem = crypto.dump_certificate(
@@ -395,7 +393,8 @@ class CertificateScanner:
                         cert = x509.load_pem_x509_certificate(cert_pem)
                         return self._extract_certificate_info(cert)
 
-            except Exception:
+            except Exception as e:
+                self.logger.debug(f"Password attempt failed for PKCS#12 file: {e}")
                 continue
 
         raise ValueError("Could not decrypt PKCS#12 file with any provided password")
@@ -426,8 +425,13 @@ class CertificateScanner:
 
         # Key information
         public_key = cert.public_key()
-        key_size = public_key.key_size
         key_algorithm = type(public_key).__name__
+
+        # Get key size - not all key types have key_size attribute
+        try:
+            key_size = getattr(public_key, "key_size", 0)
+        except AttributeError:
+            key_size = 0
 
         # Signature algorithm
         signature_algorithm = cert.signature_algorithm_oid._name
@@ -464,9 +468,10 @@ class CertificateScanner:
         try:
             cn_attrs = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
             if cn_attrs:
-                return cn_attrs[0].value
-        except Exception:
-            pass
+                value = cn_attrs[0].value
+                return value if isinstance(value, str) else value.decode("utf-8")
+        except Exception as e:
+            self.logger.debug(f"Could not extract common name from certificate: {e}")
         return "unknown"
 
     def _get_issuer_name(self, cert: x509.Certificate) -> str:
@@ -474,13 +479,15 @@ class CertificateScanner:
         try:
             cn_attrs = cert.issuer.get_attributes_for_oid(x509.NameOID.COMMON_NAME)
             if cn_attrs:
-                return cn_attrs[0].value
+                value = cn_attrs[0].value
+                return value if isinstance(value, str) else value.decode("utf-8")
             # Fallback to organization
             org_attrs = cert.issuer.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)
             if org_attrs:
-                return org_attrs[0].value
-        except Exception:
-            pass
+                value = org_attrs[0].value
+                return value if isinstance(value, str) else value.decode("utf-8")
+        except Exception as e:
+            self.logger.debug(f"Could not extract issuer name from certificate: {e}")
         return "unknown"
 
     def _get_san_list(self, cert: x509.Certificate) -> List[str]:
@@ -489,7 +496,7 @@ class CertificateScanner:
             san_ext = cert.extensions.get_extension_for_oid(
                 x509.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
             )
-            return [str(name) for name in san_ext.value]
+            return [str(name) for name in san_ext.value]  # type: ignore[attr-defined]
         except x509.ExtensionNotFound:
             return []
         except Exception:

@@ -4,7 +4,7 @@ Hot reload functionality for TLS Certificate Monitor.
 
 import asyncio
 from pathlib import Path
-from typing import Optional, Set
+from typing import Any, Coroutine, Optional, Set
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -21,9 +21,14 @@ class CertificateFileHandler(FileSystemEventHandler):
         self.manager = hot_reload_manager
         self.logger = get_logger("hot_reload.certs")
 
-    def on_any_event(self, event: FileSystemEvent):
-        """Handle any file system event."""
+    def on_any_event(self, event: FileSystemEvent) -> None:
+        """Handle meaningful file system events only."""
         if event.is_directory:
+            return
+
+        # Only respond to meaningful events, ignore file access events
+        meaningful_events = {"created", "modified", "deleted", "moved"}
+        if event.event_type not in meaningful_events:
             return
 
         file_path = Path(event.src_path)
@@ -31,7 +36,7 @@ class CertificateFileHandler(FileSystemEventHandler):
         # Check if it's a certificate file
         if file_path.suffix.lower() in CertificateScanner.SUPPORTED_EXTENSIONS:
             self.logger.debug(f"Certificate file event: {event.event_type} - {file_path}")
-            asyncio.create_task(
+            self.manager._schedule_coro(
                 self.manager._handle_certificate_change(str(file_path), event.event_type)
             )
 
@@ -43,17 +48,29 @@ class ConfigFileHandler(FileSystemEventHandler):
         self.manager = hot_reload_manager
         self.logger = get_logger("hot_reload.config")
 
-    def on_modified(self, event: FileSystemEvent):
+    def on_modified(self, event: FileSystemEvent) -> None:
         """Handle configuration file modification."""
         if event.is_directory:
             return
 
         file_path = Path(event.src_path)
 
-        # Check if it's the configuration file
-        if self.manager.config_path and file_path.samefile(self.manager.config_path):
-            self.logger.info(f"Configuration file modified: {file_path}")
-            asyncio.create_task(self.manager._handle_config_change())
+        # Skip temporary files created by editors
+        if file_path.name.startswith(".") or ".tmp" in file_path.name:
+            return
+
+        # Check if it's the configuration file (handle cases where file might not exist)
+        try:
+            if (
+                self.manager.config_path
+                and file_path.exists()
+                and file_path.samefile(self.manager.config_path)
+            ):
+                self.logger.info(f"Configuration file modified: {file_path}")
+                self.manager._schedule_coro(self.manager._handle_config_change())
+        except (FileNotFoundError, OSError):
+            # File might be a temporary file that was quickly deleted
+            pass
 
 
 class HotReloadManager:
@@ -77,6 +94,7 @@ class HotReloadManager:
         self._observer = Observer()
         self._watching = False
         self._watched_paths: Set[str] = set()
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Event handlers
         self._cert_handler = CertificateFileHandler(self)
@@ -88,6 +106,13 @@ class HotReloadManager:
 
         self.logger.info("Hot reload manager initialized")
 
+    def _schedule_coro(self, coro: Coroutine[Any, Any, Any]) -> None:
+        """Schedule a coroutine from a thread safely."""
+        if self._event_loop and not self._event_loop.is_closed():
+            asyncio.run_coroutine_threadsafe(coro, self._event_loop)
+        else:
+            self.logger.warning("Cannot schedule coroutine: event loop not available")
+
     async def start(self) -> None:
         """Start hot reload monitoring."""
         if not self.config.hot_reload:
@@ -97,6 +122,9 @@ class HotReloadManager:
         if self._watching:
             self.logger.warning("Hot reload already started")
             return
+
+        # Store the event loop for thread-safe task scheduling
+        self._event_loop = asyncio.get_running_loop()
 
         try:
             # Watch configuration file
@@ -170,7 +198,7 @@ class HotReloadManager:
 
             # Create new debounced task
             task = asyncio.create_task(self._debounced_cert_change(file_path, event_type))
-            task._file_path = file_path  # Store file path for cancellation
+            task._file_path = file_path  # type: ignore[attr-defined] # Store file path for cancellation
             self._cert_change_tasks.add(task)
 
             # Clean up completed tasks
@@ -243,6 +271,11 @@ class HotReloadManager:
             dirs_added = new_dirs - old_dirs
             dirs_removed = old_dirs - new_dirs
 
+            # Check if P12 passwords changed
+            old_passwords = set(self.config.p12_passwords)
+            new_passwords = set(new_config.p12_passwords)
+            passwords_changed = old_passwords != new_passwords
+
             # Update configuration
             old_config = self.config
             self.config = new_config
@@ -258,6 +291,24 @@ class HotReloadManager:
                     await self.scanner.cache.clear()
                     self.logger.info("Cache cleared due to scan interval change")
 
+            # Clear cache and trigger re-scan if passwords changed
+            if passwords_changed:
+                if hasattr(self.scanner, "cache"):
+                    await self.scanner.cache.clear()
+                    self.logger.info("Cache cleared due to P12 password changes")
+
+                # Reset parse error metrics to avoid stale errors
+                if hasattr(self.scanner, "metrics"):
+                    self.scanner.metrics.reset_parse_error_metrics()
+                    self.logger.info("Parse error metrics reset due to password changes")
+
+                # Trigger immediate re-scan to update metrics
+                try:
+                    self.logger.info("Triggering certificate re-scan due to password changes")
+                    await self.scanner.scan_once()
+                except Exception as e:
+                    self.logger.error(f"Failed to trigger re-scan after password change: {e}")
+
             # Log configuration changes
             changes = []
             if dirs_added:
@@ -270,6 +321,13 @@ class HotReloadManager:
                 )
             if old_config.workers != new_config.workers:
                 changes.append(f"Workers: {old_config.workers} -> {new_config.workers}")
+            if passwords_changed:
+                passwords_added = new_passwords - old_passwords
+                passwords_removed = old_passwords - new_passwords
+                if passwords_added:
+                    changes.append(f"Added {len(passwords_added)} P12 password(s)")
+                if passwords_removed:
+                    changes.append(f"Removed {len(passwords_removed)} P12 password(s)")
 
             if changes:
                 self.logger.info(f"Configuration updated: {'; '.join(changes)}")
@@ -322,6 +380,7 @@ class HotReloadManager:
             "watched_paths": list(self._watched_paths),
             "config_path": str(self.config_path) if self.config_path else None,
             "active_cert_tasks": len(self._cert_change_tasks),
-            "active_config_task": self._config_change_task is not None
-            and not self._config_change_task.done(),
+            "active_config_task": (
+                self._config_change_task is not None and not self._config_change_task.done()
+            ),
         }

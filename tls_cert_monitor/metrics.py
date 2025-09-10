@@ -5,7 +5,7 @@ Prometheus metrics collection for TLS Certificate Monitor.
 import socket
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import psutil
 from prometheus_client import (
@@ -24,7 +24,7 @@ from tls_cert_monitor.logger import get_logger, log_metrics_collection
 class MetricsCollector:
     """Prometheus metrics collector for TLS certificates and application metrics."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = get_logger("metrics")
         self.registry = CollectorRegistry()
 
@@ -148,8 +148,8 @@ class MetricsCollector:
         )
 
         # Internal tracking
-        self._duplicate_certificates = defaultdict(list)
-        self._last_system_update = 0
+        self._duplicate_certificates: Dict[str, List[str]] = defaultdict(list)
+        self._last_system_update = 0.0
         self._system_update_interval = 30  # Update system metrics every 30 seconds
 
         self.logger.info("Metrics collector initialized")
@@ -171,12 +171,12 @@ class MetricsCollector:
             if "expiration_timestamp" in cert_data:
                 self.ssl_cert_expiration_timestamp.labels(
                     common_name=common_name, issuer=issuer, path=path, serial=serial
-                ).set(cert_data["expiration_timestamp"])
+                ).set(int(cert_data["expiration_timestamp"]))
 
             # SAN count
             if "san_count" in cert_data:
                 self.ssl_cert_san_count.labels(common_name=common_name, path=path).set(
-                    cert_data["san_count"]
+                    int(cert_data["san_count"])
                 )
 
             # Certificate info
@@ -252,9 +252,9 @@ class MetricsCollector:
             errors_total: Number of parsing errors
         """
         try:
-            self.ssl_cert_files_total.labels(directory=directory).set(files_total)
+            self.ssl_cert_files_total.labels(directory=directory).set(int(files_total))
             self.ssl_cert_scan_duration_seconds.labels(directory=directory).observe(duration)
-            self.ssl_cert_last_scan_timestamp.labels(directory=directory).set(time.time())
+            self.ssl_cert_last_scan_timestamp.labels(directory=directory).set(int(time.time()))
 
             # Increment parsed counter
             self.ssl_certs_parsed_total.inc(parsed_total)
@@ -309,7 +309,7 @@ class MetricsCollector:
                 if len(paths) > 1
             }
 
-            self.ssl_cert_duplicate_count.set(len(duplicates))
+            self.ssl_cert_duplicate_count.set(int(len(duplicates)))
 
             # Record duplicate information with fixed labels
             for serial, paths in duplicates.items():
@@ -341,8 +341,8 @@ class MetricsCollector:
 
             # Memory metrics
             memory_info = process.memory_info()
-            self.app_memory_bytes.labels(type="rss").set(memory_info.rss)
-            self.app_memory_bytes.labels(type="vms").set(memory_info.vms)
+            self.app_memory_bytes.labels(type="rss").set(int(memory_info.rss))
+            self.app_memory_bytes.labels(type="vms").set(int(memory_info.vms))
 
             # CPU metrics
             cpu_percent = process.cpu_percent()
@@ -350,7 +350,7 @@ class MetricsCollector:
 
             # Thread count
             thread_count = process.num_threads()
-            self.app_thread_count.set(thread_count)
+            self.app_thread_count.set(int(thread_count))
 
             # Application info (only set once)
             import sys
@@ -384,6 +384,34 @@ class MetricsCollector:
         self._duplicate_certificates.clear()
         self.logger.debug("Scan metrics reset")
 
+    def reset_parse_error_metrics(self) -> None:
+        """Reset parse error metrics - useful after configuration changes like new passwords."""
+        # For Counters, we need to recreate them since they can't be truly reset
+        # Unregister the old counters
+        try:
+            self.registry.unregister(self.ssl_cert_parse_errors_total)
+            self.registry.unregister(self.ssl_cert_parse_error_names)
+        except KeyError:
+            # Counter might not be registered yet
+            pass
+
+        # Recreate the counters with fresh state
+        self.ssl_cert_parse_errors_total = Counter(
+            "ssl_cert_parse_errors_total",
+            "Certificate parsing errors",
+            ["filename", "error_type"],
+            registry=self.registry,
+        )
+
+        self.ssl_cert_parse_error_names = Info(
+            "ssl_cert_parse_error_names",
+            "Names of certificates that have parsing errors",
+            ["filename", "error_type", "error_message"],
+            registry=self.registry,
+        )
+
+        self.logger.debug("Parse error metrics recreated")
+
     def get_metrics(self) -> str:
         """
         Get Prometheus metrics in text format.
@@ -397,7 +425,86 @@ class MetricsCollector:
         # Update duplicate metrics
         self.update_duplicate_metrics()
 
-        return generate_latest(self.registry).decode("utf-8")
+        # Get raw metrics
+        raw_metrics = generate_latest(self.registry).decode("utf-8")
+
+        # Format numeric values to remove scientific notation and unnecessary decimals
+        formatted_metrics = self._format_numeric_values(raw_metrics)
+
+        return formatted_metrics
+
+    def _format_numeric_values(self, metrics_text: str) -> str:
+        """
+        Format numeric values in metrics to use integers where appropriate.
+
+        Args:
+            metrics_text: Raw Prometheus metrics text
+
+        Returns:
+            Formatted metrics text with integers instead of scientific notation/decimals
+        """
+        import re
+
+        lines = metrics_text.split("\n")
+        formatted_lines = []
+
+        for line in lines:
+            if line.startswith("#") or not line.strip():
+                # Keep comments and empty lines unchanged
+                formatted_lines.append(line)
+                continue
+
+            # Match lines with metric values (with or without labels)
+            match = re.match(r"^([^}]+})\s+(.+)$", line) or re.match(r"^([^\s]+)\s+(.+)$", line)
+            if match:
+                metric_name = match.group(1)
+                value = match.group(2)
+
+                # Convert scientific notation and decimals to integers for specific metrics
+                if any(
+                    metric in metric_name
+                    for metric in [
+                        "ssl_cert_expiration_timestamp",
+                        "ssl_cert_last_scan_timestamp",
+                        "ssl_cert_san_count",
+                        "ssl_cert_files_total",
+                        "ssl_cert_duplicate_count",
+                        "app_memory_bytes",
+                        "app_thread_count",
+                        "ssl_cert_issuer_code",
+                    ]
+                ):
+                    try:
+                        # Convert scientific notation and float to integer
+                        if "e+" in value:
+                            int_value = int(float(value))
+                        elif value.endswith(".0"):
+                            int_value = int(float(value))
+                        else:
+                            # Try to convert, fallback to original if not numeric
+                            try:
+                                float_value = float(value)
+                                if float_value.is_integer():
+                                    int_value = int(float_value)
+                                else:
+                                    int_value = None
+                            except ValueError:
+                                int_value = None
+
+                        if int_value is not None:
+                            formatted_lines.append(f"{metric_name} {int_value}")
+                        else:
+                            formatted_lines.append(line)
+                    except (ValueError, OverflowError):
+                        # If conversion fails, keep original
+                        formatted_lines.append(line)
+                else:
+                    # Keep other metrics unchanged (like CPU percentages)
+                    formatted_lines.append(line)
+            else:
+                formatted_lines.append(line)
+
+        return "\n".join(formatted_lines)
 
     def get_content_type(self) -> str:
         """Get content type for metrics endpoint."""

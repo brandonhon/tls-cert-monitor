@@ -1,36 +1,102 @@
-# Build artifacts
-build/
-dist/
-coverage/
-*.log
-
-# Development files
-.git/
+# Git and version control
+.git
 .gitignore
-README.md
-docs/
-examples/
+.gitattributes
 
-# Test files
-*_test.go
-test/
+# Python cache and compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
 
-# IDE files
+# Virtual environments and dependencies
+.venv
+venv/
+env/
+ENV/
+.env
+env.bak/
+venv.bak/
+
+# Development and testing files
+tests/
+test_*.py
+*_test.py
+.pytest_cache
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS files
+*~
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
 
-# Temporary files
-tmp/
-temp/
-*.tmp
+# Documentation
+docs/
+README.md
+*.md
+LICENSE
 
-# Docker files
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Local development files
+cache/
+logs/
+local/
+dev/
+temp/
+tmp/
+bandit-report.json
+*.backup
+
+# Config files (except docker config)
+config.yaml
+config*.yaml
+!docker/docker.config.yaml
+!config.example.yaml
+
+# Test certificates and fixtures
+tests/fixtures/
+certificates/
+certs/
+*.pem
+*.crt
+*.cer
+*.cert
+*.der
+*.p12
+*.pfx
+*.key
+
+# Other
+ignore/
+Makefile.backup
+.golangci.yml
+pyproject.toml
+setup.py
+requirements-dev.txt
+CLAUDE.md
+dev_server.py
+scripts/
+docker-compose.yml

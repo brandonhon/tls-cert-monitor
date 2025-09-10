@@ -2,7 +2,8 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CERTS_DIR="$BASE_DIR/tests/fixtures/certs"
+EXAMPLE_DIR="$BASE_DIR/tests/fixtures"
+CERTS_DIR="$EXAMPLE_DIR/certs"
 EXCLUDE_DIR="$CERTS_DIR/exclude"
 PFX_DIR="$CERTS_DIR/pfx"
 
@@ -215,8 +216,8 @@ for i in 1 2 3; do
 done
 
 echo "🔓 Setting world-readable permissions on all certs..."
-chmod 644 "$EXAMPLE_DIR"/certs/*.pem 2>/dev/null || true
-chmod 644 "$EXAMPLE_DIR"/certs/pfx/*.pfx 2>/dev/null || true
-chmod 644 "$EXAMPLE_DIR"/certs/exclude/*.pem 2>/dev/null || true
+chmod 644 "$CERTS_DIR"/*.pem 2>/dev/null || true
+chmod 644 "$CERTS_DIR"/pfx/*.pfx 2>/dev/null || true
+chmod 644 "$CERTS_DIR"/exclude/*.pem 2>/dev/null || true
 
 echo "✅ All test certificates successfully generated in: $CERTS_DIR"

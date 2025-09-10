@@ -2,9 +2,11 @@
 FastAPI application for TLS Certificate Monitor.
 """
 
+import asyncio
 import os
 import shutil
-from typing import Any, Dict
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Dict, Optional, Union
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,8 +19,29 @@ from tls_cert_monitor.metrics import MetricsCollector
 from tls_cert_monitor.scanner import CertificateScanner
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan handler that suppresses CancelledError during shutdown."""
+    try:
+        # Startup
+        yield
+    except asyncio.CancelledError:
+        # Suppress CancelledError during shutdown - this is expected behavior
+        pass
+    finally:
+        # Cleanup - suppress any cancellation errors here too
+        try:
+            pass  # Any cleanup code would go here
+        except asyncio.CancelledError:
+            pass
+
+
 def create_app(
-    scanner: CertificateScanner, metrics: MetricsCollector, cache: CacheManager, config: Config
+    scanner: CertificateScanner,
+    metrics: MetricsCollector,
+    cache: CacheManager,
+    config: Config,
+    lifespan_override: Optional[Any] = None,
 ) -> FastAPI:
     """
     Create and configure FastAPI application.
@@ -38,9 +61,9 @@ def create_app(
         version="1.0.0",
         docs_url="/docs" if not config.dry_run else None,
         redoc_url="/redoc" if not config.dry_run else None,
+        lifespan=lifespan_override or lifespan,
     )
 
-    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -52,33 +75,20 @@ def create_app(
     logger = get_logger("api")
 
     @app.get("/metrics", response_class=PlainTextResponse)
-    async def get_metrics():
-        """
-        Prometheus metrics endpoint.
-
-        Returns metrics in Prometheus text format.
-        """
+    async def get_metrics() -> PlainTextResponse:
         try:
-            metrics_data = metrics.get_metrics()
-            return Response(content=metrics_data, media_type=metrics.get_content_type())
+            metrics_data: str = metrics.get_metrics()
+            return PlainTextResponse(content=metrics_data, media_type=metrics.get_content_type())
         except Exception as e:
             logger.error(f"Failed to generate metrics: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate metrics")
+            raise HTTPException(status_code=500, detail="Failed to generate metrics") from e
 
     @app.get("/healthz", response_class=JSONResponse)
-    async def get_health():
-        """
-        Health status endpoint.
-
-        Returns comprehensive health information in JSON format.
-        """
+    async def get_health() -> JSONResponse:
         try:
-            # Get health status from all components
             scanner_health = await scanner.get_health_status()
             cache_health = await cache.get_health_status()
             metrics_health = metrics.get_registry_status()
-
-            # Get system health
             system_health = await _get_system_health(config)
 
             health_status = {
@@ -90,103 +100,67 @@ def create_app(
             }
 
             return JSONResponse(content=health_status)
-
         except Exception as e:
             logger.error(f"Failed to get health status: {e}")
-            error_response = {"status": "error", "error": str(e)}
-            return JSONResponse(content=error_response, status_code=500)
+            return JSONResponse(content={"status": "error", "error": str(e)}, status_code=500)
 
     @app.get("/scan", response_class=JSONResponse)
-    async def trigger_scan():
-        """
-        Trigger a manual certificate scan.
-
-        Returns scan results.
-        """
+    async def trigger_scan() -> JSONResponse:
         if config.dry_run:
             return JSONResponse(
                 content={"message": "Scan not performed - dry run mode enabled"}, status_code=200
             )
-
         try:
             logger.info("Manual scan triggered via API")
             scan_results = await scanner.scan_once()
             return JSONResponse(content=scan_results)
-
         except Exception as e:
             logger.error(f"Manual scan failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Scan failed: {e}") from e
 
     @app.get("/config", response_class=JSONResponse)
-    async def get_config():
-        """
-        Get current configuration (excluding sensitive data).
-
-        Returns sanitized configuration.
-        """
+    async def get_config() -> JSONResponse:
         try:
-            config_dict = config.dict()
-
-            # Remove sensitive information
-            sensitive_keys = ["p12_passwords", "tls_key"]
-            for key in sensitive_keys:
+            # Use current config from scanner (updated by hot reload)
+            current_config = scanner.config
+            config_dict: Dict[str, Any] = current_config.dict()
+            for key in ["p12_passwords", "tls_key"]:
                 if key in config_dict:
                     config_dict[key] = "***REDACTED***"
-
             return JSONResponse(content=config_dict)
-
         except Exception as e:
             logger.error(f"Failed to get configuration: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get configuration")
+            raise HTTPException(status_code=500, detail="Failed to get configuration") from e
 
     @app.get("/cache/stats", response_class=JSONResponse)
-    async def get_cache_stats():
-        """
-        Get cache statistics.
-
-        Returns cache performance metrics.
-        """
+    async def get_cache_stats() -> JSONResponse:
         try:
             stats = await cache.get_stats()
             return JSONResponse(content=stats)
-
         except Exception as e:
             logger.error(f"Failed to get cache stats: {e}")
-            raise HTTPException(status_code=500, detail="Failed to get cache stats")
+            raise HTTPException(status_code=500, detail="Failed to get cache stats") from e
 
     @app.post("/cache/clear", response_class=JSONResponse)
-    async def clear_cache():
-        """
-        Clear the cache.
-
-        Returns success message.
-        """
+    async def clear_cache() -> JSONResponse:
         if config.dry_run:
             return JSONResponse(
                 content={"message": "Cache not cleared - dry run mode enabled"}, status_code=200
             )
-
         try:
             await cache.clear()
             logger.info("Cache cleared via API")
             return JSONResponse(content={"message": "Cache cleared successfully"})
-
         except Exception as e:
             logger.error(f"Failed to clear cache: {e}")
-            raise HTTPException(status_code=500, detail="Failed to clear cache")
+            raise HTTPException(status_code=500, detail="Failed to clear cache") from e
 
     @app.get("/", response_class=Response)
-    async def root():
-        """
-        Root endpoint with HTML interface showing all available endpoints.
-        """
-        # Get server info
+    async def root() -> Response:
         protocol = "https" if config.tls_cert and config.tls_key else "http"
         server_url = f"{protocol}://{config.bind_address}:{config.port}"
-
-        # Build HTML page
         html_content = f"""
-<!DOCTYPE html>
+        <!DOCTYPE html>
 <html>
 <head>
     <title>TLS Certificate Monitor</title>
@@ -440,14 +414,14 @@ def create_app(
         </div>
         ''' if config.exclude_directories else ''}
     </div>
-    
+
     <div class="footer">
-        <p>TLS Certificate Monitor v1.0.0 | 
-           <a href="/docs" target="_blank">API Documentation</a> | 
-           <a href="https://github.com/your-org/tls-cert-monitor" target="_blank">GitHub</a>
+        <p>TLS Certificate Monitor v1.0.0 |
+           <a href="/docs" target="_blank">API Documentation</a> |
+           <a href="https://github.com/brandonhon/tls-cert-monitor" target="_blank">GitHub</a>
         </p>
     </div>
-    
+
     <script>
         async function clearCache() {{
             if (confirm('Are you sure you want to clear the cache?')) {{
@@ -465,7 +439,7 @@ def create_app(
                 }}
             }}
         }}
-        
+
         // Auto-refresh page every 5 minutes to show updated status
         setTimeout(() => {{
             location.reload();
@@ -474,40 +448,24 @@ def create_app(
 </body>
 </html>
         """
-
         return Response(content=html_content, media_type="text/html")
 
-    # Add startup and shutdown events
     @app.on_event("startup")
-    async def startup_event():
-        """Application startup event."""
+    async def startup_event() -> None:
         logger.info("TLS Certificate Monitor API started")
 
     @app.on_event("shutdown")
-    async def shutdown_event():
-        """Application shutdown event."""
+    async def shutdown_event() -> None:
         logger.info("TLS Certificate Monitor API shutting down")
 
     return app
 
 
 async def _get_system_health(config: Config) -> Dict[str, Any]:
-    """
-    Get system health information.
-
-    Args:
-        config: Configuration instance
-
-    Returns:
-        System health data
-    """
-    health_data = {}
-
+    health_data: Dict[str, Any] = {}
     try:
-        # Configuration file status
         config_file_exists = False
         config_file_writable = False
-
         if hasattr(config, "_config_file_path") and config._config_file_path:
             config_file_path = config._config_file_path
             config_file_exists = os.path.exists(config_file_path)
@@ -523,53 +481,46 @@ async def _get_system_health(config: Config) -> Dict[str, Any]:
             }
         )
 
-        # Log file status
         log_file_writable = True
         if config.log_file:
             log_dir = os.path.dirname(config.log_file)
-            if log_dir:
-                log_file_writable = os.access(log_dir, os.W_OK)
-            else:
-                log_file_writable = os.access(".", os.W_OK)
-
+            log_file_writable = os.access(log_dir if log_dir else ".", os.W_OK)
         health_data["log_file_writable"] = log_file_writable
 
-        # Certificate directories disk space
         for directory in config.certificate_directories:
             try:
                 if os.path.exists(directory):
                     usage = shutil.disk_usage(directory)
-                    health_data[f'diskspace_{directory.replace("/", "_").replace("\\", "_")}'] = {
+                    dir_key = directory.replace("/", "_").replace("\\", "_")
+                    health_data[f"diskspace_{dir_key}"] = {
                         "total": usage.total,
                         "used": usage.used,
                         "free": usage.free,
                         "percent_used": round((usage.used / usage.total) * 100, 2),
                     }
             except Exception as e:
-                health_data[
-                    f'diskspace_{directory.replace("/", "_").replace("\\", "_")}_error'
-                ] = str(e)
+                dir_key = directory.replace("/", "_").replace("\\", "_")
+                health_data[f"diskspace_{dir_key}_error"] = str(e)
 
-        # Overall disk space summary
-        try:
-            total_disk_usage = []
-            for directory in config.certificate_directories:
-                if os.path.exists(directory):
-                    usage = shutil.disk_usage(directory)
-                    total_disk_usage.append(
-                        {"directory": directory, "free": usage.free, "total": usage.total}
-                    )
+        total_disk_usage: list[dict[str, Union[str, int]]] = []
+        for directory in config.certificate_directories:
+            if os.path.exists(directory):
+                usage = shutil.disk_usage(directory)
+                total_disk_usage.append(
+                    {
+                        "directory": directory,
+                        "free": int(usage.free),
+                        "total": int(usage.total),
+                    }
+                )
 
-            if total_disk_usage:
-                min_free = min(usage["free"] for usage in total_disk_usage)
-                health_data["diskspace"] = {
-                    "status": "ok" if min_free > 1024**3 else "warning",  # 1GB threshold
-                    "min_free_bytes": min_free,
-                    "directories_checked": len(total_disk_usage),
-                }
-        except Exception:
-            health_data["diskspace"] = {"status": "error", "error": "Failed to check disk space"}
-
+        if total_disk_usage:
+            min_free: int = min(int(usage["free"]) for usage in total_disk_usage)
+            health_data["diskspace"] = {
+                "status": "ok" if min_free > 1024**3 else "warning",
+                "min_free_bytes": min_free,
+                "directories_checked": len(total_disk_usage),
+            }
     except Exception as e:
         health_data["system_health_error"] = str(e)
 

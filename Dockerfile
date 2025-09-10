@@ -1,13 +1,13 @@
-# Build stage
-FROM python:3.11-slim as builder
+# Build stage - Alpine for smaller size
+FROM python:3.11-alpine AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
+# Install build dependencies (only what's needed)
+RUN apk add --no-cache \
     gcc \
-    g++ \
-    libssl-dev \
+    musl-dev \
     libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
+    openssl-dev \
+    python3-dev
 
 # Set working directory
 WORKDIR /app
@@ -15,31 +15,36 @@ WORKDIR /app
 # Copy requirements first (for better caching)
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Install Python dependencies to a local directory
+# Use --no-cache-dir to avoid storing pip cache
+# Use --no-deps for faster builds if dependencies are well-defined
+RUN pip install --no-cache-dir --user --no-warn-script-location -r requirements.txt
 
-# Production stage
-FROM python:3.11-slim
+# Production stage - minimal Alpine image
+FROM python:3.11-alpine
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Install only runtime dependencies (minimal set)
+RUN apk add --no-cache \
     ca-certificates \
     wget \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/cache/apk/*
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Create non-root user (Alpine style)
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
 
 # Set working directory
 WORKDIR /app
 
 # Copy Python packages from builder stage
-COPY --from=builder /root/.local /home/appuser/.local
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
-# Copy application code
-COPY . .
+# Copy only necessary application files (exclude dev files, tests, etc.)
+COPY --chown=appuser:appuser main.py ./
+COPY --chown=appuser:appuser tls_cert_monitor/ ./tls_cert_monitor/
+COPY --chown=appuser:appuser docker/docker.config.yaml ./config.yaml
 
-# Create directories and set permissions
+# Create necessary directories with proper permissions
 RUN mkdir -p /app/cache /app/logs /app/certs && \
     chown -R appuser:appuser /app
 
@@ -47,14 +52,17 @@ RUN mkdir -p /app/cache /app/logs /app/certs && \
 USER appuser
 
 # Add local Python packages to PATH
-ENV PATH=/home/appuser/.local/bin:$PATH
+ENV PATH=/home/appuser/.local/bin:$PATH \
+    PYTHONPATH=/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 # Expose port
 EXPOSE 3200
 
-# Health check
+# Health check using wget with GET method
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3200/healthz || exit 1
+    CMD wget --no-verbose --tries=1 --method=GET -O /dev/null http://localhost:3200/healthz || exit 1
 
-# Default command
-CMD ["python", "main.py", "--config=config.example.yaml"]
+# Default command - use copied docker config
+CMD ["python", "main.py", "--config=config.yaml"]

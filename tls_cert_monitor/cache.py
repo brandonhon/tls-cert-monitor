@@ -6,11 +6,10 @@ import asyncio
 import hashlib
 import json
 import os
-import pickle
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from tls_cert_monitor.config import Config
 from tls_cert_monitor.logger import get_logger, log_cache_operation
@@ -31,7 +30,7 @@ class CacheEntry:
         """Check if cache entry is expired."""
         return time.time() - self.timestamp > self.ttl
 
-    def update_access(self):
+    def update_access(self) -> None:
         """Update access statistics."""
         self.access_count += 1
         self.last_access = time.time()
@@ -48,7 +47,7 @@ class CacheManager:
         self.config = config
         self.logger = get_logger("cache")
         self.cache_dir = Path(config.cache_dir)
-        self.cache_file = self.cache_dir / "cache.pkl"
+        self.cache_file = self.cache_dir / "cache.json"
         self.ttl = config.cache_ttl_seconds
         self.max_size = config.cache_max_size
 
@@ -61,7 +60,7 @@ class CacheManager:
         # Lock for thread safety
         self._lock = asyncio.Lock()
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Initialize cache manager."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         await self._load_persistent_cache()
@@ -111,10 +110,10 @@ class CacheManager:
 
             # Calculate size
             try:
-                serialized = pickle.dumps(value)
-                size = len(serialized)
-            except Exception:
-                self.logger.warning(f"Failed to serialize value for key: {key}")
+                serialized = json.dumps(value, ensure_ascii=False)
+                size = len(serialized.encode("utf-8"))
+            except (TypeError, ValueError) as e:
+                self.logger.warning(f"Failed to serialize value for key {key}: {e}")
                 return
 
             # Check if we need to evict entries
@@ -219,8 +218,8 @@ class CacheManager:
 
             # Write to temporary file first, then rename for atomicity
             temp_file = self.cache_file.with_suffix(".tmp")
-            with open(temp_file, "wb") as f:
-                pickle.dump(cache_data, f)
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
 
             temp_file.rename(self.cache_file)
             self.logger.debug("Cache saved to disk")
@@ -234,8 +233,8 @@ class CacheManager:
             return
 
         try:
-            with open(self.cache_file, "rb") as f:
-                cache_data = pickle.load(f)
+            with open(self.cache_file, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
 
             # Restore cache entries
             for key, entry_data in cache_data.get("entries", {}).items():
@@ -256,8 +255,9 @@ class CacheManager:
             # Remove corrupted cache file
             try:
                 self.cache_file.unlink()
-            except Exception:
-                pass
+                self.logger.info("Removed corrupted cache file")
+            except OSError as os_error:
+                self.logger.warning(f"Could not remove corrupted cache file: {os_error}")
 
     async def _ensure_space(self, needed_size: int) -> None:
         """Ensure there's enough space in cache by evicting LRU entries."""
@@ -290,7 +290,7 @@ class CacheManager:
         await self.save_to_disk()
         self.logger.info("Cache manager closed")
 
-    def make_key(self, *args) -> str:
+    def make_key(self, *args: Any) -> str:
         """
         Create a cache key from arguments.
 
@@ -320,7 +320,7 @@ class CacheManager:
 
 
 # Background task for cache maintenance
-async def cache_maintenance_task(cache_manager: CacheManager, interval: int = 300):
+async def cache_maintenance_task(cache_manager: CacheManager, interval: int = 300) -> None:
     """
     Background task for cache maintenance.
 
@@ -336,6 +336,8 @@ async def cache_maintenance_task(cache_manager: CacheManager, interval: int = 30
 
             # Clean up expired entries
             expired_count = await cache_manager.cleanup_expired()
+            if expired_count > 0:
+                logger.debug(f"Cleaned up {expired_count} expired cache entries")
 
             # Save to disk periodically
             await cache_manager.save_to_disk()

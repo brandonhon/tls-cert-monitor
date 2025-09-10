@@ -20,7 +20,20 @@ exclude_directories:
   - "/app/certs/new"
   - "/app/certs/working"
   - "/app/certs/.git"
+  - "/app/certs/exclude"
   # Add any subdirectories you want to exclude
+
+# P12/PFX certificate passwords
+# List of passwords to try when decrypting P12/PFX certificate files
+# Common passwords are included by default, add your specific ones here
+p12_passwords:
+  - ""                    # Empty password (no password)
+  - "changeit"           # Java keystore default
+  - "password"           # Common default
+  - "123456"             # Common weak password
+  # Add your organization-specific P12 passwords here
+  # - "your-p12-password"
+  # - "another-password"
 
 # Scan interval (how often to scan for certificates)
 scan_interval: "5m"
@@ -29,7 +42,7 @@ scan_interval: "5m"
 workers: 4
 
 # Logging
-log_level: "info"  # debug, info, warn, error
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 # log_file: "/var/log/tls-monitor.log"  # If not set, logs to stdout
 
 # Operation modes

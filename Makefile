@@ -1,10 +1,7 @@
 # ============================
-# TLS Certificate Monitor Makefile
+# TLS Certificate Monitor - Streamlined Makefile
 # ============================
 
-# ----------------------------
-# Shell & Environment Setup
-# ----------------------------
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
@@ -16,351 +13,274 @@ PYTHON := python3
 VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_PIP := $(VENV_DIR)/bin/pip
-REQUIREMENTS := requirements.txt
-DEV_REQUIREMENTS := requirements-dev.txt
+NUITKA := $(VENV_PYTHON) -m nuitka
 
-# Source directories
-SRC_DIR := tls_cert_monitor
-TESTS_DIR := tests
-SCRIPTS_DIR := scripts
+# Nuitka build flags
+NUITKA_FLAGS := --onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads
 
-# Build and distribution
-BUILD_DIR := build
-DIST_DIR := dist
-COVERAGE_DIR := coverage
-
-# Configuration
-CONFIG_FILE := config.yaml
-EXAMPLE_CONFIG := config.example.yaml
+# Include package for your source code
+INCLUDE_SRC := --include-package=tls_cert_monitor
 
 # ----------------------------
-# Color Output
+# Colors
 # ----------------------------
 BLUE := \033[1;34m
 GREEN := \033[1;32m
 YELLOW := \033[1;33m
 RED := \033[1;31m
-NC := \033[0m # No Color
+NC := \033[0m
 
 # ----------------------------
-# Help Target
+# Help
 # ----------------------------
 .PHONY: help
 help: ## Show this help message
-	@echo ""
-	@printf "$(BLUE)🔹 TLS Certificate Monitor - Available Commands 🔹$(NC)\n\n"
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| sort \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
-	@echo ""
-	@printf "$(YELLOW)💡 Run 'make <target>' to execute a command.$(NC)\n\n"
+	@printf "\n$(BLUE)📋 TLS Certificate Monitor - Available Commands$(NC)\n\n"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-15s$(NC) %s\n", $$1, $$2}'
+	@printf "\n"
 
 # ----------------------------
-# Virtual Environment
+# Development Environment
 # ----------------------------
-.PHONY: venv
-venv: $(VENV_DIR)/pyvenv.cfg ## Create virtual environment
-
-$(VENV_DIR)/pyvenv.cfg:
-	@echo "$(BLUE)🐍 Creating virtual environment...$(NC)"
-	$(PYTHON) -m venv $(VENV_DIR)
-	$(VENV_PIP) install --upgrade pip setuptools wheel
-	@echo "$(GREEN)✅ Virtual environment created$(NC)"
-
-.PHONY: venv-clean
-venv-clean: ## Remove virtual environment
-	@echo "$(BLUE)🧹 Removing virtual environment...$(NC)"
-	rm -rf $(VENV_DIR)
-	@echo "$(GREEN)✅ Virtual environment removed$(NC)"
-
-# ----------------------------
-# Dependencies
-# ----------------------------
-.PHONY: install
-install: venv ## Install dependencies in virtual environment
-	@echo "$(BLUE)📦 Installing dependencies...$(NC)"
-	$(VENV_PIP) install -r $(REQUIREMENTS)
-	@echo "$(GREEN)✅ Dependencies installed$(NC)"
-
-.PHONY: install-dev
-install-dev: venv ## Install development dependencies
-	@echo "$(BLUE)📦 Installing development dependencies...$(NC)"
-	$(VENV_PIP) install -r $(REQUIREMENTS)
-	$(VENV_PIP) install -r $(DEV_REQUIREMENTS)
-	@echo "$(GREEN)✅ Development dependencies installed$(NC)"
-
-.PHONY: install-system
-install-system: ## Install dependencies system-wide (no venv)
-	@echo "$(BLUE)📦 Installing dependencies system-wide...$(NC)"
-	$(PYTHON) -m pip install -r $(REQUIREMENTS)
-	@echo "$(GREEN)✅ Dependencies installed system-wide$(NC)"
-
-.PHONY: install-dev-system
-install-dev-system: ## Install development dependencies system-wide
-	@echo "$(BLUE)📦 Installing development dependencies system-wide...$(NC)"
-	$(PYTHON) -m pip install -r $(REQUIREMENTS)
-	$(PYTHON) -m pip install -r $(DEV_REQUIREMENTS)
-	@echo "$(GREEN)✅ Development dependencies installed system-wide$(NC)"
-
-.PHONY: freeze
-freeze: ## Freeze current dependencies to requirements.txt
-	@if [ -d "$(VENV_DIR)" ]; then \
-		echo "$(BLUE)❄️  Freezing venv dependencies...$(NC)"; \
-		$(VENV_PIP) freeze > $(REQUIREMENTS); \
-	else \
-		echo "$(BLUE)❄️  Freezing system dependencies...$(NC)"; \
-		$(PYTHON) -m pip freeze > $(REQUIREMENTS); \
+.PHONY: setup
+setup: ## Setup development environment (venv + deps + config)
+	@printf "$(BLUE)🔧 Setting up development environment...$(NC)\n"
+	@$(PYTHON) -m venv $(VENV_DIR)
+	@$(VENV_PIP) install --upgrade pip setuptools wheel
+	@$(VENV_PIP) install -r requirements.txt
+	@$(VENV_PIP) install -r requirements-dev.txt
+	@if [ ! -f config.yaml ]; then \
+		./scripts/generate-config-dev.sh; \
 	fi
-	@echo "$(GREEN)✅ Dependencies frozen to $(REQUIREMENTS)$(NC)"
+	@./scripts/generate-test-certs.sh
+	@printf "$(GREEN)✅ Development environment ready$(NC)\n"
+
+.PHONY: venv
+venv: ## Create virtual environment only
+	@printf "$(BLUE)🐍 Creating virtual environment...$(NC)\n"
+	@$(PYTHON) -m venv $(VENV_DIR)
+	@$(VENV_PIP) install --upgrade pip setuptools wheel
+	@$(VENV_PIP) install -r requirements.txt
+	@$(VENV_PIP) install -r requirements-dev.txt
+	@printf "$(GREEN)✅ Virtual environment created$(NC)\n"
 
 # ----------------------------
 # Code Quality
 # ----------------------------
 .PHONY: format
 format: ## Format code with black and isort
-	@echo "$(BLUE)🎨 Formatting code...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m black $(SRC_DIR) $(TESTS_DIR) main.py; \
-		$(VENV_PYTHON) -m isort $(SRC_DIR) $(TESTS_DIR) main.py; \
-	else \
-		$(PYTHON) -m black $(SRC_DIR) $(TESTS_DIR) main.py; \
-		$(PYTHON) -m isort $(SRC_DIR) $(TESTS_DIR) main.py; \
-	fi
-	@echo "$(GREEN)✅ Code formatted$(NC)"
+	@printf "$(BLUE)🎨 Formatting code...$(NC)\n"
+	@$(VENV_PYTHON) -m black .
+	@$(VENV_PYTHON) -m isort .
+	@printf "$(GREEN)✅ Code formatted$(NC)\n"
 
 .PHONY: lint
-lint: ## Run linting with flake8 and pylint
-	@echo "$(BLUE)🔍 Running linters...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m flake8 $(SRC_DIR) $(TESTS_DIR) main.py; \
-		$(VENV_PYTHON) -m pylint $(SRC_DIR) main.py; \
-	else \
-		$(PYTHON) -m flake8 $(SRC_DIR) $(TESTS_DIR) main.py; \
-		$(PYTHON) -m pylint $(SRC_DIR) main.py; \
-	fi
-	@echo "$(GREEN)✅ Linting completed$(NC)"
+lint: ## Run linters (flake8, pylint)
+	@printf "$(BLUE)🔍 Running linters...$(NC)\n"
+	@$(VENV_PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache
+	@$(VENV_PYTHON) -m pylint tls_cert_monitor/ --disable=C,R,I,W1203,W0718,W0212 --msg-template='{path}:{line}: {msg_id}: {msg}'
+	@printf "$(GREEN)✅ Linting completed$(NC)\n"
 
-.PHONY: type-check
-type-check: ## Run type checking with mypy
-	@echo "$(BLUE)🔍 Running type checker...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m mypy $(SRC_DIR) main.py; \
-	else \
-		$(PYTHON) -m mypy $(SRC_DIR) main.py; \
-	fi
-	@echo "$(GREEN)✅ Type checking completed$(NC)"
+.PHONY: typecheck
+typecheck: ## Run mypy type checking
+	@printf "$(BLUE)🔍 Running type checker...$(NC)\n"
+	@$(VENV_PYTHON) -m mypy tls_cert_monitor/
+	@printf "$(GREEN)✅ Type checking completed$(NC)\n"
 
 .PHONY: security
 security: ## Run security checks with bandit
-	@echo "$(BLUE)🔐 Running security checks...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m bandit -r $(SRC_DIR) main.py; \
-	else \
-		$(PYTHON) -m bandit -r $(SRC_DIR) main.py; \
-	fi
-	@echo "$(GREEN)✅ Security checks completed$(NC)"
+	@printf "$(BLUE)🔐 Running security checks...$(NC)\n"
+	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104
+	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/
+	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
 .PHONY: check
-check: format lint type-check security ## Run all code quality checks
+check: format lint typecheck security ## Run all code quality checks
 
 # ----------------------------
 # Testing
 # ----------------------------
 .PHONY: test
-test: ## Run tests with pytest
-	@echo "$(BLUE)🧪 Running tests...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m pytest $(TESTS_DIR) -v; \
-	else \
-		$(PYTHON) -m pytest $(TESTS_DIR) -v; \
-	fi
-	@echo "$(GREEN)✅ Tests completed$(NC)"
+test: ## Run tests
+	@printf "$(BLUE)🧪 Running tests...$(NC)\n"
+	@$(VENV_PYTHON) -m pytest tests/ -v
+	@printf "$(GREEN)✅ Tests completed$(NC)\n"
 
-.PHONY: test-coverage
-test-coverage: ## Run tests with coverage report
-	@echo "$(BLUE)🧪 Running tests with coverage...$(NC)"
-	@mkdir -p $(COVERAGE_DIR)
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m pytest $(TESTS_DIR) \
-			--cov=$(SRC_DIR) \
-			--cov-report=html:$(COVERAGE_DIR)/html \
-			--cov-report=xml:$(COVERAGE_DIR)/coverage.xml \
-			--cov-report=term-missing; \
-	else \
-		$(PYTHON) -m pytest $(TESTS_DIR) \
-			--cov=$(SRC_DIR) \
-			--cov-report=html:$(COVERAGE_DIR)/html \
-			--cov-report=xml:$(COVERAGE_DIR)/coverage.xml \
-			--cov-report=term-missing; \
-	fi
-	@echo "$(GREEN)✅ Coverage report generated in $(COVERAGE_DIR)/$(NC)"
-
-.PHONY: test-watch
-test-watch: ## Run tests in watch mode
-	@echo "$(BLUE)👀 Running tests in watch mode...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m pytest-watch $(TESTS_DIR) -- -v; \
-	else \
-		$(PYTHON) -m pytest-watch $(TESTS_DIR) -- -v; \
-	fi
+.PHONY: test-cov
+test-cov: ## Run tests with coverage
+	@printf "$(BLUE)🧪 Running tests with coverage...$(NC)\n"
+	@$(VENV_PYTHON) -m pytest tests/ --cov=tls_cert_monitor --cov-report=html --cov-report=xml --cov-report=term
+	@printf "$(GREEN)✅ Coverage report generated$(NC)\n"
 
 # ----------------------------
-# Running the Application
+# Running
 # ----------------------------
 .PHONY: run
-run: ## Run the application with virtual environment
-	@echo "$(BLUE)🚀 Starting TLS Certificate Monitor (venv)...$(NC)"
-	@if [ ! -d "$(VENV_DIR)" ]; then \
-		echo "$(RED)❌ Virtual environment not found. Run 'make install' first.$(NC)"; \
-		exit 1; \
-	fi
-	$(VENV_PYTHON) main.py $(ARGS)
+run: ## Run the application
+	@printf "$(BLUE)🚀 Starting TLS Certificate Monitor...$(NC)\n"
+	@printf "WARNING: Running with default config (config.py:188)"
+	@$(VENV_PYTHON) main.py
 
-.PHONY: run-system
-run-system: ## Run the application with system Python
-	@echo "$(BLUE)🚀 Starting TLS Certificate Monitor (system)...$(NC)"
-	$(PYTHON) main.py $(ARGS)
+.PHONY: dev
+dev: certs config ## Run in development mode with uvicorn hot reload
+	@printf "$(BLUE)🚀 Starting in development mode with uvicorn reload...$(NC)\n"
+	@TLS_CONFIG=./tests/fixtures/configs/config.dev.yaml \
+		$(VENV_PYTHON) -m uvicorn dev_server:app --reload --host 0.0.0.0 --port 3200
 
-.PHONY: run-config
-run-config: $(CONFIG_FILE) ## Run with configuration file
-	@echo "$(BLUE)🚀 Starting with config file...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) main.py --config $(CONFIG_FILE); \
+.PHONY: dev-no-reload
+dev-no-reload: certs config ## Run in development mode with config hot reload only
+	@printf "$(BLUE)🚀 Starting in development mode with config hot reload only...$(NC)\n"
+	@TLS_CONFIG=./tests/fixtures/configs/config.dev.yaml \
+		$(VENV_PYTHON) -m uvicorn dev_server:app --host 0.0.0.0 --port 3200
+
+.PHONY: dry-run
+dry-run: certs config ## Run in dry-run mode (scan only, no server)
+	@printf "$(BLUE)🔍 Running in dry-run mode...$(NC)\n"
+	@$(VENV_PYTHON) main.py --config tests/fixtures/configs/config.dev.yaml --dry-run
+
+.PHONY: stop
+stop: ## Stop the development server
+	@printf "$(BLUE)🛑 Stopping TLS Certificate Monitor...$(NC)\n"
+	@found=0; \
+	for pid in $$(ps aux | grep -E "[u]vicorn dev_server:app|[p]ython.*main\.py" | awk '{print $$2}'); do \
+	  if kill $$pid 2>/dev/null; then \
+	    found=1; \
+	  fi; \
+	done; \
+	if [ $$found -eq 1 ]; then \
+	  printf "$(GREEN)✅ Server processes stopped$(NC)\n"; \
 	else \
-		$(PYTHON) main.py --config $(CONFIG_FILE); \
-	fi
-
-.PHONY: run-dev
-run-dev: ## Run in development mode with hot reload
-	@echo "$(BLUE)🚀 Starting in development mode...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 3200; \
-	else \
-		$(PYTHON) -m uvicorn main:app --reload --host 0.0.0.0 --port 3200; \
+	  printf "$(YELLOW)⚠️  No running processes found$(NC)\n"; \
 	fi
 
 # ----------------------------
-# Configuration
-# ----------------------------
-$(CONFIG_FILE):
-	@if [ ! -f "$(CONFIG_FILE)" ] && [ -f "$(EXAMPLE_CONFIG)" ]; then \
-		echo "$(BLUE)📝 Creating config file from example...$(NC)"; \
-		cp $(EXAMPLE_CONFIG) $(CONFIG_FILE); \
-		echo "$(GREEN)✅ Config file created: $(CONFIG_FILE)$(NC)"; \
-	fi
-
-.PHONY: config
-config: $(CONFIG_FILE) ## Create configuration file from example
-
-# ----------------------------
-# Build and Distribution
+# Building
 # ----------------------------
 .PHONY: build
-build: clean ## Build distribution packages
-	@echo "$(BLUE)🔨 Building distribution packages...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PYTHON) setup.py sdist bdist_wheel; \
-	else \
-		$(PYTHON) setup.py sdist bdist_wheel; \
-	fi
-	@echo "$(GREEN)✅ Build completed$(NC)"
+build: ## Build distribution packages
+	@printf "$(BLUE)🔨 Building distribution packages...$(NC)\n"
+	@$(VENV_PYTHON) -m build
+	@printf "$(GREEN)✅ Build completed - packages in dist/$(NC)\n"
 
-.PHONY: install-local
-install-local: build ## Install package locally
-	@echo "$(BLUE)📦 Installing package locally...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PIP) install -e .; \
-	else \
-		$(PYTHON) -m pip install -e .; \
-	fi
-	@echo "$(GREEN)✅ Package installed locally$(NC)"
+.PHONY: build-linux
+build-linux: ## Build Linux binary using Nuitka
+	@printf "$(BLUE)🐧 Building Linux binary...$(NC)\n"
+	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		main.py \
+		--output-dir=dist \
+		--output-filename=$(PROJECT_NAME)-linux
+	@printf "$(GREEN)✅ Linux binary: dist/$(PROJECT_NAME)-linux$(NC)\n"
+
+# Build Windows binary (requires mingw)
+.PHONY: build-windows
+build-windows: ## Cross-compile Windows binary from Linux using Nuitka + MinGW
+	@printf "$(BLUE)🪟 Building Windows binary...$(NC)\n"
+	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		main.py \
+		--mingw64 \
+		--output-dir=dist \
+		--output-filename=$(PROJECT_NAME)-windows.exe
+	@printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"
+
+# Build macOS binary (requires osxcross)
+.PHONY: build-mac
+build-mac: ## Cross-compile macOS binary from Linux using Nuitka + osxcross
+	@printf "$(BLUE)🍎 Building macOS binary...$(NC)\n"
+	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		main.py \
+		--macos-app-name=$(PROJECT_NAME) \
+		--output-dir=dist \
+		--output-filename=$(PROJECT_NAME)-macos
+	@printf "$(GREEN)✅ macOS binary: dist/$(PROJECT_NAME)-macos$(NC)\n"
+
+.PHONY: build-all
+build-all: build-linux build-windows #build-mac ## Build for all platforms
 
 # ----------------------------
-# Docker Support
+# Installation
+# ----------------------------
+.PHONY: install
+install: build ## Install the package locally
+	@printf "$(BLUE)📦 Installing package locally...$(NC)\n"
+	@$(VENV_PIP) install dist/*.whl --force-reinstall
+	@printf "$(GREEN)✅ Package installed$(NC)\n"
+
+# ----------------------------
+# Docker
 # ----------------------------
 .PHONY: docker-build
 docker-build: ## Build Docker image
-	@echo "$(BLUE)🐳 Building Docker image...$(NC)"
-	docker build -t $(PROJECT_NAME):latest .
-	@echo "$(GREEN)✅ Docker image built$(NC)"
+	@printf "$(BLUE)🐳 Building Docker image...$(NC)\n"
+	@docker build -t $(PROJECT_NAME) .
+	@printf "$(GREEN)✅ Docker image built: $(PROJECT_NAME)$(NC)\n"
 
 .PHONY: docker-run
 docker-run: ## Run Docker container
-	@echo "$(BLUE)🐳 Running Docker container...$(NC)"
-	docker run --rm -p 3200:3200 \
-		-v $(PWD)/certs:/app/certs:ro \
-		-v $(PWD)/config.yaml:/app/config.yaml:ro \
-		$(PROJECT_NAME):latest
+	@printf "$(BLUE)🐳 Running Docker container...$(NC)\n"
+	@docker run --rm -p 3200:3200 \
+		-v $$(pwd)/certs:/app/certs:ro \
+		-v $$(pwd)/config.yaml:/app/config.yaml:ro \
+		$(PROJECT_NAME)
+
+.PHONY: docker-compose
+docker-compose: ## Run with docker-compose
+	@printf "$(BLUE)🐳 Starting with docker-compose...$(NC)\n"
+	@docker compose up --build
+
+.PHONY: docker-compose-dev
+docker-compose-dev: ## Run with docker-compose
+	@printf "$(BLUE)🐳 Starting docker compose development mode...$(NC)\n"
+	@docker compose -f docker-compose.dev.yml --profile monitoring up -d --build
 
 # ----------------------------
-# Utilities
+# Configuration & Certificates
+# ----------------------------
+.PHONY: config
+config: ## Generate development configuration
+	@if [ -f tests/fixtures/configs/config.dev.yaml ]; then \
+		printf "$(YELLOW)⚠️  Development config already exists, skipping generation$(NC)\n"; \
+	else \
+		printf "$(BLUE)📝 Generating development configuration...$(NC)\n"; \
+		./scripts/generate-config-dev.sh; \
+		printf "$(GREEN)✅ Development configuration generated$(NC)\n"; \
+	fi
+
+.PHONY: certs
+certs: ## Generate test certificates
+	@if [ -d tests/fixtures/certs ] && [ -n "$$(ls -A tests/fixtures/certs 2>/dev/null)" ]; then \
+		printf "$(YELLOW)⚠️  Test certificates already exist, skipping generation$(NC)\n"; \
+	else \
+		printf "$(BLUE)🔐 Generating test certificates...$(NC)\n"; \
+		./scripts/generate-test-certs.sh; \
+		printf "$(GREEN)✅ Test certificates generated$(NC)\n"; \
+	fi
+
+# ----------------------------
+# Cleanup
 # ----------------------------
 .PHONY: clean
-clean: ## Clean build artifacts and cache
-	@echo "$(BLUE)🧹 Cleaning build artifacts...$(NC)"
-	rm -rf $(BUILD_DIR) $(DIST_DIR) $(COVERAGE_DIR)
-	rm -rf *.egg-info
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name "*.pyd" -delete
-	find . -type f -name ".coverage" -delete
-	@echo "$(GREEN)✅ Cleanup completed$(NC)"
+clean: ## Clean development artifacts
+	@printf "$(BLUE)🧹 Cleaning development artifacts...$(NC)\n"
+	@rm -rf build/ dist/ *.egg-info/ .pytest_cache/ .coverage htmlcov/ coverage/ .mypy_cache/
+	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@rm -f bandit-report.json .dev_server.pid
+	@printf "$(GREEN)✅ Cleanup completed$(NC)\n"
 
 .PHONY: clean-all
-clean-all: clean venv-clean ## Clean everything including virtual environment
-	@echo "$(GREEN)✅ Full cleanup completed$(NC)"
-
-.PHONY: deps-update
-deps-update: ## Update all dependencies to latest versions
-	@echo "$(BLUE)⬆️  Updating dependencies...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PIP) install --upgrade pip; \
-		$(VENV_PIP) list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1 | xargs -n1 $(VENV_PIP) install --upgrade; \
-	else \
-		$(PYTHON) -m pip install --upgrade pip; \
-		$(PYTHON) -m pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1 | xargs -n1 $(PYTHON) -m pip install --upgrade; \
-	fi
-	@echo "$(GREEN)✅ Dependencies updated$(NC)"
-
-.PHONY: check-deps
-check-deps: ## Check for dependency vulnerabilities
-	@echo "$(BLUE)🔍 Checking dependencies for vulnerabilities...$(NC)"
-	@if [ -d "$(VENV_DIR)" ]; then \
-		$(VENV_PIP) install safety; \
-		$(VENV_PYTHON) -m safety check; \
-	else \
-		$(PYTHON) -m pip install safety; \
-		$(PYTHON) -m safety check; \
-	fi
-	@echo "$(GREEN)✅ Dependency check completed$(NC)"
+clean-all: clean ## Clean everything including venv, config, and certs
+	@printf "$(BLUE)🧹 Deep cleaning everything...$(NC)\n"
+	@rm -rf $(VENV_DIR)/ tests/fixtures/certs/ tests/fixtures/configs/ config.yaml config-dev.yaml
+	@printf "$(GREEN)✅ Everything cleaned$(NC)\n"
 
 # ----------------------------
-# Development Setup
-# ----------------------------
-.PHONY: setup-dev
-setup-dev: install-dev config ## Setup complete development environment
-	@echo "$(GREEN)✅ Development environment setup completed$(NC)"
-	@echo "$(YELLOW)💡 You can now run 'make run' to start the application$(NC)"
-
-.PHONY: setup-dev-system
-setup-dev-system: install-dev-system config ## Setup development environment with system Python
-	@echo "$(GREEN)✅ Development environment setup completed (system Python)$(NC)"
-	@echo "$(YELLOW)💡 You can now run 'make run-system' to start the application$(NC)"
-
-# ----------------------------
-# Information
+# Info
 # ----------------------------
 .PHONY: info
 info: ## Show project information
-	@echo "$(BLUE)📊 Project Information$(NC)"
-	@echo "  Project Name: $(PROJECT_NAME)"
-	@echo "  Python: $(shell $(PYTHON) --version 2>&1)"
-	@echo "  Virtual Environment: $(if $(wildcard $(VENV_DIR)),$(GREEN)Active$(NC),$(RED)Not created$(NC))"
-	@echo "  Source Directory: $(SRC_DIR)"
-	@echo "  Tests Directory: $(TESTS_DIR)"
-	@echo "  Configuration: $(if $(wildcard $(CONFIG_FILE)),$(GREEN)$(CONFIG_FILE)$(NC),$(RED)Not found$(NC))"
-	@echo ""
-
-# Prevent make from treating files as targets
-.PHONY: $(REQUIREMENTS) $(DEV_REQUIREMENTS)
+	@printf "$(BLUE)📊 Project Information$(NC)\n"
+	@printf "  Project Name: $(PROJECT_NAME)\n"
+	@printf "  Python: $$($(PYTHON) --version 2>&1)\n"
+	@printf "  Virtual Environment: $(if $(wildcard $(VENV_DIR)),$(GREEN)Active$(NC),$(RED)Not created$(NC))\n"
+	@printf "  Configuration: $(if $(wildcard config.yaml),$(GREEN)config.yaml$(NC),$(if $(wildcard tests/fixtures/configs/*.yaml),$(GREEN)tests/fixtures/configs/*.yaml$(NC),$(RED)Not found$(NC)))\n"
+	@printf "  Test Certificates: $(if $(wildcard tests/fixtures/certs/),$(GREEN)Available$(NC),$(RED)Not generated$(NC))\n"
+	@printf "\n"

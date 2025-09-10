@@ -20,6 +20,7 @@ bandit>=1.7.5,<2.0.0
 pre-commit>=3.5.0,<4.0.0
 pip-tools>=7.3.0,<8.0.0
 safety>=2.3.0,<3.0.0
+nuitka>=2.7.14
 
 # Type stubs
 types-PyYAML>=6.0.12,<7.0.0
