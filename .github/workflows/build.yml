@@ -108,18 +108,18 @@ jobs:
         ls -la dist/
         
         # Ensure binary is executable (fallback in case container chmod failed)
-        if [ -f "dist/tls-cert-monitor-linux" ]; then
-          chmod +x dist/tls-cert-monitor-linux || sudo chmod +x dist/tls-cert-monitor-linux || echo "Warning: Could not make binary executable"
+        if [ -f "dist/tls-cert-monitor" ]; then
+          chmod +x dist/tls-cert-monitor || sudo chmod +x dist/tls-cert-monitor || echo "Warning: Could not make binary executable"
         fi
         
-        file dist/tls-cert-monitor-linux
-        ls -lh dist/tls-cert-monitor-linux
+        file dist/tls-cert-monitor
+        ls -lh dist/tls-cert-monitor
     
     - name: Upload Linux binary
       uses: actions/upload-artifact@v4
       with:
         name: linux-binary
-        path: dist/tls-cert-monitor-linux
+        path: dist/tls-cert-monitor
         retention-days: 30
 
   build-windows:
@@ -159,7 +159,7 @@ jobs:
           "--include-module=cryptography",
           "--include-module=prometheus_client",
           "--output-dir=dist",
-          "--output-filename=tls-cert-monitor-windows.exe",
+          "--output-filename=tls-cert-monitor.exe",
           "main.py"
         )
         
@@ -167,14 +167,14 @@ jobs:
         
         # Verify binary
         Get-ChildItem dist/
-        Get-ItemProperty dist/tls-cert-monitor-windows.exe | Select-Object Name, Length
+        Get-ItemProperty dist/tls-cert-monitor.exe | Select-Object Name, Length
       shell: pwsh
     
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
       with:
         name: windows-binary
-        path: dist/tls-cert-monitor-windows.exe
+        path: dist/tls-cert-monitor.exe
         retention-days: 30
 
   build-macos:
@@ -209,25 +209,27 @@ jobs:
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
         
-        python -m nuitka $NUITKA_FLAGS main.py --output-dir=dist --output-filename=tls-cert-monitor-macos
+        python -m nuitka $NUITKA_FLAGS main.py --output-dir=dist --output-filename=tls-cert-monitor
         
         # Verify and make executable
         ls -la dist/
-        chmod +x dist/tls-cert-monitor-macos
-        file dist/tls-cert-monitor-macos
-        ls -lh dist/tls-cert-monitor-macos
+        chmod +x dist/tls-cert-monitor
+        file dist/tls-cert-monitor
+        ls -lh dist/tls-cert-monitor
     
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
       with:
         name: macos-binary
-        path: dist/tls-cert-monitor-macos
+        path: dist/tls-cert-monitor
         retention-days: 30
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-linux, build-windows, build-macos]
+    permissions:
+      contents: write
     if: |
       startsWith(github.ref, 'refs/tags/v') || 
       (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') ||
@@ -253,16 +255,50 @@ jobs:
     
     - name: Prepare release assets
       run: |
-        # Flatten artifact directories
-        find dist/ -name "tls-cert-monitor-*" -exec mv {} dist/ \;
-        rm -rf dist/*/
-        
-        # List all files
+        # List all downloaded artifacts
         ls -la dist/
         
-        # Create checksums
+        # Navigate to dist directory and organize binaries
         cd dist/
-        sha256sum tls-cert-monitor-* > checksums.txt
+        
+        # Rename binaries from artifact directories for clarity
+        if [ -f "linux-binary/tls-cert-monitor" ]; then
+          mv linux-binary/tls-cert-monitor ./tls-cert-monitor-linux
+        fi
+        if [ -f "windows-binary/tls-cert-monitor.exe" ]; then
+          mv windows-binary/tls-cert-monitor.exe ./tls-cert-monitor-windows.exe
+        fi
+        if [ -f "macos-binary/tls-cert-monitor" ]; then
+          mv macos-binary/tls-cert-monitor ./tls-cert-monitor-macos
+        fi
+        
+        # Clean up artifact directories
+        rm -rf */
+        
+        # Create platform-specific tar.gz archives
+        # Linux
+        if [ -f "tls-cert-monitor-linux" ]; then
+          tar -czf tls-cert-monitor-linux-amd64.tar.gz tls-cert-monitor-linux
+          rm tls-cert-monitor-linux
+        fi
+        
+        # Windows  
+        if [ -f "tls-cert-monitor-windows.exe" ]; then
+          tar -czf tls-cert-monitor-windows-amd64.tar.gz tls-cert-monitor-windows.exe
+          rm tls-cert-monitor-windows.exe
+        fi
+        
+        # macOS
+        if [ -f "tls-cert-monitor-macos" ]; then
+          tar -czf tls-cert-monitor-darwin-amd64.tar.gz tls-cert-monitor-macos
+          rm tls-cert-monitor-macos
+        fi
+        
+        # List final archives
+        ls -la
+        
+        # Create checksums for archives
+        sha256sum *.tar.gz > checksums.txt
         cat checksums.txt
     
     - name: Extract release notes
@@ -285,19 +321,20 @@ jobs:
         
         This release includes pre-compiled binaries for:
         
-        - **Linux (x86_64)**: \`tls-cert-monitor-linux\`
-        - **Windows (x86_64)**: \`tls-cert-monitor-windows.exe\`  
-        - **macOS (x86_64)**: \`tls-cert-monitor-macos\`
+        - **Linux (x86_64)**: \`tls-cert-monitor-linux-amd64.tar.gz\`
+        - **Windows (x86_64)**: \`tls-cert-monitor-windows-amd64.tar.gz\`  
+        - **macOS (x86_64)**: \`tls-cert-monitor-darwin-amd64.tar.gz\`
         
         ## Installation
         
-        1. Download the appropriate binary for your platform
-        2. Make it executable (Linux/macOS): \`chmod +x tls-cert-monitor-*\`
-        3. Run with: \`./tls-cert-monitor-* --help\`
+        1. Download the appropriate archive for your platform
+        2. Extract: \`tar -xzf tls-cert-monitor-<platform>-amd64.tar.gz\`
+        3. Make executable (Linux/macOS): \`chmod +x tls-cert-monitor\`
+        4. Run with: \`./tls-cert-monitor --help\`
         
         ## Verification
         
-        All binaries include SHA256 checksums in \`checksums.txt\` for verification.
+        All archives include SHA256 checksums in \`checksums.txt\` for verification.
         
         ## What's Changed
         
@@ -311,9 +348,9 @@ jobs:
         name: Release ${{ steps.release_notes.outputs.version }}
         body_path: release_notes.md
         files: |
-          dist/tls-cert-monitor-linux
-          dist/tls-cert-monitor-windows.exe
-          dist/tls-cert-monitor-macos
+          dist/tls-cert-monitor-linux-amd64.tar.gz
+          dist/tls-cert-monitor-windows-amd64.tar.gz
+          dist/tls-cert-monitor-darwin-amd64.tar.gz
           dist/checksums.txt
         draft: false
         prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
