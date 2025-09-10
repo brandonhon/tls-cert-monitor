@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     zlib1g-dev \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && patchelf --version
 
 # Set working directory
 WORKDIR /app
@@ -31,6 +33,11 @@ RUN echo '#!/bin/bash' > /app/build.sh && \
     echo 'set -e' >> /app/build.sh && \
     echo '' >> /app/build.sh && \
     echo 'echo "Building Linux binary with Nuitka..."' >> /app/build.sh && \
+    echo '' >> /app/build.sh && \
+    echo '# Verify patchelf availability' >> /app/build.sh && \
+    echo 'echo "Checking patchelf installation..."' >> /app/build.sh && \
+    echo 'which patchelf' >> /app/build.sh && \
+    echo 'patchelf --version' >> /app/build.sh && \
     echo '' >> /app/build.sh && \
     echo '# Configure Nuitka flags for Linux' >> /app/build.sh && \
     echo 'NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"' >> /app/build.sh && \
