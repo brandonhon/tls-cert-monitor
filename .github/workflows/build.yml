@@ -87,13 +87,21 @@ jobs:
         echo "Building Linux binary in container..."
         mkdir -p dist
         
-        # Build and run container
-        docker build -f build/Dockerfile.linux -t ${{ env.PROJECT_NAME }}-builder-linux .
+        # Build and run container with proper user permissions
+        docker build -f build/Dockerfile.linux \
+          --build-arg USER_ID=$(id -u) \
+          --build-arg GROUP_ID=$(id -g) \
+          -t ${{ env.PROJECT_NAME }}-builder-linux .
         docker run --rm -v $(pwd)/dist:/app/dist ${{ env.PROJECT_NAME }}-builder-linux
         
-        # Verify and make executable
+        # Verify binary was created and ensure it's executable
         ls -la dist/
-        chmod +x dist/tls-cert-monitor-linux
+        
+        # Ensure binary is executable (fallback in case container chmod failed)
+        if [ -f "dist/tls-cert-monitor-linux" ]; then
+          chmod +x dist/tls-cert-monitor-linux || sudo chmod +x dist/tls-cert-monitor-linux || echo "Warning: Could not make binary executable"
+        fi
+        
         file dist/tls-cert-monitor-linux
         ls -lh dist/tls-cert-monitor-linux
     

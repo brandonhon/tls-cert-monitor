@@ -17,6 +17,13 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
+# Create a user for building to avoid permission issues
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g ${GROUP_ID} builder && \
+    useradd -u ${USER_ID} -g ${GROUP_ID} -m builder && \
+    chown -R builder:builder /app
+
 # Copy requirements first for better caching
 COPY requirements.txt requirements-dev.txt ./
 
@@ -27,6 +34,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 
 # Copy source code
 COPY . .
+RUN chown -R builder:builder /app
 
 # Build script
 RUN echo '#!/bin/bash' > /app/build.sh && \
@@ -55,7 +63,15 @@ RUN echo '#!/bin/bash' > /app/build.sh && \
     echo '' >> /app/build.sh && \
     echo 'echo "Build completed successfully!"' >> /app/build.sh && \
     echo 'ls -la /app/dist/' >> /app/build.sh && \
-    chmod +x /app/build.sh
+    echo '' >> /app/build.sh && \
+    echo '# Make binary executable and fix permissions' >> /app/build.sh && \
+    echo 'chmod +x /app/dist/tls-cert-monitor-linux' >> /app/build.sh && \
+    echo 'ls -la /app/dist/' >> /app/build.sh && \
+    chmod +x /app/build.sh && \
+    chown builder:builder /app/build.sh
+
+# Switch to builder user
+USER builder
 
 # Default command
 CMD ["/app/build.sh"]
