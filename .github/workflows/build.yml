@@ -238,34 +238,36 @@ jobs:
     
     - name: Build Linux ARM64 binary
       run: |
-        echo "Building Linux ARM64 binary in container..."
+        echo "Building Linux ARM64 binary using Docker buildx cross-compilation..."
         mkdir -p dist
         
-        # Build and run container for ARM64 using Docker buildx
+        # Use buildx with output to extract the /app/dist directory from the container
         docker buildx build -f build/Dockerfile.linux \
           --platform linux/arm64 \
           --build-arg USER_ID=$(id -u) \
           --build-arg GROUP_ID=$(id -g) \
-          --load \
-          -t ${{ env.PROJECT_NAME }}-builder-linux-arm64 .
+          --output type=local,dest=./output \
+          .
         
-        # Run the container to build the binary
-        docker run --rm \
-          --platform linux/arm64 \
-          -v $(pwd)/dist:/app/dist \
-          ${{ env.PROJECT_NAME }}-builder-linux-arm64
+        # Extract the binary from the container's /app/dist directory
+        echo "Checking output structure..."
+        find output/ -name "tls-cert-monitor" -type f | head -5
         
-        # Verify binary was created and ensure it's executable
-        ls -la dist/
-        
-        if [ -f "dist/tls-cert-monitor" ]; then
-          chmod +x dist/tls-cert-monitor || echo "Warning: Could not make binary executable"
-          file dist/tls-cert-monitor
-          ls -lh dist/tls-cert-monitor
+        if [ -f "output/app/dist/tls-cert-monitor" ]; then
+          cp output/app/dist/tls-cert-monitor dist/tls-cert-monitor
+          chmod +x dist/tls-cert-monitor
+          echo "ARM64 binary extracted successfully"
         else
-          echo "Error: ARM64 binary not found"
+          echo "Error: ARM64 binary not found in expected location"
+          echo "Contents of output/:"
+          find output/ -type f | head -20
           exit 1
         fi
+        
+        # Verify binary
+        ls -la dist/
+        file dist/tls-cert-monitor
+        ls -lh dist/tls-cert-monitor
     
     - name: Upload Linux ARM64 binary
       uses: actions/upload-artifact@v4
