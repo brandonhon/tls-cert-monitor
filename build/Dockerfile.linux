@@ -27,31 +27,28 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY . .
 
 # Build script
-RUN cat > /app/build.sh << 'EOF'
-#!/bin/bash
-set -e
-
-echo "Building Linux binary with Nuitka..."
-
-# Configure Nuitka flags for Linux
-NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"
-NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"
-NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"
-NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"
-NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
-NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
-
-# Build the binary
-python -m nuitka $NUITKA_FLAGS \
-    main.py \
-    --output-dir=/app/dist \
-    --output-filename=tls-cert-monitor-linux
-
-echo "Build completed successfully!"
-ls -la /app/dist/
-EOF
-
-RUN chmod +x /app/build.sh
+RUN echo '#!/bin/bash' > /app/build.sh && \
+    echo 'set -e' >> /app/build.sh && \
+    echo '' >> /app/build.sh && \
+    echo 'echo "Building Linux binary with Nuitka..."' >> /app/build.sh && \
+    echo '' >> /app/build.sh && \
+    echo '# Configure Nuitka flags for Linux' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"' >> /app/build.sh && \
+    echo 'NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"' >> /app/build.sh && \
+    echo '' >> /app/build.sh && \
+    echo '# Build the binary' >> /app/build.sh && \
+    echo 'python -m nuitka $NUITKA_FLAGS \' >> /app/build.sh && \
+    echo '    main.py \' >> /app/build.sh && \
+    echo '    --output-dir=/app/dist \' >> /app/build.sh && \
+    echo '    --output-filename=tls-cert-monitor-linux' >> /app/build.sh && \
+    echo '' >> /app/build.sh && \
+    echo 'echo "Build completed successfully!"' >> /app/build.sh && \
+    echo 'ls -la /app/dist/' >> /app/build.sh && \
+    chmod +x /app/build.sh
 
 # Default command
 CMD ["/app/build.sh"]
