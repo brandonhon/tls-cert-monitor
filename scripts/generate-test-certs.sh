@@ -205,13 +205,6 @@ for i in 1 2 3; do
         -in "$pem_file" \
         -out "$pfx_file" \
         -password pass:"$PFX_PASS" \
-        -CSP "$CSP_NAME" \
-        -macalg "$MACALG" \
-        -maciter \
-        -macsaltlen "$MACSALT" \
-        -keypbe "$KEYPBE" \
-        -certpbe "$CERTPBE" \
-        -iter "$ITERATIONS" \
         -name "$friendly_name" 2>/dev/null
 done
 
