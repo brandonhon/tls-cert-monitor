@@ -23,6 +23,13 @@ RUN pip install --no-cache-dir --user --no-warn-script-location -r requirements.
 # Production stage - minimal Alpine image
 FROM python:3.11-alpine
 
+# Labels for better Docker Hub integration and metadata
+LABEL org.opencontainers.image.title="TLS Certificate Monitor"
+LABEL org.opencontainers.image.description="Monitor TLS certificates and track expiration dates"
+LABEL org.opencontainers.image.source="https://github.com/brandonhon/tls-cert-monitor"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.documentation="https://github.com/brandonhon/tls-cert-monitor"
+
 # Install only runtime dependencies (minimal set)
 RUN apk add --no-cache \
     ca-certificates \
