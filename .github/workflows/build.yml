@@ -228,10 +228,28 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-linux, build-windows, build-macos]
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && (
+        contains(github.event.head_commit.message, '[release]') ||
+        contains(github.event.head_commit.message, '[create-release]') ||
+        contains(github.event.head_commit.message, 'feat:') ||
+        contains(github.event.head_commit.message, 'BREAKING CHANGE')
+      ))
     
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Identify release trigger
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          echo "🏷️ Release triggered by git tag: ${GITHUB_REF#refs/tags/}"
+        elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "🚀 Release triggered manually via workflow dispatch"
+        else
+          echo "📝 Release triggered by commit message: ${{ github.event.head_commit.message }}"
+        fi
     
     - name: Download all artifacts
       uses: actions/download-artifact@v4
