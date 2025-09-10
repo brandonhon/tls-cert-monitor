@@ -54,8 +54,7 @@ README.md
 *.md
 LICENSE
 
-# Build artifacts
-build/
+# Build artifacts (keep build/ for Dockerfiles)
 dist/
 *.egg-info/
 .eggs/
@@ -95,7 +94,7 @@ Makefile.backup
 .golangci.yml
 pyproject.toml
 setup.py
-requirements-dev.txt
+# requirements-dev.txt - needed for Nuitka builds
 CLAUDE.md
 dev_server.py
 scripts/

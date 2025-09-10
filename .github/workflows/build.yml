@@ -1,0 +1,327 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PROJECT_NAME: tls-cert-monitor
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Run code quality checks
+      run: |
+        # Format check
+        black --check .
+        isort --check-only .
+        
+        # Linting
+        flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache
+        
+        # Type checking
+        mypy tls_cert_monitor/
+        
+        # Security checks
+        bandit -r tls_cert_monitor/ --skip B104
+    
+    - name: Generate test certificates
+      run: ./scripts/generate-test-certs.sh
+    
+    - name: Run tests
+      run: |
+        pytest tests/ --cov=tls_cert_monitor --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Linux binary
+      run: |
+        echo "Building Linux binary in container..."
+        mkdir -p dist
+        
+        # Build and run container
+        docker build -f build/Dockerfile.linux -t ${{ env.PROJECT_NAME }}-builder-linux .
+        docker run --rm -v $(pwd)/dist:/app/dist ${{ env.PROJECT_NAME }}-builder-linux
+        
+        # Verify and make executable
+        ls -la dist/
+        chmod +x dist/tls-cert-monitor-linux
+        file dist/tls-cert-monitor-linux
+        ls -lh dist/tls-cert-monitor-linux
+    
+    - name: Upload Linux binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-binary
+        path: dist/tls-cert-monitor-linux
+        retention-days: 30
+
+  build-windows:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Build Windows binary
+      run: |
+        Write-Host "Building Windows binary with Nuitka..."
+        New-Item -ItemType Directory -Path dist -Force
+        
+        $FLAGS = @(
+          "--onefile",
+          "--standalone", 
+          "--enable-plugin=pkg-resources",
+          "--assume-yes-for-downloads",
+          "--disable-console",
+          "--follow-imports",
+          "--include-package=tls_cert_monitor",
+          "--include-module=uvicorn",
+          "--include-module=cryptography",
+          "--include-module=prometheus_client",
+          "--output-dir=dist",
+          "--output-filename=tls-cert-monitor-windows.exe",
+          "main.py"
+        )
+        
+        python -m nuitka @FLAGS
+        
+        # Verify binary
+        Get-ChildItem dist/
+        Get-ItemProperty dist/tls-cert-monitor-windows.exe | Select-Object Name, Length
+      shell: pwsh
+    
+    - name: Upload Windows binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-binary
+        path: dist/tls-cert-monitor-windows.exe
+        retention-days: 30
+
+  build-macos:
+    name: Build macOS Binary
+    runs-on: macos-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Build macOS binary
+      run: |
+        echo "Building macOS binary with Nuitka..."
+        mkdir -p dist
+        
+        NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"
+        NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
+        
+        python -m nuitka $NUITKA_FLAGS main.py --output-dir=dist --output-filename=tls-cert-monitor-macos
+        
+        # Verify and make executable
+        ls -la dist/
+        chmod +x dist/tls-cert-monitor-macos
+        file dist/tls-cert-monitor-macos
+        ls -lh dist/tls-cert-monitor-macos
+    
+    - name: Upload macOS binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-binary
+        path: dist/tls-cert-monitor-macos
+        retention-days: 30
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist/
+    
+    - name: Prepare release assets
+      run: |
+        # Flatten artifact directories
+        find dist/ -name "tls-cert-monitor-*" -exec mv {} dist/ \;
+        rm -rf dist/*/
+        
+        # List all files
+        ls -la dist/
+        
+        # Create checksums
+        cd dist/
+        sha256sum tls-cert-monitor-* > checksums.txt
+        cat checksums.txt
+    
+    - name: Extract release notes
+      id: release_notes
+      run: |
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        
+        # Create release notes
+        cat > release_notes.md << EOF
+        # TLS Certificate Monitor $VERSION
+        
+        ## Cross-Platform Binaries
+        
+        This release includes pre-compiled binaries for:
+        
+        - **Linux (x86_64)**: \`tls-cert-monitor-linux\`
+        - **Windows (x86_64)**: \`tls-cert-monitor-windows.exe\`  
+        - **macOS (x86_64)**: \`tls-cert-monitor-macos\`
+        
+        ## Installation
+        
+        1. Download the appropriate binary for your platform
+        2. Make it executable (Linux/macOS): \`chmod +x tls-cert-monitor-*\`
+        3. Run with: \`./tls-cert-monitor-* --help\`
+        
+        ## Verification
+        
+        All binaries include SHA256 checksums in \`checksums.txt\` for verification.
+        
+        ## What's Changed
+        
+        See the commit history for detailed changes in this release.
+        EOF
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ steps.release_notes.outputs.version }}
+        body_path: release_notes.md
+        files: |
+          dist/tls-cert-monitor-linux
+          dist/tls-cert-monitor-windows.exe
+          dist/tls-cert-monitor-macos
+          dist/checksums.txt
+        draft: false
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

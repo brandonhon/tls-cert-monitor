@@ -162,39 +162,56 @@ build: ## Build distribution packages
 	@$(VENV_PYTHON) -m build
 	@printf "$(GREEN)✅ Build completed - packages in dist/$(NC)\n"
 
+# ----------------------------
+# Container-based Nuitka Builds
+# ----------------------------
 .PHONY: build-linux
-build-linux: ## Build Linux binary using Nuitka
-	@printf "$(BLUE)🐧 Building Linux binary...$(NC)\n"
-	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
-		main.py \
-		--output-dir=dist \
-		--output-filename=$(PROJECT_NAME)-linux
+build-linux: ## Build Linux binary using Nuitka in container
+	@printf "$(BLUE)🐧 Building Linux binary in container...$(NC)\n"
+	@mkdir -p dist
+	@docker build -f build/Dockerfile.linux -t $(PROJECT_NAME)-builder-linux .
+	@docker run --rm \
+		-v $$(pwd)/dist:/app/dist \
+		$(PROJECT_NAME)-builder-linux
 	@printf "$(GREEN)✅ Linux binary: dist/$(PROJECT_NAME)-linux$(NC)\n"
 
-# Build Windows binary (requires mingw)
 .PHONY: build-windows
-build-windows: ## Cross-compile Windows binary from Linux using Nuitka + MinGW
-	@printf "$(BLUE)🪟 Building Windows binary...$(NC)\n"
-	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
-		main.py \
-		--mingw64 \
-		--output-dir=dist \
-		--output-filename=$(PROJECT_NAME)-windows.exe
+build-windows: ## Build Windows binary using Nuitka + MinGW in container
+	@printf "$(BLUE)🪟 Building Windows binary in container...$(NC)\n"
+	@mkdir -p dist
+	@docker build -f build/Dockerfile.windows -t $(PROJECT_NAME)-builder-windows .
+	@docker run --rm \
+		-v $$(pwd)/dist:/app/dist \
+		$(PROJECT_NAME)-builder-windows
 	@printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"
 
-# Build macOS binary (requires osxcross)
-.PHONY: build-mac
-build-mac: ## Cross-compile macOS binary from Linux using Nuitka + osxcross
-	@printf "$(BLUE)🍎 Building macOS binary...$(NC)\n"
+.PHONY: build-macos
+build-macos: ## Build macOS binary using local Nuitka (requires macOS)
+	@printf "$(BLUE)🍎 Building macOS binary locally...$(NC)\n"
+	@if [ "$$(uname)" != "Darwin" ]; then \
+		printf "$(RED)❌ macOS builds require macOS runner - use GitHub Actions$(NC)\n"; \
+		exit 1; \
+	fi
+	@mkdir -p dist
 	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
 		main.py \
-		--macos-app-name=$(PROJECT_NAME) \
 		--output-dir=dist \
 		--output-filename=$(PROJECT_NAME)-macos
 	@printf "$(GREEN)✅ macOS binary: dist/$(PROJECT_NAME)-macos$(NC)\n"
 
 .PHONY: build-all
-build-all: build-linux build-windows #build-mac ## Build for all platforms
+build-all: build-linux build-windows ## Build for Linux and Windows in containers (macOS requires macOS runner)
+
+# Local Nuitka builds (for development)
+.PHONY: build-local
+build-local: ## Build binary for current platform using local Nuitka
+	@printf "$(BLUE)🔧 Building local binary...$(NC)\n"
+	@mkdir -p dist
+	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		main.py \
+		--output-dir=dist \
+		--output-filename=$(PROJECT_NAME)-local
+	@printf "$(GREEN)✅ Local binary: dist/$(PROJECT_NAME)-local$(NC)\n"
 
 # ----------------------------
 # Installation

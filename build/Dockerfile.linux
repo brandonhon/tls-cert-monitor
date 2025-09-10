@@ -1,0 +1,57 @@
+# Linux Build Container for TLS Certificate Monitor
+FROM python:3.11-slim-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    libc6-dev \
+    libssl-dev \
+    libffi-dev \
+    zlib1g-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt requirements-dev.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-dev.txt
+
+# Copy source code
+COPY . .
+
+# Build script
+RUN cat > /app/build.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "Building Linux binary with Nuitka..."
+
+# Configure Nuitka flags for Linux
+NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"
+NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"
+NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"
+NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"
+NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
+NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
+
+# Build the binary
+python -m nuitka $NUITKA_FLAGS \
+    main.py \
+    --output-dir=/app/dist \
+    --output-filename=tls-cert-monitor-linux
+
+echo "Build completed successfully!"
+ls -la /app/dist/
+EOF
+
+RUN chmod +x /app/build.sh
+
+# Default command
+CMD ["/app/build.sh"]

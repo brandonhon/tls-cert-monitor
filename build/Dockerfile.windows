@@ -1,0 +1,45 @@
+# Windows Native Container for TLS Certificate Monitor
+# escape=`
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+
+# Install Chocolatey
+RUN powershell -Command `
+    Set-ExecutionPolicy Bypass -Scope Process -Force; `
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+    iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install Python via Chocolatey
+RUN choco install python311 -y --installargs="PrependPath=1"
+
+# Refresh environment variables
+RUN refreshenv
+
+# Set working directory
+WORKDIR C:\app
+
+# Copy requirements first for better caching
+COPY requirements.txt requirements-dev.txt ./
+
+# Install Python dependencies
+RUN python -m pip install --upgrade pip setuptools wheel && `
+    python -m pip install --no-cache-dir -r requirements.txt && `
+    python -m pip install --no-cache-dir -r requirements-dev.txt
+
+# Copy source code
+COPY . .
+
+# Create build script
+RUN echo 'echo "Building Windows binary with Nuitka..."' > build.bat && `
+    echo 'set NUITKA_FLAGS=--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads' >> build.bat && `
+    echo 'set NUITKA_FLAGS=%NUITKA_FLAGS% --disable-console --follow-imports' >> build.bat && `
+    echo 'set NUITKA_FLAGS=%NUITKA_FLAGS% --include-package=tls_cert_monitor' >> build.bat && `
+    echo 'set NUITKA_FLAGS=%NUITKA_FLAGS% --include-module=uvicorn' >> build.bat && `
+    echo 'set NUITKA_FLAGS=%NUITKA_FLAGS% --include-module=cryptography' >> build.bat && `
+    echo 'set NUITKA_FLAGS=%NUITKA_FLAGS% --include-module=prometheus_client' >> build.bat && `
+    echo 'mkdir dist 2>NUL || echo Directory exists' >> build.bat && `
+    echo 'python -m nuitka %NUITKA_FLAGS% main.py --output-dir=dist --output-filename=tls-cert-monitor-windows.exe' >> build.bat && `
+    echo 'echo "Build completed successfully!"' >> build.bat && `
+    echo 'dir dist' >> build.bat
+
+# Default command
+CMD ["build.bat"]
