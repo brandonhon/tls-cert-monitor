@@ -288,10 +288,10 @@ def create_app(
 </head>
 <body>
     <h1>🔒 TLS Certificate Monitor</h1>
-    
+
     <div class="container">
         <h2>📊 Monitoring Endpoints</h2>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method">GET</span>
@@ -302,7 +302,7 @@ def create_app(
             </div>
             <small>Content-Type: text/plain; version=0.0.4; charset=utf-8</small>
         </div>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method">GET</span>
@@ -314,10 +314,10 @@ def create_app(
             <small>Content-Type: application/json</small>
         </div>
     </div>
-    
+
     <div class="container">
         <h2>🔧 Management Endpoints</h2>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method">GET</span>
@@ -328,7 +328,7 @@ def create_app(
             </div>
             <small>Returns scan results including parsed certificates, errors, and timing</small>
         </div>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method">GET</span>
@@ -339,7 +339,7 @@ def create_app(
             </div>
             <small>Shows all configuration settings except passwords and keys</small>
         </div>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method">GET</span>
@@ -350,7 +350,7 @@ def create_app(
             </div>
             <small>Includes hit rate, entry count, and memory usage</small>
         </div>
-        
+
         <div class="endpoint">
             <div class="endpoint-title">
                 <span class="endpoint-method post">POST</span>
@@ -362,7 +362,7 @@ def create_app(
             <small>Click to clear cache via JavaScript POST request</small>
         </div>
     </div>
-    
+
     <div class="container">
         <h2>⚙️ Current Configuration</h2>
         <div class="config-grid">
@@ -401,12 +401,12 @@ def create_app(
                 <div class="config-value">{config.log_level}</div>
             </div>
         </div>
-        
+
         <h3>📂 Monitored Directories</h3>
         <div style="margin-top: 15px;">
             {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{directory}</code></div>' for directory in config.certificate_directories)}
         </div>
-        
+
         {f'''
         <h3>🚫 Excluded Directories</h3>
         <div style="margin-top: 15px;">
