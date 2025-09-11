@@ -1,6 +1,6 @@
 # TLS Certificate Monitor
 
-A cross-platform Python application for monitoring SSL/TLS certificates, providing comprehensive metrics and health status information.
+A cross-platform application for monitoring SSL/TLS certificates, providing comprehensive metrics and health status information. Available as pre-compiled binaries for Linux, Windows, and macOS, or as a Python application.
 
 ## Features
 
@@ -29,13 +29,31 @@ A cross-platform Python application for monitoring SSL/TLS certificates, providi
 - **TLS support**: Optional HTTPS for metrics endpoint
 - **Customizable passwords**: P12/PFX password list support
 
-## Quick Start
+## Installation
 
-### Using Virtual Environment (Recommended)
+### 📦 Pre-compiled Binaries (Recommended)
+
+Download the latest release for your platform:
+
+- **Linux (AMD64)**: `linux-amd64.tar.gz`  
+- **Windows (AMD64)**: `windows-amd64.tar.gz`
+- **macOS (Intel)**: `darwin-amd64.tar.gz`
+- **macOS (Apple Silicon)**: `darwin-arm64.tar.gz`
+
+```bash
+# Download and extract (replace with your platform)
+curl -L https://github.com/brandonhon/tls-cert-monitor/releases/latest/download/linux-amd64.tar.gz | tar -xz
+chmod +x tls-cert-monitor
+./tls-cert-monitor --help
+```
+
+### 🐍 From Source
+
+#### Using Virtual Environment (Recommended)
 
 ```bash
 # Clone and setup
-git clone <repository-url>
+git clone https://github.com/brandonhon/tls-cert-monitor.git
 cd tls-cert-monitor
 
 # Setup development environment
@@ -64,13 +82,30 @@ make config
 make run-system
 ```
 
-### Using Docker
+### 🐳 Docker Images
+
+Pre-built container images are available supporting Linux AMD64 and ARM64 architectures:
+
+```bash
+# Pull and run the latest image
+docker run -d \
+  --name tls-cert-monitor \
+  -p 3200:3200 \
+  -v /etc/ssl/certs:/etc/ssl/certs:ro \
+  -v ./config.yaml:/app/config.yaml:ro \
+  ghcr.io/brandonhon/tls-cert-monitor:latest
+
+# Or use docker-compose
+make docker-compose
+```
+
+### 🛠️ Development Setup
 
 ```bash
 # Build and run with Docker Compose
 make compose-up
 
-# Or build Docker image
+# Or build Docker image locally
 make docker-build
 make docker-run
 ```
@@ -228,27 +263,37 @@ make info               # Show project information
 
 ```
 tls-cert-monitor/
-├── main.py                    # Application entry point
-├── tls_cert_monitor/          # Main package
+├── main.py                      # Application entry point
+├── tls_cert_monitor/            # Main package
 │   ├── __init__.py
-│   ├── config.py              # Configuration management
-│   ├── logger.py              # Logging setup
-│   ├── cache.py               # Cache management
-│   ├── metrics.py             # Prometheus metrics
-│   ├── scanner.py             # Certificate scanner
-│   ├── api.py                 # FastAPI application
-│   └── hot_reload.py          # Hot reload functionality
-├── tests/                     # Test suite
+│   ├── config.py                # Configuration management
+│   ├── logger.py                # Logging setup
+│   ├── cache.py                 # Cache management
+│   ├── metrics.py               # Prometheus metrics
+│   ├── scanner.py               # Certificate scanner
+│   ├── api.py                   # FastAPI application
+│   └── hot_reload.py            # Hot reload functionality
+├── build/                       # Build configurations
+│   ├── Dockerfile.linux         # Linux binary build container
+│   └── Dockerfile.windows       # Windows binary build container
+├── tests/                       # Test suite
 │   ├── test_config.py
 │   ├── test_metrics.py
 │   └── test_cache.py
-├── config.example.yaml        # Example configuration
-├── requirements.txt           # Production dependencies
-├── requirements-dev.txt       # Development dependencies
-├── Makefile                   # Build and development tasks
-├── setup.py                   # Package setup
-├── pyproject.toml            # Modern Python project config
-└── README.md                 # This file
+├── .github/workflows/           # GitHub Actions workflows
+│   └── build.yml                # Multi-platform build and release
+├── docker/                      # Docker development setup
+├── config.example.yaml          # Example configuration
+├── config.windows.example.yaml  # Windows-specific config example
+├── requirements.txt             # Production dependencies
+├── requirements-dev.txt         # Development dependencies
+├── Makefile                     # Build and development tasks
+├── setup.py                     # Package setup
+├── pyproject.toml              # Modern Python project config
+├── Dockerfile                   # Multi-platform container image
+├── docker-compose.yml           # Production docker compose
+├── docker-compose.dev.yml       # Development docker compose
+└── README.md                   # This file
 ```
 
 ### Testing

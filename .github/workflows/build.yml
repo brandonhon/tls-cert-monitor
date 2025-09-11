@@ -4,8 +4,28 @@ on:
   push:
     branches: [ main, develop ]
     tags: [ 'v*' ]
+    paths:
+      - 'main.py'
+      - 'tls_cert_monitor/**/*.py'
+      - 'requirements*.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'Dockerfile*'
+      - 'build/**'
+      - '.github/workflows/build.yml'
+      - 'docker-compose*.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'main.py'
+      - 'tls_cert_monitor/**/*.py'
+      - 'requirements*.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'Dockerfile*'
+      - 'build/**'
+      - '.github/workflows/build.yml'
+      - 'docker-compose*.yml'
   workflow_dispatch:
     inputs:
       create_release:

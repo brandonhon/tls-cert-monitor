@@ -28,6 +28,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `python -m pytest tests/test_config.py -v` - Run specific test file
 - `python -m pytest -k "test_cache" -v` - Run tests matching pattern
 
+### Docker Development
+- `make docker-build` - Build Docker image locally
+- `make docker-run` - Run Docker container locally
+- `make compose-up` - Start with docker-compose
+- `make compose-down` - Stop docker-compose
+- `make docker-compose` - Run using production docker-compose
+
+### Release and Distribution
+- Releases are automatically created on every push to main branch
+- Multi-platform binaries are built via GitHub Actions
+- Docker images are published to GitHub Container Registry
+- Binary artifacts are packaged as `platform-arch.tar.gz` (e.g., `linux-amd64.tar.gz`)
+
 ## Architecture Overview
 
 This is a Python-based TLS certificate monitoring application with the following key architectural components:
@@ -77,6 +90,19 @@ The application uses YAML configuration with these key sections:
 - **pytest**: Test framework with coverage reporting
 - **Test structure**: Tests mirror source structure in `tests/` directory
 - **Coverage**: HTML and XML coverage reports generated in `coverage/` directory
+
+### Build and Release System
+- **Multi-platform binaries**: Automated builds for Linux, Windows, and macOS (AMD64 + ARM64 where supported)
+- **Docker images**: Multi-architecture container images published to GitHub Container Registry
+- **Automated releases**: GitHub Actions workflow creates releases on every push to main branch
+- **Binary packaging**: Platform-specific tar.gz archives (e.g., `linux-amd64.tar.gz`)
+- **Nuitka compilation**: Python-to-binary compilation for standalone executables
+- **Cross-compilation**: Docker buildx for ARM64 Linux builds, native compilation for other platforms
+
+### Distribution Channels
+- **GitHub Releases**: Pre-compiled binaries for direct download
+- **GitHub Container Registry**: Docker images at `ghcr.io/brandonhon/tls-cert-monitor`
+- **Source installation**: Python package installable via pip from source
 
 # Development Guidelines
 
