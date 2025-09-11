@@ -167,7 +167,7 @@ def create_app(
             </linearGradient>
         </defs>
         <rect x="9" y="14" width="14" height="12" rx="1.5" fill="url(#lg)" stroke="#1e3a5f"/>
-        <path d="M 12.5 14 L 12.5 10 Q 12.5 6 16 6 Q 19.5 6 19.5 10 L 19.5 14" 
+        <path d="M 12.5 14 L 12.5 10 Q 12.5 6 16 6 Q 19.5 6 19.5 10 L 19.5 14"
               fill="none" stroke="#1e3a5f" stroke-width="1.5" stroke-linecap="round"/>
         <circle cx="16" cy="19" r="1.5" fill="#1e3a5f"/>
         <rect x="15.5" y="19" width="1" height="3" fill="#1e3a5f" rx="0.5"/>
