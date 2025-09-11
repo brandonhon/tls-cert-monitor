@@ -218,14 +218,66 @@ class CacheManager:
 
             # Write to temporary file first, then rename for atomicity
             temp_file = self.cache_file.with_suffix(".tmp")
+
+            # Clean up any existing temp file first
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except OSError:
+                    pass  # Ignore cleanup failures
+
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
 
-            temp_file.rename(self.cache_file)
+            # Cross-platform atomic file replacement
+            self._atomic_replace(temp_file, self.cache_file)
+
             self.logger.debug("Cache saved to disk")
 
         except Exception as e:
             self.logger.error(f"Failed to save cache to disk: {e}")
+            # Clean up temp file on error
+            temp_file = self.cache_file.with_suffix(".tmp")
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except OSError:
+                    pass
+
+    def _atomic_replace(self, temp_file: Path, target_file: Path) -> None:
+        """Atomically replace target file with temp file, handling Windows limitations."""
+        import platform
+
+        if platform.system() == "Windows":
+            # Windows doesn't support atomic rename over existing files
+            # Use a backup approach to minimize the window of corruption
+            backup_file = None
+            try:
+                if target_file.exists():
+                    backup_file = target_file.with_suffix(".backup")
+                    if backup_file.exists():
+                        backup_file.unlink()
+                    target_file.rename(backup_file)
+
+                temp_file.rename(target_file)
+
+                # Clean up backup file on success
+                if backup_file and backup_file.exists():
+                    backup_file.unlink()
+
+            except OSError as e:
+                # Restore backup if something went wrong
+                if backup_file and backup_file.exists():
+                    try:
+                        if target_file.exists():
+                            target_file.unlink()
+                        backup_file.rename(target_file)
+                    except OSError:
+                        pass  # Best effort recovery
+                raise e
+        else:
+            # Unix-like systems support atomic replace
+            temp_file.replace(target_file)
 
     async def _load_persistent_cache(self) -> None:
         """Load cache from disk."""
