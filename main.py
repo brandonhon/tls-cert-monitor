@@ -36,6 +36,8 @@ class TLSCertMonitor:
         self.config_path = config_path
         self.dry_run = dry_run
         self._shutdown_event = asyncio.Event()
+        # Initialize logger early to avoid AttributeError
+        self.logger = logging.getLogger(__name__)
 
     async def initialize(self):
         """Initialize all application components."""
@@ -45,7 +47,6 @@ class TLSCertMonitor:
 
             # Setup logging
             setup_logging(self.config)
-            self.logger = logging.getLogger(__name__)
             self.logger.info("Initializing TLS Certificate Monitor")
 
             # Initialize cache
@@ -135,12 +136,14 @@ class TLSCertMonitor:
 
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals."""
-        self.logger.info(f"Received signal {signum}, initiating graceful shutdown")
+        if hasattr(self, 'logger'):
+            self.logger.info(f"Received signal {signum}, initiating graceful shutdown")
         self._shutdown_event.set()
 
     async def shutdown(self):
         """Gracefully shutdown all components."""
-        self.logger.info("Starting graceful shutdown")
+        if hasattr(self, 'logger'):
+            self.logger.info("Starting graceful shutdown")
 
         # Stop hot reload manager
         if self.hot_reload:
@@ -154,7 +157,8 @@ class TLSCertMonitor:
         if self.cache:
             await self.cache.close()
 
-        self.logger.info("Graceful shutdown completed")
+        if hasattr(self, 'logger'):
+            self.logger.info("Graceful shutdown completed")
 
 
 @click.command()
