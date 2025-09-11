@@ -172,12 +172,12 @@ jobs:
           "--standalone", 
           "--enable-plugin=pkg-resources",
           "--assume-yes-for-downloads",
-          "--disable-console",
           "--follow-imports",
           "--include-package=tls_cert_monitor",
           "--include-module=uvicorn",
           "--include-module=cryptography",
           "--include-module=prometheus_client",
+          "--include-module=click",
           "--output-dir=dist",
           "--output-filename=tls-cert-monitor.exe",
           "main.py"
