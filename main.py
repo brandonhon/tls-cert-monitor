@@ -39,7 +39,7 @@ class TLSCertMonitor:
         # Initialize logger early to avoid AttributeError
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Initialize all application components."""
         try:
             # Load configuration
@@ -82,16 +82,20 @@ class TLSCertMonitor:
             self.logger.error(f"Failed to initialize application: {e}")
             raise
 
-    async def run(self):
+    async def run(self) -> None:
         """Run the application server or perform dry-run scan."""
         if not self.app:
             await self.initialize()
+
+        # At this point, config is guaranteed to be set by initialize()
+        assert self.config is not None, "Config should be initialized"
 
         # Handle dry-run mode
         if self.dry_run:
             self.logger.info("Running in dry-run mode - scanning certificates only")
             # Perform one scan and exit
-            await self.scanner.scan_once()
+            if self.scanner:
+                await self.scanner.scan_once()
             self.logger.info("Dry-run scan completed")
             await self.shutdown()
             return
@@ -134,15 +138,15 @@ class TLSCertMonitor:
         finally:
             await self.shutdown()
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame: Optional[object]) -> None:
         """Handle shutdown signals."""
-        if hasattr(self, 'logger'):
+        if hasattr(self, "logger"):
             self.logger.info(f"Received signal {signum}, initiating graceful shutdown")
         self._shutdown_event.set()
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Gracefully shutdown all components."""
-        if hasattr(self, 'logger'):
+        if hasattr(self, "logger"):
             self.logger.info("Starting graceful shutdown")
 
         # Stop hot reload manager
@@ -157,7 +161,7 @@ class TLSCertMonitor:
         if self.cache:
             await self.cache.close()
 
-        if hasattr(self, 'logger'):
+        if hasattr(self, "logger"):
             self.logger.info("Graceful shutdown completed")
 
 
@@ -170,7 +174,7 @@ class TLSCertMonitor:
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
 @click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
-def main(config: Optional[Path], version: bool, dry_run: bool):
+def main(config: Optional[Path], version: bool, dry_run: bool) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
     if version:
