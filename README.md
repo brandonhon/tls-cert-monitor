@@ -282,6 +282,12 @@ tls-cert-monitor/
 │   └── test_cache.py
 ├── .github/workflows/           # GitHub Actions workflows
 │   └── build.yml                # Multi-platform build and release
+├── scripts/                     # Installation and service scripts
+│   ├── install-linux-service.sh       # Linux systemd service installer
+│   ├── install-windows-service.bat    # Windows service installer
+│   ├── install-macos-service.sh       # macOS service installer
+│   ├── tls-cert-monitor.service       # systemd service file
+│   └── com.tlscertmonitor.service.plist # macOS LaunchDaemon config
 ├── docker/                      # Docker development setup
 ├── config.example.yaml          # Example configuration
 ├── config.windows.example.yaml  # Windows-specific config example
@@ -337,27 +343,149 @@ make check
 
 ## Production Deployment
 
-### System Service (systemd)
+### Linux System Service (systemd)
 
-Create `/etc/systemd/system/tls-cert-monitor.service`:
+Install as a Linux systemd service:
 
-```ini
-[Unit]
-Description=TLS Certificate Monitor
-After=network.target
+#### Installation
+```bash
+# Download the Linux binary: linux-amd64.tar.gz
+tar -xzf linux-amd64.tar.gz
 
-[Service]
-Type=simple
-User=tls-monitor
-Group=tls-monitor
-WorkingDirectory=/opt/tls-cert-monitor
-Environment=PATH=/opt/tls-cert-monitor/venv/bin
-ExecStart=/opt/tls-cert-monitor/venv/bin/python main.py --config=/etc/tls-cert-monitor/config.yaml
-Restart=always
-RestartSec=5
+# Run installation script as root
+sudo scripts/install-linux-service.sh
+```
 
-[Install]
-WantedBy=multi-user.target
+#### Manual Installation
+```bash
+# Create service user
+sudo groupadd --system tls-monitor
+sudo useradd --system --gid tls-monitor --home-dir /var/empty \
+    --shell /usr/sbin/nologin --comment "TLS Certificate Monitor Service" tls-monitor
+
+# Install binary and configuration
+sudo mkdir -p /usr/local/bin /etc/tls-cert-monitor /var/lib/tls-cert-monitor /var/log/tls-cert-monitor
+sudo cp tls-cert-monitor /usr/local/bin/
+sudo cp config.yaml /etc/tls-cert-monitor/
+sudo chown tls-monitor:tls-monitor /var/lib/tls-cert-monitor /var/log/tls-cert-monitor
+
+# Install systemd service
+sudo cp scripts/tls-cert-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable tls-cert-monitor
+sudo systemctl start tls-cert-monitor
+```
+
+#### Service Management
+```bash
+# Check status
+sudo systemctl status tls-cert-monitor
+
+# Start/Stop/Restart service
+sudo systemctl start tls-cert-monitor
+sudo systemctl stop tls-cert-monitor
+sudo systemctl restart tls-cert-monitor
+
+# Enable/Disable auto-start
+sudo systemctl enable tls-cert-monitor
+sudo systemctl disable tls-cert-monitor
+
+# View logs
+sudo journalctl -u tls-cert-monitor -f
+```
+
+### Windows Service
+
+Install as a Windows service using NSSM (Non-Sucking Service Manager):
+
+#### Prerequisites
+1. Download [NSSM](https://nssm.cc/download) and add to PATH
+2. Download the Windows binary: `windows-amd64.tar.gz`
+3. Extract and place the installation script in the same directory
+
+#### Installation
+```cmd
+# Run as Administrator
+scripts\install-windows-service.bat
+```
+
+#### Manual Installation
+```cmd
+# Install NSSM service
+nssm install TLSCertMonitor "C:\Program Files\TLSCertMonitor\tls-cert-monitor.exe"
+nssm set TLSCertMonitor AppParameters "--config=C:\ProgramData\TLSCertMonitor\config.yaml"
+nssm set TLSCertMonitor DisplayName "TLS Certificate Monitor"
+nssm set TLSCertMonitor Description "Monitors TLS/SSL certificates and provides Prometheus metrics"
+nssm set TLSCertMonitor Start SERVICE_AUTO_START
+
+# Configure logging
+nssm set TLSCertMonitor AppStdout "C:\ProgramData\TLSCertMonitor\logs\service.log"
+nssm set TLSCertMonitor AppStderr "C:\ProgramData\TLSCertMonitor\logs\service-error.log"
+
+# Start service
+nssm start TLSCertMonitor
+```
+
+#### Service Management
+```cmd
+# Check status
+sc query TLSCertMonitor
+
+# Start/Stop service
+sc start TLSCertMonitor
+sc stop TLSCertMonitor
+
+# Uninstall service
+nssm remove TLSCertMonitor
+```
+
+### macOS Service (LaunchDaemon)
+
+Install as a macOS system service using LaunchDaemon:
+
+#### Installation
+```bash
+# Download the macOS binary: darwin-amd64.tar.gz or darwin-arm64.tar.gz
+tar -xzf darwin-amd64.tar.gz  # or darwin-arm64.tar.gz
+
+# Run installation script as root
+sudo scripts/install-macos-service.sh
+```
+
+#### Manual Installation
+```bash
+# Create service user
+sudo dscl . -create /Groups/_tlscertmonitor
+sudo dscl . -create /Groups/_tlscertmonitor PrimaryGroupID 250
+sudo dscl . -create /Users/_tlscertmonitor
+sudo dscl . -create /Users/_tlscertmonitor UniqueID 250
+sudo dscl . -create /Users/_tlscertmonitor PrimaryGroupID 250
+sudo dscl . -create /Users/_tlscertmonitor UserShell /usr/bin/false
+sudo dscl . -create /Users/_tlscertmonitor NFSHomeDirectory /var/empty
+
+# Install binary and configuration
+sudo mkdir -p /usr/local/bin /usr/local/etc/tls-cert-monitor /usr/local/var/{lib,log}/tls-cert-monitor
+sudo cp tls-cert-monitor /usr/local/bin/
+sudo cp config.yaml /usr/local/etc/tls-cert-monitor/
+sudo chown -R _tlscertmonitor:_tlscertmonitor /usr/local/etc/tls-cert-monitor /usr/local/var/{lib,log}/tls-cert-monitor
+
+# Install LaunchDaemon
+sudo cp scripts/com.tlscertmonitor.service.plist /Library/LaunchDaemons/
+sudo chown root:wheel /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+sudo launchctl load /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+```
+
+#### Service Management
+```bash
+# Check status
+sudo launchctl list | grep tlscertmonitor
+
+# Start/Stop service
+sudo launchctl unload /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+sudo launchctl load /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+
+# View logs
+sudo log show --predicate 'process == "tls-cert-monitor"' --last 1h
 ```
 
 ### Docker Deployment

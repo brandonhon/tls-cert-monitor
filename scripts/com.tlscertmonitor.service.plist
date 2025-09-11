@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier - must match filename -->
+    <key>Label</key>
+    <string>com.tlscertmonitor.service</string>
+    
+    <!-- Program path and arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/tls-cert-monitor</string>
+        <string>--config=/usr/local/etc/tls-cert-monitor/config.yaml</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/usr/local/var/lib/tls-cert-monitor</string>
+    
+    <!-- Run as daemon (background service) -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep service running -->
+    <key>KeepAlive</key>
+    <true/>
+    
+    <!-- Restart on failure -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <!-- User to run as (root for system-wide service) -->
+    <key>UserName</key>
+    <string>_tlscertmonitor</string>
+    
+    <!-- Group to run as -->
+    <key>GroupName</key>
+    <string>_tlscertmonitor</string>
+    
+    <!-- Standard output and error logging -->
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/tls-cert-monitor/service.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/tls-cert-monitor/service-error.log</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <key>TLS_MONITOR_CONFIG_FILE</key>
+        <string>/usr/local/etc/tls-cert-monitor/config.yaml</string>
+    </dict>
+    
+    <!-- Process limits -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+        <key>NumberOfProcesses</key>
+        <integer>100</integer>
+    </dict>
+    
+    <!-- Throttle restart attempts -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    
+    <!-- Only run if network is available -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+    
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <!-- Umask for created files -->
+    <key>Umask</key>
+    <integer>022</integer>
+    
+</dict>
+</plist>
