@@ -168,9 +168,11 @@ jobs:
         path: |
           ~/.cache/Nuitka
           ~/AppData/Local/Nuitka
-        key: ${{ runner.os }}-nuitka-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+          %LOCALAPPDATA%\Nuitka
+        key: nuitka-${{ runner.os }}-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-nuitka-
+          nuitka-${{ runner.os }}-
+        save-always: true
     
     - name: Build Windows binary
       run: |
@@ -242,9 +244,10 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/Nuitka
-        key: ${{ runner.os }}-nuitka-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+        key: nuitka-${{ runner.os }}-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-nuitka-
+          nuitka-${{ runner.os }}-
+        save-always: true
     
     - name: Build macOS binary
       run: |
@@ -333,10 +336,11 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/Nuitka
-        key: ${{ runner.os }}-nuitka-arm64-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+        key: nuitka-${{ runner.os }}-arm64-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-nuitka-arm64-
-          ${{ runner.os }}-nuitka-
+          nuitka-${{ runner.os }}-arm64-
+          nuitka-${{ runner.os }}-
+        save-always: true
     
     - name: Build macOS ARM64 binary
       run: |
