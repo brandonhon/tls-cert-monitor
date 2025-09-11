@@ -155,6 +155,25 @@ def create_app(
             logger.error(f"Failed to clear cache: {e}")
             raise HTTPException(status_code=500, detail="Failed to clear cache") from e
 
+    @app.get("/favicon.ico")
+    async def get_favicon() -> Response:
+        """Serve favicon."""
+        # Simple SVG lock icon
+        favicon_svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+        <defs>
+            <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#4a90e2"/>
+                <stop offset="100%" style="stop-color:#2c5aa0"/>
+            </linearGradient>
+        </defs>
+        <rect x="9" y="14" width="14" height="12" rx="1.5" fill="url(#lg)" stroke="#1e3a5f"/>
+        <path d="M 12.5 14 L 12.5 10 Q 12.5 6 16 6 Q 19.5 6 19.5 10 L 19.5 14" 
+              fill="none" stroke="#1e3a5f" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="16" cy="19" r="1.5" fill="#1e3a5f"/>
+        <rect x="15.5" y="19" width="1" height="3" fill="#1e3a5f" rx="0.5"/>
+        </svg>"""
+        return Response(content=favicon_svg, media_type="image/svg+xml")
+
     @app.get("/", response_class=Response)
     async def root() -> Response:
         protocol = "https" if config.tls_cert and config.tls_key else "http"

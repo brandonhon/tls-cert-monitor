@@ -162,6 +162,16 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
+    - name: Cache Nuitka
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/Nuitka
+          ~/AppData/Local/Nuitka
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-
+    
     - name: Build Windows binary
       run: |
         Write-Host "Building Windows binary with Nuitka..."
@@ -180,6 +190,17 @@ jobs:
           "--include-module=click",
           "--output-dir=dist",
           "--output-filename=tls-cert-monitor.exe",
+          # Speed optimizations
+          "--jobs=4",
+          "--clang",
+          "--lto=no",
+          "--report=nuitka-report.xml",
+          # Remove unnecessary inclusions to speed up
+          "--nofollow-import-to=numpy",
+          "--nofollow-import-to=matplotlib",
+          "--nofollow-import-to=scipy",
+          "--nofollow-import-to=pandas",
+          "--nofollow-import-to=tkinter",
           "main.py"
         )
         
@@ -217,17 +238,30 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
+    - name: Cache Nuitka
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/Nuitka
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-
+    
     - name: Build macOS binary
       run: |
         echo "Building macOS binary with Nuitka..."
         mkdir -p dist
         
         NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"
-        NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"
+        NUITKA_FLAGS="$NUITKA_FLAGS --follow-imports"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-module=click"
+        # Speed optimizations  
+        NUITKA_FLAGS="$NUITKA_FLAGS --jobs=4 --clang --lto=no"
+        NUITKA_FLAGS="$NUITKA_FLAGS --nofollow-import-to=numpy --nofollow-import-to=matplotlib"
+        NUITKA_FLAGS="$NUITKA_FLAGS --nofollow-import-to=scipy --nofollow-import-to=pandas --nofollow-import-to=tkinter"
         
         python -m nuitka $NUITKA_FLAGS main.py --output-dir=dist --output-filename=tls-cert-monitor
         
@@ -295,6 +329,15 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
+    - name: Cache Nuitka
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/Nuitka
+        key: ${{ runner.os }}-nuitka-arm64-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py') }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-arm64-
+          ${{ runner.os }}-nuitka-
+    
     - name: Build macOS ARM64 binary
       run: |
         echo "Building macOS ARM64 binary with Nuitka..."
@@ -302,11 +345,16 @@ jobs:
         mkdir -p dist
         
         NUITKA_FLAGS="--onefile --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads"
-        NUITKA_FLAGS="$NUITKA_FLAGS --disable-console --follow-imports"
+        NUITKA_FLAGS="$NUITKA_FLAGS --follow-imports"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-package=tls_cert_monitor"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=uvicorn"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=cryptography"
         NUITKA_FLAGS="$NUITKA_FLAGS --include-module=prometheus_client"
+        NUITKA_FLAGS="$NUITKA_FLAGS --include-module=click"
+        # Speed optimizations
+        NUITKA_FLAGS="$NUITKA_FLAGS --jobs=4 --clang --lto=no"
+        NUITKA_FLAGS="$NUITKA_FLAGS --nofollow-import-to=numpy --nofollow-import-to=matplotlib"
+        NUITKA_FLAGS="$NUITKA_FLAGS --nofollow-import-to=scipy --nofollow-import-to=pandas --nofollow-import-to=tkinter"
         
         # Only add --target-arch if we're not already on ARM64
         if [ "$(uname -m)" != "arm64" ]; then
