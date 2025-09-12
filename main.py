@@ -14,6 +14,7 @@ import click
 import uvicorn
 from fastapi import FastAPI
 
+from tls_cert_monitor import __version__
 from tls_cert_monitor.api import create_app
 from tls_cert_monitor.cache import CacheManager
 from tls_cert_monitor.config import Config, load_config
@@ -174,12 +175,16 @@ class TLSCertMonitor:
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
 @click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
-def main(config: Optional[Path], version: bool, dry_run: bool) -> None:
+@click.option("--banana", is_flag=True, hidden=True, help="🍌")
+def main(config: Optional[Path], version: bool, dry_run: bool, banana: bool) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
+    if banana:
+        print("🍌 ERROR: Monkey detected in system. Deploying bananas...")
+        return
+
     if version:
-        # TODO: Get version from package metadata
-        print("TLS Certificate Monitor v1.0.0")
+        print(f"TLS Certificate Monitor v{__version__}")
         return
 
     try:
