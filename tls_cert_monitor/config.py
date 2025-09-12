@@ -25,6 +25,7 @@ class Config(BaseModel):
     # Certificate monitoring
     certificate_directories: List[str] = Field(default_factory=lambda: ["/etc/ssl/certs"])
     exclude_directories: List[str] = Field(default_factory=list)
+    exclude_file_patterns: List[str] = Field(default_factory=lambda: ["dhparam.pem"])
 
     # P12/PFX certificate passwords
     p12_passwords: List[str] = Field(
@@ -49,9 +50,19 @@ class Config(BaseModel):
     hot_reload: bool = Field(default=True)
 
     # Cache settings
+    cache_type: str = Field(default="memory")  # "memory", "file", or "both"
     cache_dir: str = Field(default="./cache")
     cache_ttl: str = Field(default="1h")
-    cache_max_size: int = Field(default=104857600)  # 100MB
+    cache_max_size: int = Field(default=10485760)  # 10MB for memory default
+
+    @field_validator("cache_type")
+    @classmethod
+    def validate_cache_type(cls, v: str) -> str:
+        """Validate cache type."""
+        valid_types = {"memory", "file", "both"}
+        if v.lower() not in valid_types:
+            raise ValueError(f"cache_type must be one of {valid_types}, got '{v}'")
+        return v.lower()
 
     @field_validator("log_level")
     @classmethod
@@ -155,6 +166,7 @@ def _get_env_overrides() -> dict:
         "TLS_MONITOR_LOG_FILE": ("log_file", str),
         "TLS_MONITOR_DRY_RUN": ("dry_run", lambda x: x.lower() in ("true", "1", "yes")),
         "TLS_MONITOR_HOT_RELOAD": ("hot_reload", lambda x: x.lower() in ("true", "1", "yes")),
+        "TLS_MONITOR_CACHE_TYPE": ("cache_type", str),
         "TLS_MONITOR_CACHE_DIR": ("cache_dir", str),
         "TLS_MONITOR_CACHE_TTL": ("cache_ttl", str),
         "TLS_MONITOR_CACHE_MAX_SIZE": ("cache_max_size", int),
@@ -178,6 +190,10 @@ def _get_env_overrides() -> dict:
     if exclude_dirs:
         overrides["exclude_directories"] = [d.strip() for d in exclude_dirs.split(",")]
 
+    exclude_patterns = os.getenv("TLS_MONITOR_EXCLUDE_FILE_PATTERNS")
+    if exclude_patterns:
+        overrides["exclude_file_patterns"] = [p.strip() for p in exclude_patterns.split(",")]
+
     p12_passwords = os.getenv("TLS_MONITOR_P12_PASSWORDS")
     if p12_passwords:
         overrides["p12_passwords"] = [p.strip() for p in p12_passwords.split(",")]
@@ -192,15 +208,17 @@ def create_example_config(output_path: str = "config.example.yaml") -> None:
         "bind_address": "0.0.0.0",  # nosec B104  # Intentional for production - allows external access
         "certificate_directories": ["/etc/ssl/certs", "/etc/pki/tls/certs"],
         "exclude_directories": ["/etc/ssl/certs/private", "/etc/ssl/certs/backup"],
+        "exclude_file_patterns": ["dhparam.pem", ".*\\.key$", ".*backup.*"],
         "p12_passwords": ["", "changeit", "password", "123456"],
         "scan_interval": "5m",
         "workers": 4,
         "log_level": "INFO",
         "dry_run": False,
         "hot_reload": True,
+        "cache_type": "memory",
         "cache_dir": "./cache",
         "cache_ttl": "1h",
-        "cache_max_size": 104857600,
+        "cache_max_size": 10485760,  # 10MB for memory, 30MB (31457280) for file
     }
 
     with open(output_path, "w", encoding="utf-8") as f:

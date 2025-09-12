@@ -89,7 +89,7 @@ def create_app(
             scanner_health = await scanner.get_health_status()
             cache_health = await cache.get_health_status()
             metrics_health = metrics.get_registry_status()
-            system_health = await _get_system_health(config)
+            system_health = await _get_system_health(scanner.config)
 
             health_status = {
                 **scanner_health,
@@ -106,7 +106,7 @@ def create_app(
 
     @app.get("/scan", response_class=JSONResponse)
     async def trigger_scan() -> JSONResponse:
-        if config.dry_run:
+        if scanner.config.dry_run:
             return JSONResponse(
                 content={"message": "Scan not performed - dry run mode enabled"}, status_code=200
             )
@@ -143,7 +143,7 @@ def create_app(
 
     @app.post("/cache/clear", response_class=JSONResponse)
     async def clear_cache() -> JSONResponse:
-        if config.dry_run:
+        if scanner.config.dry_run:
             return JSONResponse(
                 content={"message": "Cache not cleared - dry run mode enabled"}, status_code=200
             )
@@ -162,22 +162,29 @@ def create_app(
         favicon_svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
         <defs>
             <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#4a90e2"/>
-                <stop offset="100%" style="stop-color:#2c5aa0"/>
+                <stop offset="0%" style="stop-color:#ffd700"/>
+                <stop offset="100%" style="stop-color:#ffb347"/>
             </linearGradient>
         </defs>
-        <rect x="9" y="14" width="14" height="12" rx="1.5" fill="url(#lg)" stroke="#1e3a5f"/>
-        <path d="M 12.5 14 L 12.5 10 Q 12.5 6 16 6 Q 19.5 6 19.5 10 L 19.5 14"
-              fill="none" stroke="#1e3a5f" stroke-width="1.5" stroke-linecap="round"/>
-        <circle cx="16" cy="19" r="1.5" fill="#1e3a5f"/>
-        <rect x="15.5" y="19" width="1" height="3" fill="#1e3a5f" rx="0.5"/>
+        <!-- Padlock body with golden color like 🔒 emoji -->
+        <rect x="8" y="15" width="16" height="14" rx="2" fill="url(#lg)" stroke="#d4911a" stroke-width="1.5"/>
+        <!-- Padlock shackle -->
+        <path d="M 12 15 L 12 10 Q 12 5 16 5 Q 20 5 20 10 L 20 15"
+              fill="none" stroke="#d4911a" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- Keyhole -->
+        <circle cx="16" cy="21" r="2" fill="#d4911a"/>
+        <rect x="15" y="21" width="2" height="4" fill="#d4911a" rx="1"/>
+        <!-- Highlight for 3D effect -->
+        <rect x="10" y="17" width="4" height="1.5" rx="0.75" fill="#ffffff" opacity="0.6"/>
         </svg>"""
         return Response(content=favicon_svg, media_type="image/svg+xml")
 
     @app.get("/", response_class=Response)
     async def root() -> Response:
-        protocol = "https" if config.tls_cert and config.tls_key else "http"
-        server_url = f"{protocol}://{config.bind_address}:{config.port}"
+        # Get current config from scanner to reflect hot reload changes
+        current_config = scanner.config
+        protocol = "https" if current_config.tls_cert and current_config.tls_key else "http"
+        server_url = f"{protocol}://{current_config.bind_address}:{current_config.port}"
         html_content = f"""
         <!DOCTYPE html>
 <html>
@@ -397,41 +404,60 @@ def create_app(
             </div>
             <div class="config-item">
                 <div class="config-label">TLS Enabled</div>
-                <div class="config-value">{'Yes' if config.tls_cert and config.tls_key else 'No'}</div>
+                <div class="config-value">{'Yes' if current_config.tls_cert and current_config.tls_key else 'No'}</div>
             </div>
             <div class="config-item">
                 <div class="config-label">Workers</div>
-                <div class="config-value">{config.workers}</div>
+                <div class="config-value">{current_config.workers}</div>
             </div>
             <div class="config-item">
                 <div class="config-label">Scan Interval</div>
-                <div class="config-value">{config.scan_interval}</div>
+                <div class="config-value">{current_config.scan_interval}</div>
             </div>
             <div class="config-item">
                 <div class="config-label">Hot Reload</div>
-                <div class="config-value">{'Enabled' if config.hot_reload else 'Disabled'}</div>
+                <div class="config-value">{'Enabled' if current_config.hot_reload else 'Disabled'}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Cache Type</div>
+                <div class="config-value">{current_config.cache_type.title()}</div>
             </div>
             <div class="config-item">
                 <div class="config-label">Cache Directory</div>
-                <div class="config-value">{config.cache_dir}</div>
+                <div class="config-value">{current_config.cache_dir if current_config.cache_type in ('file', 'both') else 'N/A (memory only)'}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Cache TTL</div>
+                <div class="config-value">{current_config.cache_ttl}</div>
+            </div>
+            <div class="config-item">
+                <div class="config-label">Cache Max Size</div>
+                <div class="config-value">{current_config.cache_max_size // 1024 // 1024}MB</div>
             </div>
             <div class="config-item">
                 <div class="config-label">Log Level</div>
-                <div class="config-value">{config.log_level}</div>
+                <div class="config-value">{current_config.log_level}</div>
             </div>
         </div>
 
         <h3>📂 Monitored Directories</h3>
         <div style="margin-top: 15px;">
-            {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{directory}</code></div>' for directory in config.certificate_directories)}
+            {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{directory}</code></div>' for directory in current_config.certificate_directories)}
         </div>
 
         {f'''
         <h3>🚫 Excluded Directories</h3>
         <div style="margin-top: 15px;">
-            {"".join(f'<div style="background: #fef2f2; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ef4444;"><code>{directory}</code></div>' for directory in config.exclude_directories)}
+            {"".join(f'<div style="background: #fef2f2; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ef4444;"><code>{directory}</code></div>' for directory in current_config.exclude_directories)}
         </div>
-        ''' if config.exclude_directories else ''}
+        ''' if current_config.exclude_directories else ''}
+
+        {f'''
+        <h3>🔍 Excluded File Patterns</h3>
+        <div style="margin-top: 15px;">
+            {"".join(f'<div style="background: #fff4e6; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ff8c00;"><code>{pattern}</code></div>' for pattern in current_config.exclude_file_patterns)}
+        </div>
+        ''' if current_config.exclude_file_patterns else ''}
     </div>
 
     <div class="footer">

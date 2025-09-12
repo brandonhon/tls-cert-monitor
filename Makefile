@@ -163,55 +163,149 @@ build: ## Build distribution packages
 	@printf "$(GREEN)✅ Build completed - packages in dist/$(NC)\n"
 
 # ----------------------------
-# Container-based Nuitka Builds
+# Build Dependencies Check
 # ----------------------------
-.PHONY: build-linux
-build-linux: ## Build Linux binary using Nuitka in container
-	@printf "$(BLUE)🐧 Building Linux binary in container...$(NC)\n"
-	@mkdir -p dist
-	@docker build -f build/Dockerfile.linux -t $(PROJECT_NAME)-builder-linux .
-	@docker run --rm \
-		-v $$(pwd)/dist:/app/dist \
-		$(PROJECT_NAME)-builder-linux
-	@printf "$(GREEN)✅ Linux binary: dist/$(PROJECT_NAME)-linux$(NC)\n"
-
-.PHONY: build-windows
-build-windows: ## Build Windows binary using Nuitka + MinGW in container
-	@printf "$(BLUE)🪟 Building Windows binary in container...$(NC)\n"
-	@mkdir -p dist
-	@docker build -f build/Dockerfile.windows -t $(PROJECT_NAME)-builder-windows .
-	@docker run --rm \
-		-v $$(pwd)/dist:/app/dist \
-		$(PROJECT_NAME)-builder-windows
-	@printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"
-
-.PHONY: build-macos
-build-macos: ## Build macOS binary using local Nuitka (requires macOS)
-	@printf "$(BLUE)🍎 Building macOS binary locally...$(NC)\n"
-	@if [ "$$(uname)" != "Darwin" ]; then \
-		printf "$(RED)❌ macOS builds require macOS runner - use GitHub Actions$(NC)\n"; \
+.PHONY: check-build-deps
+check-build-deps: ## Check if build dependencies are available
+	@printf "$(BLUE)🔍 Checking build dependencies...$(NC)\n"
+	@if ! $(VENV_PYTHON) -c "import nuitka" >/dev/null 2>&1; then \
+		printf "$(RED)❌ Nuitka not found - installing...$(NC)\n"; \
+		$(VENV_PIP) install nuitka; \
+	else \
+		printf "$(GREEN)✅ Nuitka available$(NC)\n"; \
+	fi
+	@if command -v clang >/dev/null 2>&1; then \
+		printf "$(GREEN)✅ Clang compiler available$(NC)\n"; \
+	elif command -v gcc >/dev/null 2>&1; then \
+		printf "$(YELLOW)⚠️  GCC available (Clang recommended for better performance)$(NC)\n"; \
+	else \
+		printf "$(RED)❌ No C compiler found - install clang or gcc$(NC)\n"; \
 		exit 1; \
 	fi
+
+# ----------------------------
+# Native Nuitka Builds (Local Platform)
+# ----------------------------
+.PHONY: build-native
+build-native: check-build-deps ## Build binary for current platform using local Nuitka
+	@printf "$(BLUE)🔧 Building native binary for $$(uname -s)...$(NC)\n"
 	@mkdir -p dist
 	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		--jobs=4 \
+		--clang \
+		--lto=no \
+		--nofollow-import-to=numpy \
+		--nofollow-import-to=matplotlib \
 		main.py \
 		--output-dir=dist \
-		--output-filename=$(PROJECT_NAME)-macos
-	@printf "$(GREEN)✅ macOS binary: dist/$(PROJECT_NAME)-macos$(NC)\n"
+		--output-filename=$(PROJECT_NAME)-$$(uname -s | tr '[:upper:]' '[:lower:]')
+	@printf "$(GREEN)✅ Native binary: dist/$(PROJECT_NAME)-$$(uname -s | tr '[:upper:]' '[:lower:]')$(NC)\n"
+
+.PHONY: build-linux
+build-linux: ## Build Linux binary (Docker fallback if not on Linux)
+	@if [ "$$(uname)" = "Linux" ]; then \
+		printf "$(BLUE)🐧 Building Linux binary locally...$(NC)\n"; \
+		mkdir -p dist; \
+		$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+			--jobs=4 \
+			--clang \
+			--lto=no \
+			--nofollow-import-to=numpy \
+			--nofollow-import-to=matplotlib \
+			main.py \
+			--output-dir=dist \
+			--output-filename=$(PROJECT_NAME)-linux; \
+		printf "$(GREEN)✅ Linux binary: dist/$(PROJECT_NAME)-linux$(NC)\n"; \
+	else \
+		printf "$(YELLOW)⚠️  Not on Linux - attempting Docker build...$(NC)\n"; \
+		if command -v docker >/dev/null 2>&1 && [ -f build/Dockerfile.linux ]; then \
+			mkdir -p dist; \
+			docker build -f build/Dockerfile.linux -t $(PROJECT_NAME)-builder-linux .; \
+			docker run --rm -v $$(pwd)/dist:/app/dist $(PROJECT_NAME)-builder-linux; \
+			printf "$(GREEN)✅ Linux binary: dist/$(PROJECT_NAME)-linux$(NC)\n"; \
+		else \
+			printf "$(RED)❌ Docker not available or Dockerfile.linux not found$(NC)\n"; \
+			printf "$(YELLOW)💡 Run 'make build-native' to build for current platform$(NC)\n"; \
+			exit 1; \
+		fi \
+	fi
+
+.PHONY: build-windows
+build-windows: ## Build Windows binary (Docker fallback if not on Windows)
+	@if [ "$$(uname | grep -i cygwin\|mingw\|msys)" ] || [ "$$(uname)" = "MINGW64_NT-10.0" ]; then \
+		printf "$(BLUE)🪟 Building Windows binary locally...$(NC)\n"; \
+		mkdir -p dist; \
+		$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+			--jobs=4 \
+			--clang \
+			--lto=no \
+			--nofollow-import-to=numpy \
+			--nofollow-import-to=matplotlib \
+			main.py \
+			--output-dir=dist \
+			--output-filename=$(PROJECT_NAME)-windows.exe; \
+		printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"; \
+	else \
+		printf "$(YELLOW)⚠️  Not on Windows - attempting Docker build...$(NC)\n"; \
+		if command -v docker >/dev/null 2>&1 && [ -f build/Dockerfile.windows ]; then \
+			mkdir -p dist; \
+			docker build -f build/Dockerfile.windows -t $(PROJECT_NAME)-builder-windows .; \
+			docker run --rm -v $$(pwd)/dist:/app/dist $(PROJECT_NAME)-builder-windows; \
+			printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"; \
+		else \
+			printf "$(RED)❌ Docker not available or Dockerfile.windows not found$(NC)\n"; \
+			printf "$(YELLOW)💡 Run 'make build-native' to build for current platform$(NC)\n"; \
+			exit 1; \
+		fi \
+	fi
+
+.PHONY: build-macos
+build-macos: ## Build macOS binary (requires macOS)
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		printf "$(BLUE)🍎 Building macOS binary locally...$(NC)\n"; \
+		mkdir -p dist; \
+		$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+			--jobs=4 \
+			--clang \
+			--lto=no \
+			--nofollow-import-to=numpy \
+			--nofollow-import-to=matplotlib \
+			main.py \
+			--output-dir=dist \
+			--output-filename=$(PROJECT_NAME)-macos; \
+		printf "$(GREEN)✅ macOS binary: dist/$(PROJECT_NAME)-macos$(NC)\n"; \
+	else \
+		printf "$(RED)❌ macOS builds require macOS platform$(NC)\n"; \
+		printf "$(YELLOW)💡 Run 'make build-native' to build for current platform$(NC)\n"; \
+		exit 1; \
+	fi
 
 .PHONY: build-all
-build-all: build-linux build-windows ## Build for Linux and Windows in containers (macOS requires macOS runner)
+build-all: ## Build for all platforms (tries native first, falls back to Docker)
+	@printf "$(BLUE)🔨 Building for all supported platforms...$(NC)\n"
+	@make build-native
+	@if [ "$$(uname)" != "Linux" ]; then make build-linux || true; fi
+	@if [ "$$(uname | grep -i cygwin\|mingw\|msys)" = "" ] && [ "$$(uname)" != "MINGW64_NT-10.0" ]; then make build-windows || true; fi
+	@if [ "$$(uname)" != "Darwin" ]; then make build-macos || true; fi
+	@printf "$(GREEN)✅ Multi-platform build completed$(NC)\n"
 
-# Local Nuitka builds (for development)
-.PHONY: build-local
-build-local: ## Build binary for current platform using local Nuitka
-	@printf "$(BLUE)🔧 Building local binary...$(NC)\n"
+# Development build (faster, less optimized)
+.PHONY: build-dev
+build-dev: check-build-deps ## Build development binary (faster compilation, less optimized)
+	@printf "$(BLUE)⚡ Building development binary (fast build)...$(NC)\n"
 	@mkdir -p dist
-	@$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+	@$(NUITKA) --onefile --standalone \
+		--assume-yes-for-downloads \
+		--enable-plugin=pkg-resources \
+		$(INCLUDE_SRC) \
 		main.py \
 		--output-dir=dist \
-		--output-filename=$(PROJECT_NAME)-local
-	@printf "$(GREEN)✅ Local binary: dist/$(PROJECT_NAME)-local$(NC)\n"
+		--output-filename=$(PROJECT_NAME)-dev
+	@printf "$(GREEN)✅ Development binary: dist/$(PROJECT_NAME)-dev$(NC)\n"
+
+# Alias for backward compatibility
+.PHONY: build-local
+build-local: build-native ## Alias for build-native (backward compatibility)
 
 # ----------------------------
 # Installation

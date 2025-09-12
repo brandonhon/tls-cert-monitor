@@ -4,6 +4,7 @@ Certificate scanner for TLS Certificate Monitor.
 
 import asyncio
 import os
+import re
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -260,7 +261,21 @@ class CertificateScanner:
 
                     # Check file extension
                     if file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS:
-                        cert_files.append(file_path)
+                        # Check if file matches any exclude patterns
+                        exclude_file = False
+                        for pattern in self.config.exclude_file_patterns:
+                            try:
+                                if re.search(pattern, file_path.name, re.IGNORECASE):
+                                    self.logger.debug(
+                                        f"Excluding file {file_path.name} (matches pattern: {pattern})"
+                                    )
+                                    exclude_file = True
+                                    break
+                            except re.error as e:
+                                self.logger.warning(f"Invalid regex pattern '{pattern}': {e}")
+
+                        if not exclude_file:
+                            cert_files.append(file_path)
 
         except Exception as e:
             self.logger.error(f"Error walking directory {directory}: {e}")

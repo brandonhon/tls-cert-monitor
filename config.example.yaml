@@ -22,6 +22,14 @@ exclude_directories:
   - "/etc/pki/tls/certs/archived"
   # Add directories you want to exclude from certificate scanning
 
+# File patterns to exclude from scanning (optional)
+# These are regex patterns that will exclude files by name
+exclude_file_patterns:
+  - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
+  - ".*\\.key$"         # Exclude private key files
+  - ".*backup.*"        # Exclude backup files
+  # Add regex patterns for files you want to exclude
+
 # P12/PFX certificate passwords
 # List of passwords to try when decrypting P12/PFX certificate files
 # Common passwords are included by default, add your specific ones here
@@ -49,6 +57,7 @@ dry_run: false
 hot_reload: true
 
 # Cache settings
-cache_dir: "./cache"
+cache_type: "memory"       # "memory", "file", or "both"
+cache_dir: "./cache"       # Only used when cache_type is "file" or "both"
 cache_ttl: "1h"
-cache_max_size: 104857600  # 100MB in bytes
+cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)

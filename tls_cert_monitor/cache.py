@@ -46,6 +46,7 @@ class CacheManager:
     def __init__(self, config: Config):
         self.config = config
         self.logger = get_logger("cache")
+        self.cache_type = config.cache_type
         self.cache_dir = Path(config.cache_dir)
         self.cache_file = self.cache_dir / "cache.json"
         self.ttl = config.cache_ttl_seconds
@@ -62,9 +63,14 @@ class CacheManager:
 
     async def initialize(self) -> None:
         """Initialize cache manager."""
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        await self._load_persistent_cache()
-        self.logger.info(f"Cache initialized - TTL: {self.ttl}s, Max size: {self.max_size} bytes")
+        if self.cache_type in ("file", "both"):
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            await self._load_persistent_cache()
+
+        cache_info = f"Cache initialized - Type: {self.cache_type}, TTL: {self.ttl}s, Max size: {self.max_size} bytes"
+        if self.cache_type == "file":
+            cache_info += f", File: {self.cache_file}"
+        self.logger.info(cache_info)
 
     async def get(self, key: str) -> Optional[Any]:
         """
@@ -201,6 +207,9 @@ class CacheManager:
 
     async def save_to_disk(self) -> None:
         """Save cache to disk."""
+        if self.cache_type == "memory":
+            return  # Skip disk operations for memory-only cache
+
         try:
             async with self._lock:
                 # Convert cache to serializable format

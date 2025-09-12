@@ -22,14 +22,22 @@ cat > "$CONFIG_FILE" <<EOF
 port: 3200
 bind_address: "0.0.0.0"
 
+# tls_cert: "/path/to/server.crt"
+# tls_key: "/path/to/server.key"
+
 certificate_directories:
   - "tests/fixtures/certs"
 
 exclude_directories:
   - "tests/fixtures/certs/exclude"
 
+exclude_file_patterns:
+  - "dhparam.pem"       # Exclude Diffie-Hellman parameter files
+  - ".*\\\.key$"         # Exclude private key files
+  - ".*backup.*"        # Exclude backup files
+
 p12_passwords:
-  - ""                   # Empty password (no password)
+  - ""                    # Empty password (no password)
   - "changeit"           # Java keystore default
   - "password"           # Common default
   - "123456"             # Common weak password
@@ -37,13 +45,15 @@ p12_passwords:
 scan_interval: "5m"
 workers: 4
 log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+# log_file: "/var/log/tls-monitor.log"  # If not set, logs to stdout
 dry_run: false
 hot_reload: true
-cache_dir: "./cache"
-cache_ttl: "1h"
-cache_max_size: 104857600  # 100MB in bytes
+
+cache_type: "memory"       # "memory", "file", or "both"
+cache_dir: "./cache"       # Only used when cache_type is "file" or "both"
+cache_ttl: "5m"
+cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)
 EOF
 
 # Success messages
 echo "✅ Development configuration created: $CONFIG_FILE"
-echo "📝 Use with: ./build/$BINARY_NAME -config=$CONFIG_FILE"

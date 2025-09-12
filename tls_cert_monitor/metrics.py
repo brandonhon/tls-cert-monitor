@@ -171,7 +171,7 @@ class MetricsCollector:
             if "expiration_timestamp" in cert_data:
                 self.ssl_cert_expiration_timestamp.labels(
                     common_name=common_name, issuer=issuer, path=path, serial=serial
-                ).set(int(cert_data["expiration_timestamp"]))
+                ).set(float(cert_data["expiration_timestamp"]))
 
             # SAN count
             if "san_count" in cert_data:
@@ -186,15 +186,7 @@ class MetricsCollector:
                 issuer=issuer,
                 serial=serial,
                 subject=cert_data.get("subject", "unknown"),
-            ).info(
-                {
-                    "algorithm": cert_data.get("signature_algorithm", "unknown"),
-                    "key_size": str(cert_data.get("key_size", 0)),
-                    "not_before": cert_data.get("not_before", ""),
-                    "not_after": cert_data.get("not_after", ""),
-                    "version": str(cert_data.get("version", 0)),
-                }
-            )
+            ).info({})
 
             # Issuer code
             issuer_code = self._get_issuer_code(issuer)
@@ -380,9 +372,9 @@ class MetricsCollector:
             self.logger.error(f"Failed to update system metrics: {e}")
 
     def reset_scan_metrics(self) -> None:
-        """Reset scan-specific metrics for a new scan."""
+        """Reset scan-specific metrics for a new scan. Does not reset counters as they should be cumulative."""
         self._duplicate_certificates.clear()
-        self.logger.debug("Scan metrics reset")
+        self.logger.debug("Scan metrics reset (counters preserved)")
 
     def reset_parse_error_metrics(self) -> None:
         """Reset parse error metrics - useful after configuration changes like new passwords."""
@@ -464,7 +456,6 @@ class MetricsCollector:
                 if any(
                     metric in metric_name
                     for metric in [
-                        "ssl_cert_expiration_timestamp",
                         "ssl_cert_last_scan_timestamp",
                         "ssl_cert_san_count",
                         "ssl_cert_files_total",

@@ -49,6 +49,16 @@ exclude_directories:
   - "C:\\certificates\\old"
   # Add directories you want to exclude from certificate scanning
 
+# File patterns to exclude from scanning (optional)
+# These are regex patterns that will exclude files by name
+exclude_file_patterns:
+  - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
+  - ".*\\.key$"         # Exclude private key files  
+  - ".*backup.*"        # Exclude backup files
+  - ".*\\.bak$"         # Exclude Windows .bak files
+  - ".*temp.*"          # Exclude temporary files
+  # Add regex patterns for files you want to exclude
+
 # P12/PFX certificate passwords
 # List of passwords to try when decrypting P12/PFX certificate files
 # Windows environments often use these common passwords
@@ -86,11 +96,12 @@ dry_run: false
 hot_reload: true
 
 # Cache settings - Windows paths
-cache_dir: ".\\cache"              # Relative path
+cache_type: "memory"       # "memory", "file", or "both"
+cache_dir: ".\\cache"              # Only used when cache_type is "file" or "both"
 # cache_dir: "C:\\ProgramData\\TLSCertMonitor\\cache"  # Absolute path option
 # cache_dir: "%TEMP%\\tls-monitor-cache"               # Temp directory option
 cache_ttl: "1h"
-cache_max_size: 104857600  # 100MB in bytes
+cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)
 
 # Windows-specific notes:
 # 
@@ -119,6 +130,17 @@ cache_max_size: 104857600  # 100MB in bytes
 #    - Consider running as a Windows Service using tools like NSSM or sc.exe
 #    - Set appropriate service account with necessary permissions
 #
-# 6. Firewall:
+# 6. File Exclusion Patterns:
+#    - Use regex patterns to exclude specific files by name
+#    - Windows-specific patterns like .*\\.bak$ for backup files
+#    - Escape backslashes in regex patterns (use \\\\)
+#
+# 7. Cache Configuration:
+#    - "memory" cache: Fast, volatile, 10MB limit recommended
+#    - "file" cache: Persistent across restarts, 30MB limit recommended  
+#    - "both" cache: Combines memory + file caching
+#    - File cache uses Windows-compatible atomic file operations
+#
+# 8. Firewall:
 #    - Ensure port 3200 (or your chosen port) is open in Windows Firewall
 #    - Add firewall rule: netsh advfirewall firewall add rule name="TLS Cert Monitor" dir=in action=allow protocol=TCP localport=3200
