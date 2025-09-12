@@ -1,0 +1,381 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Only run on semantic version tags (v1.0.0, v1.2.3, etc.)
+
+env:
+  PROJECT_NAME: tls-cert-monitor
+
+jobs:
+  build-linux-amd64:
+    name: Build Linux Binary (AMD64)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for changelog generation
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Linux binary
+      run: |
+        echo "🐧 Building Linux binary in container..."
+        mkdir -p dist
+        
+        # Build and run container with proper user permissions
+        docker build -f build/Dockerfile.linux \
+          --build-arg USER_ID=$(id -u) \
+          --build-arg GROUP_ID=$(id -g) \
+          -t ${{ env.PROJECT_NAME }}-builder-linux .
+        docker run --rm -v $(pwd)/dist:/app/dist ${{ env.PROJECT_NAME }}-builder-linux
+        
+        # Verify binary was created and ensure it's executable
+        ls -la dist/
+        
+        # Ensure binary is executable (fallback in case container chmod failed)
+        if [ -f "dist/tls-cert-monitor" ]; then
+          chmod +x dist/tls-cert-monitor || sudo chmod +x dist/tls-cert-monitor || echo "Warning: Could not make binary executable"
+        fi
+        
+        file dist/tls-cert-monitor
+        ls -lh dist/tls-cert-monitor
+
+    - name: Upload Linux binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-amd64-binary
+        path: dist/tls-cert-monitor
+        retention-days: 30
+
+  build-windows-amd64:
+    name: Build Windows Binary (AMD64)
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Cache Nuitka
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/Nuitka
+          ~/AppData/Local/Nuitka
+          %LOCALAPPDATA%\Nuitka
+        key: nuitka-${{ runner.os }}-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
+        restore-keys: |
+          nuitka-${{ runner.os }}-
+        save-always: true
+
+    - name: Build Windows binary
+      run: |
+        Write-Host "🪟 Building Windows binary with Nuitka..."
+        New-Item -ItemType Directory -Path dist -Force
+        
+        $FLAGS = @(
+          "--onefile",
+          "--standalone", 
+          "--disable-console",
+          "--enable-plugin=pyside6",
+          "--include-package=tls_cert_monitor",
+          "--include-data-dir=tls_cert_monitor=tls_cert_monitor",
+          "--output-dir=dist",
+          "--output-filename=${{ env.PROJECT_NAME }}.exe"
+        )
+        
+        python -m nuitka $FLAGS main.py
+        
+        Write-Host "📄 Verifying Windows binary..."
+        Get-ChildItem -Path dist -Name "*.exe" | ForEach-Object { 
+          Write-Host "Binary: $_"
+          $path = Join-Path -Path dist -ChildPath $_
+          (Get-Item $path).Length
+        }
+
+    - name: Upload Windows binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-amd64-binary
+        path: dist/${{ env.PROJECT_NAME }}.exe
+        retention-days: 30
+
+  build-macos-amd64:
+    name: Build macOS Binary (AMD64)
+    runs-on: macos-13  # Intel-based runner for AMD64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Build macOS binary
+      run: |
+        echo "🍎 Building macOS binary with Nuitka..."
+        mkdir -p dist
+        
+        python -m nuitka \
+          --onefile \
+          --standalone \
+          --disable-console \
+          --include-package=tls_cert_monitor \
+          --include-data-dir=tls_cert_monitor=tls_cert_monitor \
+          --output-dir=dist \
+          --output-filename=${{ env.PROJECT_NAME }}-darwin-amd64 \
+          main.py
+        
+        echo "📄 Verifying macOS binary..."
+        ls -la dist/
+        file dist/${{ env.PROJECT_NAME }}-darwin-amd64
+
+    - name: Upload macOS binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-amd64-binary
+        path: dist/${{ env.PROJECT_NAME }}-darwin-amd64
+        retention-days: 30
+
+  build-macos-arm64:
+    name: Build macOS Binary (ARM64)
+    runs-on: macos-14  # Apple Silicon runner for ARM64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Build macOS ARM64 binary
+      run: |
+        echo "🍎 Building macOS ARM64 binary with Nuitka..."
+        mkdir -p dist
+        
+        python -m nuitka \
+          --onefile \
+          --standalone \
+          --disable-console \
+          --include-package=tls_cert_monitor \
+          --include-data-dir=tls_cert_monitor=tls_cert_monitor \
+          --output-dir=dist \
+          --output-filename=${{ env.PROJECT_NAME }}-darwin-arm64 \
+          main.py
+        
+        echo "📄 Verifying macOS ARM64 binary..."
+        ls -la dist/
+        file dist/${{ env.PROJECT_NAME }}-darwin-arm64
+
+    - name: Upload macOS ARM64 binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-arm64-binary
+        path: dist/${{ env.PROJECT_NAME }}-darwin-arm64
+        retention-days: 30
+
+  build-container:
+    name: Build and Push Container Images
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository_owner }}/${{ env.PROJECT_NAME }}
+        tags: |
+          type=ref,event=tag
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+
+    - name: Build and push container image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-linux-amd64, build-windows-amd64, build-macos-amd64, build-macos-arm64, build-container]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for changelog
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Prepare release assets
+      run: |
+        echo "📦 Preparing release assets..."
+        mkdir -p release-assets
+        
+        # Linux binary
+        if [ -f linux-amd64-binary/tls-cert-monitor ]; then
+          chmod +x linux-amd64-binary/tls-cert-monitor
+          tar -czf release-assets/linux-amd64.tar.gz -C linux-amd64-binary tls-cert-monitor
+          echo "✅ Created linux-amd64.tar.gz"
+        fi
+        
+        # Windows binary  
+        if [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
+          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.exe
+          echo "✅ Created windows-amd64.tar.gz"
+        fi
+        
+        # macOS AMD64 binary
+        if [ -f macos-amd64-binary/${{ env.PROJECT_NAME }}-darwin-amd64 ]; then
+          chmod +x macos-amd64-binary/${{ env.PROJECT_NAME }}-darwin-amd64
+          tar -czf release-assets/darwin-amd64.tar.gz -C macos-amd64-binary ${{ env.PROJECT_NAME }}-darwin-amd64
+          echo "✅ Created darwin-amd64.tar.gz"
+        fi
+        
+        # macOS ARM64 binary
+        if [ -f macos-arm64-binary/${{ env.PROJECT_NAME }}-darwin-arm64 ]; then
+          chmod +x macos-arm64-binary/${{ env.PROJECT_NAME }}-darwin-arm64
+          tar -czf release-assets/darwin-arm64.tar.gz -C macos-arm64-binary ${{ env.PROJECT_NAME }}-darwin-arm64
+          echo "✅ Created darwin-arm64.tar.gz"
+        fi
+        
+        echo "📋 Release assets created:"
+        ls -la release-assets/
+
+    - name: Generate changelog and release notes
+      id: changelog
+      run: |
+        echo "📝 Generating changelog..."
+        
+        # Get the tag name
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+        
+        # Get previous tag
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        # Generate commit list with links
+        echo "## What's Changed" > release_notes.md
+        echo "" >> release_notes.md
+        
+        if [ -n "$PREV_TAG" ]; then
+          echo "**Changes since ${PREV_TAG}:**" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # Get commits since previous tag
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse >> release_notes.md
+        else
+          echo "**Initial release:**" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # Get all commits
+          git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --reverse >> release_notes.md
+        fi
+        
+        echo "" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 📦 Pre-compiled Binaries" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "This release includes pre-compiled binaries for multiple platforms:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "- **Linux (AMD64)**: \`linux-amd64.tar.gz\`" >> release_notes.md
+        echo "- **Windows (AMD64)**: \`windows-amd64.tar.gz\`" >> release_notes.md
+        echo "- **macOS (Intel)**: \`darwin-amd64.tar.gz\`" >> release_notes.md  
+        echo "- **macOS (Apple Silicon)**: \`darwin-arm64.tar.gz\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 🐳 Container Images" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Container images are available at:" >> release_notes.md
+        echo "- \`ghcr.io/${{ github.repository_owner }}/${{ env.PROJECT_NAME }}:${TAG_NAME}\`" >> release_notes.md
+        echo "- \`ghcr.io/${{ github.repository_owner }}/${{ env.PROJECT_NAME }}:latest\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 📚 Usage" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Extract the binary for your platform and run:" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "./tls-cert-monitor --help" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "For detailed usage instructions, see the [README](https://github.com/${{ github.repository }}#readme)." >> release_notes.md
+        
+        echo "📄 Generated release notes:"
+        cat release_notes.md
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.changelog.outputs.tag_name }}
+        name: Release ${{ steps.changelog.outputs.tag_name }}
+        body_path: release_notes.md
+        files: release-assets/*
+        draft: false
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        generate_release_notes: false  # We generate our own
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Release Summary
+      run: |
+        echo "🎉 Release ${{ steps.changelog.outputs.tag_name }} created successfully!"
+        echo "📦 Assets included:"
+        ls -la release-assets/
+        echo ""
+        echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.changelog.outputs.tag_name }}"
