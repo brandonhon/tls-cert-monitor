@@ -373,7 +373,15 @@ class MetricsCollector:
         self._current_scan_parse_errors = 0
         self._current_scan_weak_keys = 0
         self._current_scan_deprecated_sigalgs = 0
-        self.logger.debug("Scan metrics reset (current counts cleared)")
+
+        # Immediately reset the gauge metrics to zero for instant feedback
+        self.ssl_certs_parsed_total.set(0)
+        self.ssl_cert_parse_errors_total.set(0)
+        self.ssl_cert_weak_key_total.set(0)
+        self.ssl_cert_deprecated_sigalg_total.set(0)
+        self.ssl_cert_duplicate_count.set(0)
+
+        self.logger.debug("Scan metrics reset (current counts cleared and gauges zeroed)")
 
     def reset_parse_error_metrics(self) -> None:
         """Reset parse error metrics - useful after configuration changes like new passwords."""
