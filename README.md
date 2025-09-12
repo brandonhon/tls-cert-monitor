@@ -247,6 +247,11 @@ make run-system         # Run with system Python
 make run-config         # Run with config file
 make run-dev            # Run in development mode
 
+# Building
+make build-native       # Build native binary for current platform
+make build-dev          # Build development binary
+make check-build-deps   # Check build dependencies
+
 # Docker
 make docker-build       # Build Docker image
 make docker-run         # Run Docker container
