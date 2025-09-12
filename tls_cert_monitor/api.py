@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from tls_cert_monitor import __version__
 from tls_cert_monitor.cache import CacheManager
 from tls_cert_monitor.config import Config
 from tls_cert_monitor.logger import get_logger
@@ -58,7 +59,7 @@ def create_app(
     app = FastAPI(
         title="TLS Certificate Monitor",
         description="Cross-platform TLS certificate monitoring application",
-        version="1.0.0",
+        version=__version__,
         docs_url="/docs" if not config.dry_run else None,
         redoc_url="/redoc" if not config.dry_run else None,
         lifespan=lifespan_override or lifespan,
@@ -97,6 +98,7 @@ def create_app(
                 **metrics_health,
                 **system_health,
                 "status": "healthy",
+                "version": __version__,
             }
 
             return JSONResponse(content=health_status)
@@ -313,7 +315,7 @@ def create_app(
     </style>
 </head>
 <body>
-    <h1>🔒 TLS Certificate Monitor</h1>
+    <h1>🔒 TLS Certificate Monitor v{__version__}</h1>
 
     <div class="container">
         <h2>📊 Monitoring Endpoints</h2>
@@ -461,7 +463,7 @@ def create_app(
     </div>
 
     <div class="footer">
-        <p>TLS Certificate Monitor v1.0.0 |
+        <p>TLS Certificate Monitor v{__version__} |
            <a href="/docs" target="_blank">API Documentation</a> |
            <a href="https://github.com/brandonhon/tls-cert-monitor" target="_blank">GitHub</a>
         </p>
