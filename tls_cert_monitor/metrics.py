@@ -92,14 +92,13 @@ class MetricsCollector:
             registry=self.registry,
         )
 
-        self.ssl_certs_parsed_total = Counter(
+        self.ssl_certs_parsed_total = Gauge(
             "ssl_certs_parsed_total", "Successfully parsed certificates", registry=self.registry
         )
 
-        self.ssl_cert_parse_errors_total = Counter(
+        self.ssl_cert_parse_errors_total = Gauge(
             "ssl_cert_parse_errors_total",
-            "Certificate parsing errors",
-            ["filename", "error_type"],
+            "Current count of certificate parsing errors",
             registry=self.registry,
         )
 
@@ -149,6 +148,7 @@ class MetricsCollector:
 
         # Internal tracking
         self._duplicate_certificates: Dict[str, List[str]] = defaultdict(list)
+        self._current_scan_parse_errors = 0  # Count of parse errors in current scan
         self._last_system_update = 0.0
         self._system_update_interval = 30  # Update system metrics every 30 seconds
 
@@ -248,8 +248,9 @@ class MetricsCollector:
             self.ssl_cert_scan_duration_seconds.labels(directory=directory).observe(duration)
             self.ssl_cert_last_scan_timestamp.labels(directory=directory).set(int(time.time()))
 
-            # Increment parsed counter
-            self.ssl_certs_parsed_total.inc(parsed_total)
+            # Set current counts (not cumulative)
+            self.ssl_certs_parsed_total.set(parsed_total)
+            self.ssl_cert_parse_errors_total.set(self._current_scan_parse_errors)
 
             log_metrics_collection(
                 self.logger,
@@ -276,7 +277,8 @@ class MetricsCollector:
             error_message: Error message
         """
         try:
-            self.ssl_cert_parse_errors_total.labels(filename=filename, error_type=error_type).inc()
+            # Increment our internal counter for current scan
+            self._current_scan_parse_errors += 1
 
             self.ssl_cert_parse_error_names.labels(
                 filename=filename,
@@ -372,28 +374,23 @@ class MetricsCollector:
             self.logger.error(f"Failed to update system metrics: {e}")
 
     def reset_scan_metrics(self) -> None:
-        """Reset scan-specific metrics for a new scan. Does not reset counters as they should be cumulative."""
+        """Reset scan-specific metrics for a new scan. Resets current counts but preserves historical data."""
         self._duplicate_certificates.clear()
-        self.logger.debug("Scan metrics reset (counters preserved)")
+        self._current_scan_parse_errors = 0
+        self.logger.debug("Scan metrics reset (current counts cleared)")
 
     def reset_parse_error_metrics(self) -> None:
         """Reset parse error metrics - useful after configuration changes like new passwords."""
-        # For Counters, we need to recreate them since they can't be truly reset
-        # Unregister the old counters
+        # Reset the current scan error count and gauge
+        self._current_scan_parse_errors = 0
+        self.ssl_cert_parse_errors_total.set(0)
+
+        # Clear individual error details
         try:
-            self.registry.unregister(self.ssl_cert_parse_errors_total)
             self.registry.unregister(self.ssl_cert_parse_error_names)
         except KeyError:
-            # Counter might not be registered yet
+            # Metric might not be registered yet
             pass
-
-        # Recreate the counters with fresh state
-        self.ssl_cert_parse_errors_total = Counter(
-            "ssl_cert_parse_errors_total",
-            "Certificate parsing errors",
-            ["filename", "error_type"],
-            registry=self.registry,
-        )
 
         self.ssl_cert_parse_error_names = Info(
             "ssl_cert_parse_error_names",
