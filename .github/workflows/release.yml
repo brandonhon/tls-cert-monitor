@@ -94,9 +94,13 @@ jobs:
           "--onefile",
           "--standalone", 
           "--disable-console",
-          "--enable-plugin=pyside6",
+          "--enable-plugin=pkg-resources",
+          "--assume-yes-for-downloads",
+          "--follow-imports",
           "--include-package=tls_cert_monitor",
-          "--include-data-dir=tls_cert_monitor=tls_cert_monitor",
+          "--include-module=uvicorn",
+          "--include-module=cryptography",
+          "--include-module=prometheus_client",
           "--output-dir=dist",
           "--output-filename=${{ env.PROJECT_NAME }}.exe"
         )
@@ -147,8 +151,13 @@ jobs:
           --onefile \
           --standalone \
           --disable-console \
+          --enable-plugin=pkg-resources \
+          --assume-yes-for-downloads \
+          --follow-imports \
           --include-package=tls_cert_monitor \
-          --include-data-dir=tls_cert_monitor=tls_cert_monitor \
+          --include-module=uvicorn \
+          --include-module=cryptography \
+          --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-amd64 \
           main.py
@@ -194,8 +203,13 @@ jobs:
           --onefile \
           --standalone \
           --disable-console \
+          --enable-plugin=pkg-resources \
+          --assume-yes-for-downloads \
+          --follow-imports \
           --include-package=tls_cert_monitor \
-          --include-data-dir=tls_cert_monitor=tls_cert_monitor \
+          --include-module=uvicorn \
+          --include-module=cryptography \
+          --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-arm64 \
           main.py
