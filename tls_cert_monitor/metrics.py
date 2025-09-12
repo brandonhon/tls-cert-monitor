@@ -383,6 +383,72 @@ class MetricsCollector:
 
         self.logger.debug("Scan metrics reset (current counts cleared and gauges zeroed)")
 
+    def clear_all_certificate_metrics(self) -> None:
+        """Clear all labeled certificate metrics. Used when exclude patterns change."""
+        try:
+            # Clear all labeled metrics by recreating them
+            # This is necessary because Prometheus labeled metrics can't be selectively cleared
+
+            # Store the registry reference
+            registry = self.registry
+
+            # Unregister all labeled certificate metrics
+            labeled_metrics = [
+                self.ssl_cert_expiration_timestamp,
+                self.ssl_cert_san_count,
+                self.ssl_cert_info,
+                self.ssl_cert_duplicate_names,
+                self.ssl_cert_issuer_code,
+            ]
+
+            for metric in labeled_metrics:
+                try:
+                    registry.unregister(metric)
+                except KeyError:
+                    # Metric might not be registered yet
+                    pass
+
+            # Recreate all labeled metrics
+            self.ssl_cert_expiration_timestamp = Gauge(
+                "ssl_cert_expiration_timestamp",
+                "Certificate expiration time (Unix timestamp)",
+                ["common_name", "issuer", "path", "serial"],
+                registry=registry,
+            )
+
+            self.ssl_cert_san_count = Gauge(
+                "ssl_cert_san_count",
+                "Number of Subject Alternative Names",
+                ["common_name", "path"],
+                registry=registry,
+            )
+
+            self.ssl_cert_info = Info(
+                "ssl_cert_info",
+                "Certificate information with labels",
+                ["path", "common_name", "issuer", "serial", "subject"],
+                registry=registry,
+            )
+
+            self.ssl_cert_duplicate_names = Info(
+                "ssl_cert_duplicate_names",
+                "Names of certificates that are duplicates",
+                ["serial_number"],
+                registry=registry,
+            )
+
+            self.ssl_cert_issuer_code = Gauge(
+                "ssl_cert_issuer_code",
+                "Numeric issuer classification",
+                ["common_name", "issuer", "path"],
+                registry=registry,
+            )
+
+            self.logger.debug("All labeled certificate metrics cleared and recreated")
+
+        except Exception as e:
+            self.logger.error(f"Failed to clear certificate metrics: {e}")
+
     def reset_parse_error_metrics(self) -> None:
         """Reset parse error metrics - useful after configuration changes like new passwords."""
         # Reset the current scan error count and gauge

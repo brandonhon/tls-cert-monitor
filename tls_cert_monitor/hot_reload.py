@@ -326,10 +326,13 @@ class HotReloadManager:
                     await self.scanner.cache.clear()
                     self.logger.info("Cache cleared due to exclude pattern changes")
 
-                # Reset scan metrics to ensure accurate counts with new excludes
+                # Clear all certificate metrics to remove excluded certificates from metrics
                 if hasattr(self.scanner, "metrics"):
+                    self.scanner.metrics.clear_all_certificate_metrics()
                     self.scanner.metrics.reset_scan_metrics()
-                    self.logger.info("Scan metrics reset due to exclude pattern changes")
+                    self.logger.info(
+                        "Certificate metrics cleared and scan metrics reset due to exclude pattern changes"
+                    )
 
                 # Trigger immediate re-scan to update metrics
                 try:
