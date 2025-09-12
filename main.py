@@ -169,7 +169,7 @@ class TLSCertMonitor:
 @click.command()
 @click.option(
     "--config",
-    "-c",
+    "-f",
     type=click.Path(exists=True, path_type=Path),
     help="Path to configuration file",
 )
