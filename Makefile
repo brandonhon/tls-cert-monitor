@@ -94,6 +94,42 @@ security: ## Run security checks with bandit
 	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/
 	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
+.PHONY: format-system
+format-system: ## Format code with black and isort (system-wide)
+	@printf "$(BLUE)🎨 Formatting code (system-wide)...$(NC)\n"
+	@$(PYTHON) -m black .
+	@$(PYTHON) -m isort .
+	@printf "$(GREEN)✅ Code formatted$(NC)\n"
+
+.PHONY: lint-system
+lint-system: ## Run linters (system-wide)
+	@printf "$(BLUE)🔍 Running linters (system-wide)...$(NC)\n"
+	@$(PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache
+	@$(PYTHON) -m pylint tls_cert_monitor/ --disable=C,R,I,W1203,W0718,W0212 --msg-template='{path}:{line}: {msg_id}: {msg}'
+	@printf "$(GREEN)✅ Linting completed$(NC)\n"
+
+.PHONY: typecheck-system
+typecheck-system: ## Run mypy type checking (system-wide)
+	@printf "$(BLUE)🔍 Running type checker (system-wide)...$(NC)\n"
+	@$(PYTHON) -m mypy tls_cert_monitor/
+	@printf "$(GREEN)✅ Type checking completed$(NC)\n"
+
+.PHONY: security-system
+security-system: ## Run security checks with bandit (system-wide)
+	@printf "$(BLUE)🔐 Running security checks (system-wide)...$(NC)\n"
+	@$(PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104
+	@$(PYTHON) -m bandit -r tls_cert_monitor/
+	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
+
+.PHONY: test-system
+test-system: ## Run tests (system-wide)
+	@printf "$(BLUE)🧪 Running tests (system-wide)...$(NC)\n"
+	@$(PYTHON) -m pytest tests/ -v
+	@printf "$(GREEN)✅ Tests completed$(NC)\n"
+
+.PHONY: check-system
+check-system: format-system lint-system typecheck-system security-system ## Run all code quality checks (system-wide)
+
 .PHONY: check
 check: format lint typecheck security ## Run all code quality checks
 

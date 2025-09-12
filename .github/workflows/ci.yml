@@ -54,10 +54,10 @@ jobs:
         pip install -r requirements-dev.txt
 
     - name: Run quality checks
-      run: make check
+      run: make check-system
 
     - name: Run tests
-      run: make test
+      run: make test-system
 
     - name: Test dry-run execution
       run: |
