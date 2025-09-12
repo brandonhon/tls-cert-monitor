@@ -276,6 +276,17 @@ class HotReloadManager:
             new_passwords = set(new_config.p12_passwords)
             passwords_changed = old_passwords != new_passwords
 
+            # Check if exclude patterns changed
+            old_exclude_dirs = set(self.config.exclude_directories or [])
+            new_exclude_dirs = set(new_config.exclude_directories or [])
+            exclude_dirs_changed = old_exclude_dirs != new_exclude_dirs
+
+            old_exclude_patterns = set(self.config.exclude_file_patterns or [])
+            new_exclude_patterns = set(new_config.exclude_file_patterns or [])
+            exclude_patterns_changed = old_exclude_patterns != new_exclude_patterns
+
+            exclude_changed = exclude_dirs_changed or exclude_patterns_changed
+
             # Update configuration
             old_config = self.config
             self.config = new_config
@@ -309,6 +320,28 @@ class HotReloadManager:
                 except Exception as e:
                     self.logger.error(f"Failed to trigger re-scan after password change: {e}")
 
+            # Clear cache and trigger re-scan if exclude patterns changed
+            if exclude_changed:
+                if hasattr(self.scanner, "cache"):
+                    await self.scanner.cache.clear()
+                    self.logger.info("Cache cleared due to exclude pattern changes")
+
+                # Reset scan metrics to ensure accurate counts with new excludes
+                if hasattr(self.scanner, "metrics"):
+                    self.scanner.metrics.reset_scan_metrics()
+                    self.logger.info("Scan metrics reset due to exclude pattern changes")
+
+                # Trigger immediate re-scan to update metrics
+                try:
+                    self.logger.info(
+                        "Triggering certificate re-scan due to exclude pattern changes"
+                    )
+                    await self.scanner.scan_once()
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to trigger re-scan after exclude pattern change: {e}"
+                    )
+
             # Log configuration changes
             changes = []
             if dirs_added:
@@ -328,6 +361,20 @@ class HotReloadManager:
                     changes.append(f"Added {len(passwords_added)} P12 password(s)")
                 if passwords_removed:
                     changes.append(f"Removed {len(passwords_removed)} P12 password(s)")
+            if exclude_dirs_changed:
+                exclude_dirs_added = new_exclude_dirs - old_exclude_dirs
+                exclude_dirs_removed = old_exclude_dirs - new_exclude_dirs
+                if exclude_dirs_added:
+                    changes.append(f"Added exclude directories: {exclude_dirs_added}")
+                if exclude_dirs_removed:
+                    changes.append(f"Removed exclude directories: {exclude_dirs_removed}")
+            if exclude_patterns_changed:
+                exclude_patterns_added = new_exclude_patterns - old_exclude_patterns
+                exclude_patterns_removed = old_exclude_patterns - new_exclude_patterns
+                if exclude_patterns_added:
+                    changes.append(f"Added exclude patterns: {exclude_patterns_added}")
+                if exclude_patterns_removed:
+                    changes.append(f"Removed exclude patterns: {exclude_patterns_removed}")
 
             if changes:
                 self.logger.info(f"Configuration updated: {'; '.join(changes)}")

@@ -11,7 +11,6 @@ import psutil
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
-    Counter,
     Gauge,
     Histogram,
     Info,
@@ -70,17 +69,15 @@ class MetricsCollector:
         )
 
         # Cryptographic security metrics
-        self.ssl_cert_weak_key_total = Counter(
+        self.ssl_cert_weak_key_total = Gauge(
             "ssl_cert_weak_key_total",
-            "Certificates with weak cryptographic keys",
-            ["common_name", "path", "key_size", "algorithm"],
+            "Current count of certificates with weak cryptographic keys",
             registry=self.registry,
         )
 
-        self.ssl_cert_deprecated_sigalg_total = Counter(
+        self.ssl_cert_deprecated_sigalg_total = Gauge(
             "ssl_cert_deprecated_sigalg_total",
-            "Certificates using deprecated signature algorithms",
-            ["common_name", "path", "algorithm"],
+            "Current count of certificates using deprecated signature algorithms",
             registry=self.registry,
         )
 
@@ -149,6 +146,10 @@ class MetricsCollector:
         # Internal tracking
         self._duplicate_certificates: Dict[str, List[str]] = defaultdict(list)
         self._current_scan_parse_errors = 0  # Count of parse errors in current scan
+        self._current_scan_weak_keys = 0  # Count of weak keys in current scan
+        self._current_scan_deprecated_sigalgs = (
+            0  # Count of deprecated signature algorithms in current scan
+        )
         self._last_system_update = 0.0
         self._system_update_interval = 30  # Update system metrics every 30 seconds
 
@@ -200,20 +201,11 @@ class MetricsCollector:
 
             # Check for weak keys
             if cert_data.get("is_weak_key", False):
-                self.ssl_cert_weak_key_total.labels(
-                    common_name=common_name,
-                    path=path,
-                    key_size=str(cert_data.get("key_size", 0)),
-                    algorithm=cert_data.get("key_algorithm", "unknown"),
-                ).inc()
+                self._current_scan_weak_keys += 1
 
             # Check for deprecated signature algorithms
             if cert_data.get("is_deprecated_algorithm", False):
-                self.ssl_cert_deprecated_sigalg_total.labels(
-                    common_name=common_name,
-                    path=path,
-                    algorithm=cert_data.get("signature_algorithm", "unknown"),
-                ).inc()
+                self._current_scan_deprecated_sigalgs += 1
 
             log_metrics_collection(
                 self.logger,
@@ -251,6 +243,8 @@ class MetricsCollector:
             # Set current counts (not cumulative)
             self.ssl_certs_parsed_total.set(parsed_total)
             self.ssl_cert_parse_errors_total.set(self._current_scan_parse_errors)
+            self.ssl_cert_weak_key_total.set(self._current_scan_weak_keys)
+            self.ssl_cert_deprecated_sigalg_total.set(self._current_scan_deprecated_sigalgs)
 
             log_metrics_collection(
                 self.logger,
@@ -377,6 +371,8 @@ class MetricsCollector:
         """Reset scan-specific metrics for a new scan. Resets current counts but preserves historical data."""
         self._duplicate_certificates.clear()
         self._current_scan_parse_errors = 0
+        self._current_scan_weak_keys = 0
+        self._current_scan_deprecated_sigalgs = 0
         self.logger.debug("Scan metrics reset (current counts cleared)")
 
     def reset_parse_error_metrics(self) -> None:
