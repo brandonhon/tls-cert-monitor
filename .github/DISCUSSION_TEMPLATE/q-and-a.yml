@@ -1,0 +1,25 @@
+title: "❓ [Question]: "
+body: |
+  ## Question
+  What do you need help with?
+
+  ## Environment
+  - OS: (e.g., Ubuntu 22.04, Windows 11, macOS 14)
+  - Installation method: (binary, Docker, source)
+  - Version: (e.g., v1.0.5)
+
+  ## What I've Tried
+  What have you already attempted?
+
+  ## Configuration (if relevant)
+  Share relevant parts of your config.yaml (remove sensitive data).
+
+  ## Logs/Error Messages
+  ```
+  Paste any relevant logs or error messages here
+  ```
+
+  ## Expected Behavior
+  What did you expect to happen?
+
+labels: ["question", "help-wanted"]

@@ -1,0 +1,18 @@
+title: "💡 [Idea]: "
+body: |
+  ## Problem or Use Case
+  Describe what problem this idea would solve or what use case it addresses.
+
+  ## Proposed Solution
+  What are you thinking? How would this work?
+
+  ## Benefits
+  Who would benefit from this? How would it improve the project?
+
+  ## Implementation Thoughts
+  Any ideas on how this could be implemented? (Optional)
+
+  ## Additional Context
+  Anything else we should know?
+
+labels: ["enhancement", "needs-discussion"]
