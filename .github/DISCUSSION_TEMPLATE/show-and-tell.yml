@@ -1,0 +1,23 @@
+title: "🚀 [Show and Tell]: "
+body: |
+  ## What I Built/Configured
+  Tell us what you've done with TLS Certificate Monitor!
+
+  ## Setup Details
+  - Environment: (e.g., Docker, binary, source)
+  - Platform: (e.g., Linux, Windows, macOS)
+  - Scale: (e.g., monitoring 50 certificates, enterprise setup)
+
+  ## Configuration Highlights
+  Share any interesting configuration, custom metrics, or integrations.
+
+  ## Results/Screenshots
+  Show us what it looks like! Metrics dashboards, alerts, etc.
+
+  ## Lessons Learned
+  What worked well? Any challenges or tips for others?
+
+  ## Code/Config (Optional)
+  Feel free to share relevant configuration snippets or scripts.
+
+labels: ["community", "showcase"]

@@ -1,0 +1,26 @@
+# Global code owners - require review from @brandonhon for all changes
+* @brandonhon
+
+# GitHub workflows and CI/CD - critical infrastructure
+/.github/ @brandonhon
+/build/ @brandonhon
+/docker/ @brandonhon
+
+# Core application code
+/tls_cert_monitor/ @brandonhon
+/main.py @brandonhon
+/setup.py @brandonhon
+
+# Configuration and documentation
+/CONTRIBUTING.md @brandonhon
+/SECURITY.md @brandonhon
+/README.md @brandonhon
+/CLAUDE.md @brandonhon
+
+# Build and release configuration
+/Makefile @brandonhon
+/requirements*.txt @brandonhon
+/pyproject.toml @brandonhon
+
+# Scripts and automation
+/scripts/ @brandonhon
