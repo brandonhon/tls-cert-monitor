@@ -122,11 +122,11 @@ Use the feature request template and include:
 
 ## 🤝 Code of Conduct
 
-This project follows a standard Code of Conduct. By participating, you agree to:
-- Be respectful and inclusive
+By participating in this project, you agree to:
+- Be respectful in discussions
 - Focus on constructive feedback
-- Help maintain a welcoming environment
-- Report unacceptable behavior to maintainers
+- Follow professional standards
+- Report disruptive behavior to maintainers
 
 ## 📞 Getting Help
 
