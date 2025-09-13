@@ -1,0 +1,75 @@
+name: Build Check (PR)
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      # Only run binary builds when these files change
+      - 'main.py'
+      - 'tls_cert_monitor/**/*.py'
+      - 'requirements*.txt' 
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'build/**'
+      - 'Makefile'
+      - '.github/workflows/build-*.yml'
+      - '.github/workflows/release.yml'
+
+env:
+  PROJECT_NAME: tls-cert-monitor
+
+jobs:
+  # Quick smoke test build - just verify it compiles
+  build-smoke-test:
+    name: Build Smoke Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Test Nuitka compilation (dev build)
+      run: |
+        echo "🔧 Testing Nuitka compilation..."
+        python -m nuitka --onefile --standalone main.py --output-filename=test-binary
+        
+        # Verify binary was created and is executable
+        ls -la test-binary*
+        chmod +x test-binary*
+        echo "✅ Nuitka compilation successful"
+
+    - name: Test binary execution
+      run: |
+        ./test-binary --version
+        ./test-binary --help
+        echo "✅ Binary execution successful"
+
+  # Optional: Build one platform for testing (only if dockerfile changes)
+  build-docker-test:
+    name: Docker Build Test  
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.changed_files, 'build/') || contains(github.event.pull_request.changed_files, 'Dockerfile')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Test Linux Docker build
+      run: |
+        echo "🐳 Testing Docker build..."
+        docker build -f build/Dockerfile.linux -t test-build .
+        echo "✅ Docker build successful"
