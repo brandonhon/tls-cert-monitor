@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -32,7 +32,7 @@ known_first_party = ["tls_cert_monitor"]
 known_third_party = ["fastapi", "prometheus_client", "cryptography", "pydantic"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

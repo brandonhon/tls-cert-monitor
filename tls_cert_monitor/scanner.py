@@ -392,21 +392,10 @@ class CertificateScanner:
             try:
                 password_bytes = password.encode("utf-8") if password else None
 
-                # Try with cryptography library
-                try:
-                    _, cert, _ = pkcs12.load_key_and_certificates(p12_data, password_bytes)
-                    if cert:
-                        return self._extract_certificate_info(cert)
-                except Exception:
-                    # Try with pyOpenSSL as fallback
-                    p12 = crypto.load_pkcs12(p12_data, password_bytes)  # pylint: disable=no-member
-                    if p12.get_certificate():
-                        # Convert to cryptography certificate
-                        cert_pem = crypto.dump_certificate(
-                            crypto.FILETYPE_PEM, p12.get_certificate()
-                        )
-                        cert = x509.load_pem_x509_certificate(cert_pem)
-                        return self._extract_certificate_info(cert)
+                # Use cryptography library for PKCS#12 parsing
+                _, cert, _ = pkcs12.load_key_and_certificates(p12_data, password_bytes)
+                if cert:
+                    return self._extract_certificate_info(cert)
 
             except Exception as e:
                 self.logger.debug(f"Password attempt failed for PKCS#12 file: {e}")
