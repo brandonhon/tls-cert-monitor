@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 
 from cryptography import x509
 from cryptography.hazmat.primitives.serialization import pkcs12
-from OpenSSL import crypto
 
 from tls_cert_monitor.cache import CacheManager
 from tls_cert_monitor.config import Config
