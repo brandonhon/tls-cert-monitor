@@ -3,12 +3,13 @@ FastAPI application for TLS Certificate Monitor.
 """
 
 import asyncio
+import ipaddress
 import os
 import shutil
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict, Optional, Union
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, Union
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -75,6 +76,60 @@ def create_app(
 
     logger = get_logger("api")
 
+    @app.middleware("http")
+    async def ip_whitelist_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Middleware to enforce IP whitelisting."""
+        if not config.enable_ip_whitelist:
+            # IP whitelisting is disabled, allow all requests
+            response = await call_next(request)
+            return response
+
+        # Get client IP address
+        client_ip = request.client.host if request.client else None
+
+        # Handle case where client IP is not available (e.g., in tests)
+        if not client_ip:
+            logger.warning("Unable to determine client IP address, allowing request")
+            response = await call_next(request)
+            return response
+
+        # Check if client IP is in allowed list
+        is_allowed = False
+        for allowed_ip in config.allowed_ips:
+            try:
+                if "/" in allowed_ip:
+                    # CIDR notation - check if client IP is in network
+                    network = ipaddress.ip_network(allowed_ip, strict=False)
+                    if ipaddress.ip_address(client_ip) in network:
+                        is_allowed = True
+                        break
+                else:
+                    # Single IP address
+                    if client_ip == allowed_ip:
+                        is_allowed = True
+                        break
+            except (ipaddress.AddressValueError, ValueError) as e:
+                logger.warning(f"Invalid IP configuration '{allowed_ip}': {e}")
+                continue
+
+        if not is_allowed:
+            logger.warning(f"Access denied for IP address: {client_ip}")
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "Access forbidden",
+                    "message": "Your IP address is not allowed to access this service",
+                    "client_ip": client_ip,
+                },
+            )
+
+        # IP is allowed, proceed with request
+        logger.debug(f"Access granted for IP address: {client_ip}")
+        response = await call_next(request)
+        return response
+
     @app.get("/metrics", response_class=PlainTextResponse)
     async def get_metrics() -> PlainTextResponse:
         try:
@@ -126,9 +181,30 @@ def create_app(
             # Use current config from scanner (updated by hot reload)
             current_config = scanner.config
             config_dict: Dict[str, Any] = current_config.dict()
-            for key in ["p12_passwords", "tls_key"]:
+
+            # Always redact sensitive information
+            sensitive_keys = ["p12_passwords", "tls_key", "allowed_ips"]
+            for key in sensitive_keys:
                 if key in config_dict:
-                    config_dict[key] = "***REDACTED***"
+                    if key == "p12_passwords":
+                        config_dict[key] = [f"***REDACTED*** ({len(config_dict[key])} passwords)"]
+                    elif key == "allowed_ips":
+                        config_dict[key] = [
+                            f"***REDACTED*** ({len(config_dict[key])} IPs/networks)"
+                        ]
+                    else:
+                        config_dict[key] = "***REDACTED***"
+
+            # Mask certificate directory paths to prevent information disclosure
+            if "certificate_directories" in config_dict:
+                masked_dirs = []
+                for dir_path in config_dict["certificate_directories"]:
+                    # Show only the basename, not full paths
+                    from pathlib import Path
+
+                    masked_dirs.append(f"***/{Path(dir_path).name}")
+                config_dict["certificate_directories"] = masked_dirs
+
             return JSONResponse(content=config_dict)
         except Exception as e:
             logger.error(f"Failed to get configuration: {e}")

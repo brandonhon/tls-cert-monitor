@@ -4,6 +4,7 @@ Configuration management for TLS Certificate Monitor.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -55,6 +56,10 @@ class Config(BaseModel):
     cache_ttl: str = Field(default="1h")
     cache_max_size: int = Field(default=10485760)  # 10MB for memory default
 
+    # Security settings
+    allowed_ips: List[str] = Field(default_factory=lambda: ["127.0.0.1", "::1"])
+    enable_ip_whitelist: bool = Field(default=True)
+
     @field_validator("cache_type")
     @classmethod
     def validate_cache_type(cls, v: str) -> str:
@@ -76,12 +81,112 @@ class Config(BaseModel):
     @field_validator("certificate_directories")
     @classmethod
     def validate_cert_directories(cls, v: List[str]) -> List[str]:
-        """Validate certificate directories exist."""
+        """Validate certificate directories exist and are safe to access."""
+        validated_dirs = []
+
+        # Forbidden system directories for security
+        forbidden_paths = [
+            "/etc/shadow",
+            "/etc/passwd",
+            "/etc/sudoers",
+            "/private/etc/shadow",
+            "/private/etc/passwd",  # macOS paths
+            "/proc",
+            "/sys",
+            "/dev",
+            "/root/.ssh",
+            "/home/*/.ssh",
+            "/Users/*/.ssh",  # macOS user paths
+            "/var/log/auth.log",
+            "/var/log/secure",
+        ]
+
         for directory in v:
-            path = Path(directory)
-            if not path.exists():
-                logging.warning(f"Certificate directory does not exist: {directory}")
-        return v
+            try:
+                # Resolve path to absolute form and check for symlink attacks
+                path = Path(directory).resolve()
+
+                # Check if path is forbidden
+                path_str = str(path)
+                is_forbidden = False
+
+                for forbidden in forbidden_paths:
+                    if "*" in forbidden:
+                        # Handle wildcard patterns
+                        pattern = forbidden.replace("*", "[^/]*")
+                        if re.match(pattern, path_str):
+                            is_forbidden = True
+                            break
+                    elif path_str.startswith(forbidden) or path_str == forbidden:
+                        is_forbidden = True
+                        break
+
+                if is_forbidden:
+                    logging.error(
+                        f"Access to directory {directory} is forbidden for security reasons"
+                    )
+                    continue
+
+                # Warn if directory doesn't exist but include it anyway
+                # (it might be created later, especially in containerized environments)
+                if not path.exists():
+                    logging.warning(f"Certificate directory does not exist: {directory}")
+                elif not path.is_dir():
+                    logging.error(f"Certificate directory path is not a directory: {directory}")
+                    continue
+
+                validated_dirs.append(str(path))
+
+            except (OSError, RuntimeError) as e:
+                logging.error(f"Invalid certificate directory {directory}: {e}")
+                continue
+
+        if not validated_dirs:
+            logging.warning("No valid certificate directories configured")
+
+        return validated_dirs
+
+    @field_validator("exclude_file_patterns")
+    @classmethod
+    def validate_exclude_patterns(cls, v: List[str]) -> List[str]:
+        """Validate exclude file patterns are valid regex."""
+        validated_patterns = []
+        for pattern in v:
+            try:
+                re.compile(pattern)
+                validated_patterns.append(pattern)
+            except re.error as e:
+                logging.warning(f"Invalid regex pattern '{pattern}': {e}")
+        return validated_patterns
+
+    @field_validator("allowed_ips")
+    @classmethod
+    def validate_allowed_ips(cls, v: List[str]) -> List[str]:
+        """Validate IP addresses and CIDR blocks in allowed_ips list."""
+        import ipaddress
+
+        validated_ips = []
+        for ip_str in v:
+            try:
+                # Try to parse as IP address or network
+                if "/" in ip_str:
+                    # CIDR notation
+                    ipaddress.ip_network(ip_str, strict=False)
+                else:
+                    # Single IP address
+                    ipaddress.ip_address(ip_str)
+                validated_ips.append(ip_str)
+            except (ipaddress.AddressValueError, ValueError) as e:
+                logging.error(f"Invalid IP address or network '{ip_str}': {e}")
+
+        # Ensure localhost is always allowed for health checks
+        localhost_ips = ["127.0.0.1", "::1"]
+        for localhost in localhost_ips:
+            if localhost not in validated_ips:
+                validated_ips.append(localhost)
+                logging.info(f"Added {localhost} to allowed IPs for localhost access")
+
+        return validated_ips
 
     @field_validator("scan_interval", "cache_ttl")
     @classmethod
@@ -91,8 +196,6 @@ class Config(BaseModel):
             raise ValueError("Duration cannot be empty")
 
         # Simple validation for duration format
-        import re
-
         # Use raw string to avoid escaping issues
         pattern = r"^\d+[smhd]$"
         if not re.match(pattern, v):
@@ -101,8 +204,6 @@ class Config(BaseModel):
 
     def parse_duration_seconds(self, duration: str) -> int:
         """Parse duration string to seconds."""
-        import re
-
         match = re.match(r"^(\d+)([smhd])$", duration)
         if not match:
             raise ValueError(f"Invalid duration format: {duration}")
@@ -170,6 +271,10 @@ def _get_env_overrides() -> dict:
         "TLS_MONITOR_CACHE_DIR": ("cache_dir", str),
         "TLS_MONITOR_CACHE_TTL": ("cache_ttl", str),
         "TLS_MONITOR_CACHE_MAX_SIZE": ("cache_max_size", int),
+        "TLS_MONITOR_ENABLE_IP_WHITELIST": (
+            "enable_ip_whitelist",
+            lambda x: x.lower() in ("true", "1", "yes"),
+        ),
     }
 
     overrides = {}
@@ -198,6 +303,11 @@ def _get_env_overrides() -> dict:
     if p12_passwords:
         overrides["p12_passwords"] = [p.strip() for p in p12_passwords.split(",")]
 
+    # Handle allowed IPs list
+    allowed_ips = os.getenv("TLS_MONITOR_ALLOWED_IPS")
+    if allowed_ips:
+        overrides["allowed_ips"] = [ip.strip() for ip in allowed_ips.split(",")]
+
     return overrides
 
 
@@ -219,6 +329,8 @@ def create_example_config(output_path: str = "config.example.yaml") -> None:
         "cache_dir": "./cache",
         "cache_ttl": "1h",
         "cache_max_size": 10485760,  # 10MB for memory, 30MB (31457280) for file
+        "allowed_ips": ["127.0.0.1", "::1", "192.168.1.0/24"],  # localhost + local network
+        "enable_ip_whitelist": True,
     }
 
     with open(output_path, "w", encoding="utf-8") as f:

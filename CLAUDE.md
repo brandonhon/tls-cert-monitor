@@ -257,3 +257,4 @@ When multiple valid approaches exist, choose based on:
 - Learn from existing implementations
 - Stop after 3 failed attempts and reassess
 - Make sure to alway increment the version appropriately using git tags
+- when there are new changes to any of the .py files for the app always follow the version tagging
