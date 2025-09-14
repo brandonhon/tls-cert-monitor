@@ -21,10 +21,14 @@ class TestAPI:
     def mock_config(self):
         """Create a mock configuration."""
         config = MagicMock(spec=Config)
-        config.server.host = "0.0.0.0"
-        config.server.port = 8080
-        config.server.metrics_path = "/metrics"
-        config.server.health_path = "/healthz"
+        # Create mock server object with attributes
+        server_mock = MagicMock()
+        server_mock.host = "0.0.0.0"
+        server_mock.port = 8080
+        server_mock.metrics_path = "/metrics"
+        server_mock.health_path = "/healthz"
+        config.server = server_mock
+        config.scan_interval = 300
         return config
 
     @pytest.fixture
