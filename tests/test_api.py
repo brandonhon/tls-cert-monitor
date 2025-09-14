@@ -2,9 +2,10 @@
 Tests for FastAPI endpoints.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
 
 from tls_cert_monitor.api import create_app
 from tls_cert_monitor.cache import CacheManager
@@ -47,10 +48,7 @@ class TestAPI:
     def client(self, mock_config, mock_scanner, mock_cache, mock_metrics):
         """Create a test client."""
         app = create_app(
-            config=mock_config,
-            scanner=mock_scanner,
-            cache=mock_cache,
-            metrics=mock_metrics
+            config=mock_config, scanner=mock_scanner, cache=mock_cache, metrics=mock_metrics
         )
         return TestClient(app)
 
@@ -74,7 +72,7 @@ class TestAPI:
     def test_scan_endpoint_trigger(self, client, mock_scanner):
         """Test manual scan trigger endpoint."""
         mock_scanner.scan_once.return_value = {"scanned": 10, "parsed": 8}
-        
+
         response = client.post("/scan")
         assert response.status_code == 200
         data = response.json()
