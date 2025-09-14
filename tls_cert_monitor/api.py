@@ -23,9 +23,12 @@ from tls_cert_monitor.scanner import CertificateScanner
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-    """Lifespan handler that suppresses CancelledError during shutdown."""
+    """Lifespan handler for startup and shutdown events."""
+    logger = get_logger("api")
+    
     try:
         # Startup
+        logger.info("TLS Certificate Monitor API started")
         yield
     except asyncio.CancelledError:
         # Suppress CancelledError during shutdown - this is expected behavior
@@ -33,7 +36,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         # Cleanup - suppress any cancellation errors here too
         try:
-            pass  # Any cleanup code would go here
+            logger.info("TLS Certificate Monitor API shutting down")
         except asyncio.CancelledError:
             pass
 
@@ -572,14 +575,6 @@ def create_app(
 </html>
         """
         return Response(content=html_content, media_type="text/html")
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        logger.info("TLS Certificate Monitor API started")
-
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:
-        logger.info("TLS Certificate Monitor API shutting down")
 
     return app
 
