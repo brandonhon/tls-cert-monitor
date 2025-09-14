@@ -36,10 +36,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make docker-compose` - Run using production docker-compose
 
 ### Release and Distribution
-- Releases are automatically created on every push to main branch
+- Releases are triggered by semantic version tags (v1.0.0, v1.2.3, etc.)
 - Multi-platform binaries are built via GitHub Actions
 - Docker images are published to GitHub Container Registry
 - Binary artifacts are packaged as `platform-arch.tar.gz` (e.g., `linux-amd64.tar.gz`)
+
+#### Version Management
+**IMPORTANT**: This project uses semantic versioning. ALWAYS follow this process for releases:
+
+1. **Update version in code**:
+   ```bash
+   # Edit tls_cert_monitor/__init__.py
+   __version__ = "1.x.x"  # Update to new semantic version
+   ```
+
+2. **Commit version change**:
+   ```bash
+   git add tls_cert_monitor/__init__.py
+   git commit -m "chore: bump version to 1.x.x for [feature/fix] release"
+   git push origin main
+   ```
+
+3. **Create and push semantic version tag**:
+   ```bash
+   git tag -a v1.x.x -m "Release v1.x.x: [Description]"
+   git push origin v1.x.x
+   ```
+
+**Version Bump Guidelines**:
+- **Patch** (1.0.0 → 1.0.1): Bug fixes, documentation updates
+- **Minor** (1.0.0 → 1.1.0): New features, enhancements (backward compatible)  
+- **Major** (1.0.0 → 2.0.0): Breaking changes, major rewrites
+
+**❌ NEVER use date-based tags** like `v2025.09.14-abc123` - only semantic versions!
 
 ## Architecture Overview
 
