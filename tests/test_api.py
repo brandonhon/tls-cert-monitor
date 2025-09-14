@@ -2,8 +2,6 @@
 Simplified API tests to verify basic functionality.
 """
 
-import pytest
-
 from tls_cert_monitor.api import create_app
 
 
@@ -19,6 +17,7 @@ class TestAPI:
         assert callable(create_app)
         # Just verify the function exists and has the expected signature
         import inspect
+
         sig = inspect.signature(create_app)
         assert "scanner" in sig.parameters
         assert "metrics" in sig.parameters
