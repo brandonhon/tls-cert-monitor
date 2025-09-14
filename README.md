@@ -29,6 +29,12 @@ A cross-platform application for monitoring SSL/TLS certificates, providing comp
 - **TLS support**: Optional HTTPS for metrics endpoint
 - **Customizable passwords**: P12/PFX password list support
 
+### 🔒 Security Features
+- **IP Whitelisting**: Restrict API access to specific IP addresses and networks
+- **Input Validation**: Comprehensive validation of file paths and configuration
+- **Path Protection**: Blocks access to sensitive system directories
+- **Data Redaction**: Sensitive information masked in API responses
+
 ## Installation
 
 ### 📦 Pre-compiled Binaries (Recommended)
@@ -150,6 +156,14 @@ dry_run: false
 cache_dir: "./cache"
 cache_ttl: "1h"
 cache_max_size: 104857600  # 100MB
+
+# Security settings
+enable_ip_whitelist: true
+allowed_ips:
+  - "127.0.0.1"           # Localhost IPv4
+  - "::1"                 # Localhost IPv6  
+  - "192.168.1.0/24"      # Local network CIDR
+  - "10.0.0.100"          # Specific monitoring server
 ```
 
 ### Environment Variables
@@ -161,6 +175,76 @@ export TLS_MONITOR_PORT=8080
 export TLS_MONITOR_LOG_LEVEL=DEBUG
 export TLS_MONITOR_CERT_DIRECTORIES="/path1,/path2"
 export TLS_MONITOR_WORKERS=8
+
+# Security settings
+export TLS_MONITOR_ENABLE_IP_WHITELIST=true
+export TLS_MONITOR_ALLOWED_IPS="127.0.0.1,192.168.1.0/24,10.0.0.100"
+```
+
+## Security Configuration
+
+### IP Whitelisting
+
+Protect your TLS Certificate Monitor API by restricting access to specific IP addresses and networks:
+
+```yaml
+# Enable IP whitelisting (default: true)
+enable_ip_whitelist: true
+
+# Allowed IP addresses and networks
+allowed_ips:
+  - "127.0.0.1"           # Localhost IPv4
+  - "::1"                 # Localhost IPv6
+  - "192.168.1.0/24"      # Local network (CIDR notation)
+  - "10.0.0.0/8"          # Private network range
+  - "172.16.0.100"        # Specific server IP
+```
+
+**Key Features:**
+- Supports both IPv4 and IPv6 addresses
+- CIDR network notation for ranges (e.g., `192.168.1.0/24`)
+- Localhost (`127.0.0.1`, `::1`) always allowed for health checks
+- Detailed logging of blocked access attempts
+- 403 Forbidden response for unauthorized IPs
+
+**Environment Variable:**
+```bash
+export TLS_MONITOR_ENABLE_IP_WHITELIST=true
+export TLS_MONITOR_ALLOWED_IPS="127.0.0.1,::1,192.168.1.0/24"
+```
+
+### Path Security
+
+The application automatically validates and protects against access to sensitive system directories:
+
+**Forbidden Paths (automatically blocked):**
+- `/etc/shadow`, `/etc/passwd` - System password files
+- `/proc`, `/sys`, `/dev` - System filesystems  
+- `/root/.ssh`, `/home/*/.ssh` - SSH key directories
+- `/var/log/auth.log` - Authentication logs
+
+**Input Validation:**
+- Certificate directory paths are resolved and validated
+- Regex patterns in `exclude_file_patterns` are syntax-checked
+- IP addresses are validated using Python's `ipaddress` module
+
+### API Security
+
+**Information Protection:**
+- Sensitive data redacted in `/config` endpoint responses
+- Certificate directory paths masked (only basename shown)
+- P12 passwords and TLS keys completely hidden
+- IP whitelist configuration redacted
+
+**Example redacted `/config` response:**
+```json
+{
+  "port": 3200,
+  "certificate_directories": ["***/certs", "***/ssl"],
+  "p12_passwords": ["***REDACTED*** (4 passwords)"],
+  "allowed_ips": ["***REDACTED*** (3 IPs/networks)"],
+  "tls_key": "***REDACTED***"
+}
 ```
 
 ## API Endpoints

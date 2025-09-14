@@ -103,6 +103,17 @@ cache_dir: ".\\cache"              # Only used when cache_type is "file" or "bot
 cache_ttl: "1h"
 cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)
 
+# Security settings
+enable_ip_whitelist: true  # Enable IP address whitelisting for API access
+allowed_ips:
+  - "127.0.0.1"           # Localhost IPv4
+  - "::1"                 # Localhost IPv6
+  - "192.168.1.0/24"      # Local network (CIDR notation)
+  # Add your specific IP addresses or networks here:
+  # - "10.0.0.0/8"        # Private network range
+  # - "172.16.0.100"      # Specific server IP
+  # - "203.0.113.0/24"    # Public network range
+
 # Windows-specific notes:
 # 
 # 1. File Paths:
@@ -144,3 +155,10 @@ cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)
 # 8. Firewall:
 #    - Ensure port 3200 (or your chosen port) is open in Windows Firewall
 #    - Add firewall rule: netsh advfirewall firewall add rule name="TLS Cert Monitor" dir=in action=allow protocol=TCP localport=3200
+#
+# 9. Security Configuration:
+#    - IP whitelisting is enabled by default for production security
+#    - Add your monitoring system IPs to the allowed_ips list
+#    - Use bind_address: "127.0.0.1" instead of "0.0.0.0" for localhost-only access
+#    - Review certificate_directories to ensure no sensitive system paths are included
+#    - The application automatically blocks access to sensitive Windows system directories

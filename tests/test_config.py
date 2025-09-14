@@ -26,6 +26,9 @@ class TestConfig:
         assert config.scan_interval == "5m"
         assert config.hot_reload is True
         assert config.dry_run is False
+        assert config.enable_ip_whitelist is True
+        assert "127.0.0.1" in config.allowed_ips
+        assert "::1" in config.allowed_ips
 
     def test_duration_parsing(self):
         """Test duration parsing."""
@@ -134,7 +137,11 @@ class TestCreateExampleConfig:
             assert "port" in config_data
             assert "certificate_directories" in config_data
             assert "p12_passwords" in config_data
+            assert "allowed_ips" in config_data
+            assert "enable_ip_whitelist" in config_data
 
             # Should be valid configuration
             config = Config(**config_data)
             assert config.port == 3200
+            assert config.enable_ip_whitelist is True
+            assert "127.0.0.1" in config.allowed_ips

@@ -53,6 +53,13 @@ cache_type: "memory"       # "memory", "file", or "both"
 cache_dir: "./cache"       # Only used when cache_type is "file" or "both"
 cache_ttl: "5m"
 cache_max_size: 10485760   # 10MB (memory), use 31457280 for file cache (30MB)
+
+# Security settings (disabled for development)
+enable_ip_whitelist: false  # Disabled for development - enable in production
+allowed_ips:
+  - "127.0.0.1"           # Localhost IPv4
+  - "::1"                 # Localhost IPv6
+  - "192.168.1.0/24"      # Local network for development
 EOF
 
 # Success messages
