@@ -1,0 +1,44 @@
+---
+# Default variables for tls-cert-monitor role
+
+# GitHub repository
+github_repo: "brandonhon/tls-cert-monitor"
+
+# Installation directories
+install_dir_linux: "/opt/tls-cert-monitor"
+install_dir_windows: "C:\\Program Files\\tls-cert-monitor"
+
+# Configuration directories
+config_dir_linux: "/etc/tls-cert-monitor"
+config_dir_windows: "C:\\ProgramData\\tls-cert-monitor"
+
+# Service configuration
+service_name: "tls-cert-monitor"
+service_user_linux: "tls-monitor"
+service_port: 9090
+
+# Certificate directories to monitor
+cert_dirs_linux:
+  - /etc/ssl/certs
+  - /etc/pki/tls/certs
+  - /usr/local/share/ca-certificates
+  - /opt/certificates
+
+cert_dirs_windows:
+  - C:\ProgramData\ssl\certs
+  - C:\certificates
+  - C:\inetpub\certificates
+
+# Scan configuration
+scan_interval_seconds: 3600
+scan_workers: 4
+
+# Log configuration
+log_level: "INFO"
+log_dir_linux: "/var/log/tls-cert-monitor"
+log_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\logs"
+
+# Feature flags
+enable_hot_reload: true
+enable_cache: true
+cache_ttl_seconds: 86400

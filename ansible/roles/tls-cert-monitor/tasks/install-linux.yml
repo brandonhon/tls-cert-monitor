@@ -1,0 +1,97 @@
+---
+# Linux installation tasks
+
+- name: Install required packages
+  package:
+    name:
+      - tar
+      - gzip
+      - ca-certificates
+    state: present
+
+- name: Create service user
+  user:
+    name: "{{ service_user_linux }}"
+    system: yes
+    shell: /bin/false
+    home: "{{ install_dir_linux }}"
+    create_home: no
+    comment: "TLS Certificate Monitor Service User"
+
+- name: Create required directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0755'
+  loop:
+    - "{{ install_dir_linux }}"
+    - "{{ config_dir_linux }}"
+    - "{{ config_dir_linux }}/certificates"
+    - "{{ log_dir_linux }}"
+
+- name: Download Linux binary
+  get_url:
+    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/linux-{{ arch_name }}.tar.gz"
+    dest: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    mode: '0644'
+
+- name: Extract binary
+  unarchive:
+    src: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    dest: "{{ install_dir_linux }}"
+    remote_src: yes
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0755'
+    creates: "{{ install_dir_linux }}/tls-cert-monitor"
+
+- name: Clean up download
+  file:
+    path: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    state: absent
+
+- name: Deploy configuration file
+  template:
+    src: config-linux.yaml.j2
+    dest: "{{ config_dir_linux }}/config.yaml"
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0640'
+    backup: yes
+
+- name: Deploy systemd service
+  template:
+    src: tls-cert-monitor.service.j2
+    dest: /etc/systemd/system/{{ service_name }}.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart tls-cert-monitor
+
+- name: Configure log rotation
+  copy:
+    content: |
+      {{ log_dir_linux }}/*.log {
+          daily
+          rotate 14
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 {{ service_user_linux }} {{ service_user_linux }}
+          sharedscripts
+          postrotate
+              systemctl reload {{ service_name }} 2>/dev/null || true
+          endscript
+      }
+    dest: /etc/logrotate.d/{{ service_name }}
+    mode: '0644'
+
+- name: Start and enable service
+  systemd:
+    name: "{{ service_name }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes

@@ -1,0 +1,21 @@
+---
+# Handlers for tls-cert-monitor role
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  when: ansible_system == "Linux"
+
+- name: restart tls-cert-monitor
+  systemd:
+    name: "{{ service_name }}"
+    state: restarted
+  when: ansible_system == "Linux"
+
+- name: restart tls-cert-monitor-windows
+  win_shell: |
+    $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
+    & $nssmPath restart "{{ service_name }}"
+  args:
+    executable: powershell
+  when: ansible_os_family == "Windows"

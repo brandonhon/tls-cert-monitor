@@ -1,0 +1,29 @@
+---
+# Group variables for Windows servers
+
+# Default certificate directories for Windows
+cert_dirs_windows:
+  - C:\ProgramData\ssl\certs
+  - C:\inetpub\certificates
+  - C:\certificates
+  - C:\Program Files\Common Files\SSL
+
+# Windows-specific service settings
+log_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\logs"
+
+# Scan configuration optimized for Windows
+scan_workers: 2  # More conservative for Windows
+enable_cache: true
+cache_ttl_seconds: 3600
+
+# Windows-specific alert settings
+alerts:
+  expiry_warning_days: 30
+  expiry_critical_days: 7
+  weak_key_bits: 2048
+
+# Additional P12/PFX passwords common on Windows
+p12_additional_passwords:
+  - "Password123"
+  - "default"
+  - "admin"

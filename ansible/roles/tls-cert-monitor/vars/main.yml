@@ -1,0 +1,15 @@
+---
+# Variables for tls-cert-monitor role
+
+# Architecture mapping
+arch_map:
+  x86_64: amd64
+  aarch64: arm64
+  armv7l: arm
+  i386: 386
+  i686: 386
+
+# Platform-specific service commands
+service_manager:
+  Linux: systemd
+  Windows: nssm

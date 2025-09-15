@@ -372,11 +372,13 @@ tls-cert-monitor/
 ├── .github/workflows/           # GitHub Actions workflows
 │   └── build.yml                # Multi-platform build and release
 ├── scripts/                     # Installation and service scripts
-│   ├── install-linux-service.sh       # Linux systemd service installer
-│   ├── install-windows-service.bat    # Windows service installer
-│   ├── install-macos-service.sh       # macOS service installer
-│   ├── tls-cert-monitor.service       # systemd service file
-│   └── com.tlscertmonitor.service.plist # macOS LaunchDaemon config
+│   ├── install-linux-service.sh              # Linux systemd service installer
+│   ├── install-windows-service.bat           # Windows service installer (NSSM)
+│   ├── install-windows-service-native.bat    # Windows native service installer
+│   ├── Install-WindowsService.ps1            # PowerShell Windows service installer
+│   ├── install-macos-service.sh              # macOS service installer
+│   ├── tls-cert-monitor.service              # systemd service file
+│   └── com.tlscertmonitor.service.plist      # macOS LaunchDaemon config
 ├── docker/                      # Docker development setup
 ├── config.example.yaml          # Example configuration
 ├── config.windows.example.yaml  # Windows-specific config example
@@ -485,20 +487,70 @@ sudo journalctl -u tls-cert-monitor -f
 
 ### Windows Service
 
-Install as a Windows service using NSSM (Non-Sucking Service Manager):
+Install as a Windows service using native Windows service support (recommended) or NSSM.
 
-#### Prerequisites
+#### Option 1: Native Windows Service (Recommended)
+
+The application now includes built-in Windows service support without requiring third-party tools:
+
+**Prerequisites:**
+- Windows with Administrator privileges
+- pywin32 package (automatically included in pre-compiled binaries)
+
+**Installation:**
+```cmd
+# Run as Administrator
+# Using PowerShell (recommended)
+.\scripts\Install-WindowsService.ps1
+
+# Or using batch script
+scripts\install-windows-service-native.bat
+```
+
+**Manual Installation:**
+```cmd
+# Install service with automatic start
+tls-cert-monitor.exe --service-install --config="C:\ProgramData\TLSCertMonitor\config.yaml"
+
+# Install service with manual start
+tls-cert-monitor.exe --service-install --service-manual --config="C:\ProgramData\TLSCertMonitor\config.yaml"
+```
+
+**Service Management:**
+```cmd
+# Application commands
+tls-cert-monitor.exe --service-start
+tls-cert-monitor.exe --service-stop
+tls-cert-monitor.exe --service-status
+tls-cert-monitor.exe --service-uninstall
+
+# Standard Windows service commands
+sc start TLSCertMonitor
+sc stop TLSCertMonitor
+sc query TLSCertMonitor
+
+# PowerShell commands
+Start-Service -Name TLSCertMonitor
+Stop-Service -Name TLSCertMonitor
+Get-Service -Name TLSCertMonitor
+```
+
+#### Option 2: NSSM (Legacy)
+
+If you prefer using NSSM (Non-Sucking Service Manager):
+
+**Prerequisites:**
 1. Download [NSSM](https://nssm.cc/download) and add to PATH
 2. Download the Windows binary: `windows-amd64.tar.gz`
 3. Extract and place the installation script in the same directory
 
-#### Installation
+**Installation:**
 ```cmd
 # Run as Administrator
 scripts\install-windows-service.bat
 ```
 
-#### Manual Installation
+**Manual NSSM Installation:**
 ```cmd
 # Install NSSM service
 nssm install TLSCertMonitor "C:\Program Files\TLSCertMonitor\tls-cert-monitor.exe"
@@ -515,7 +567,7 @@ nssm set TLSCertMonitor AppStderr "C:\ProgramData\TLSCertMonitor\logs\service-er
 nssm start TLSCertMonitor
 ```
 
-#### Service Management
+**NSSM Service Management:**
 ```cmd
 # Check status
 sc query TLSCertMonitor

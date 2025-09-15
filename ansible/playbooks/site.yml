@@ -1,0 +1,7 @@
+---
+# Main playbook to install tls-cert-monitor
+- name: Deploy TLS Certificate Monitor
+  hosts: all
+  become: yes
+  roles:
+    - tls-cert-monitor

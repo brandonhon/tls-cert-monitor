@@ -1,0 +1,67 @@
+---
+# Verify installation
+
+- name: Wait for service to start
+  pause:
+    seconds: 5
+
+- name: Check service health (Linux)
+  uri:
+    url: "http://localhost:{{ service_port }}/healthz"
+    method: GET
+    status_code: 200
+  register: health_check_linux
+  until: health_check_linux.status == 200
+  retries: 30
+  delay: 2
+  when: ansible_system == "Linux"
+
+- name: Check service health (Windows)
+  win_uri:
+    url: "http://localhost:{{ service_port }}/healthz"
+    method: GET
+    status_code: 200
+  register: health_check_windows
+  until: health_check_windows.status_code == 200
+  retries: 30
+  delay: 2
+  when: ansible_os_family == "Windows"
+
+- name: Get metrics endpoint
+  uri:
+    url: "http://localhost:{{ service_port }}/metrics"
+    method: GET
+    status_code: 200
+  register: metrics_check
+  when: ansible_system == "Linux"
+
+- name: Get metrics endpoint (Windows)
+  win_uri:
+    url: "http://localhost:{{ service_port }}/metrics"
+    method: GET
+    status_code: 200
+  register: metrics_check_windows
+  when: ansible_os_family == "Windows"
+
+- name: Display installation summary
+  debug:
+    msg: |
+      ========================================
+      TLS Certificate Monitor Installation Complete
+      ========================================
+      Version: {{ release_version }}
+      Platform: {{ ansible_system }}
+      Architecture: {{ arch_name }}
+      Service Status: Running
+
+      Endpoints:
+        Health: http://{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}:{{ service_port }}/healthz
+        Metrics: http://{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}:{{ service_port }}/metrics
+        Config: http://{{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}:{{ service_port }}/config
+
+      Configuration:
+        {{ config_dir_linux if ansible_system == 'Linux' else config_dir_windows }}/config.yaml
+
+      Logs:
+        {{ log_dir_linux if ansible_system == 'Linux' else log_dir_windows }}/
+      ========================================

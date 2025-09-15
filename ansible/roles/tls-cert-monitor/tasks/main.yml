@@ -1,0 +1,24 @@
+---
+# Main tasks for tls-cert-monitor role
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_system | lower }}.yml"
+  ignore_errors: yes
+
+- name: Set architecture
+  set_fact:
+    arch_name: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
+
+- name: Get latest release information
+  include_tasks: get-release.yml
+
+- name: Install on Linux
+  include_tasks: install-linux.yml
+  when: ansible_system == "Linux"
+
+- name: Install on Windows
+  include_tasks: install-windows.yml
+  when: ansible_os_family == "Windows"
+
+- name: Verify installation
+  include_tasks: verify.yml

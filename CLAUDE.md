@@ -83,6 +83,35 @@ This is a Python-based TLS certificate monitoring application with the following
 - **api.py**: FastAPI-based REST API providing `/metrics`, `/healthz`, `/scan`, and `/config` endpoints
 - **hot_reload.py**: File system watcher for configuration and certificate changes
 - **logger.py**: Centralized logging configuration
+- **windows_service.py**: Native Windows service implementation using pywin32
+
+### Command Line Interface
+The application supports both console and service modes with the following options:
+
+**General Options:**
+- `--config/-f <path>`: Path to configuration file
+- `--version/-v`: Show version information
+- `--dry-run`: Enable dry-run mode (scan only, don't start server)
+
+**Windows Service Options (Windows only):**
+- `--service-install`: Install as Windows service
+- `--service-uninstall`: Uninstall Windows service
+- `--service-start`: Start Windows service
+- `--service-stop`: Stop Windows service
+- `--service-status`: Show Windows service status
+- `--service-manual`: Install service with manual start (use with --service-install)
+
+Examples:
+```bash
+# Run in console mode
+python main.py --config=config.yaml
+
+# Install Windows service with automatic start
+tls-cert-monitor.exe --service-install --config=config.yaml
+
+# Install Windows service with manual start
+tls-cert-monitor.exe --service-install --service-manual --config=config.yaml
+```
 
 ### Key Patterns
 - **Async/await**: Application uses asyncio throughout for concurrent operations

@@ -18,3 +18,6 @@ watchdog>=3.0.0,<4.0.0
 
 # Async support
 aiofiles>=23.2.1,<24.0.0
+
+# Windows service support (Windows only)
+pywin32>=306; sys_platform == "win32"

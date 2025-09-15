@@ -1,0 +1,96 @@
+---
+# Windows installation tasks
+
+- name: Create required directories
+  win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ install_dir_windows }}"
+    - "{{ config_dir_windows }}"
+    - "{{ config_dir_windows }}\\certificates"
+    - "{{ log_dir_windows }}"
+
+- name: Download Windows binary
+  win_get_url:
+    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/windows-{{ arch_name }}.tar.gz"
+    dest: "{{ install_dir_windows }}\\tls-cert-monitor-{{ release_version }}.tar.gz"
+
+- name: Extract Windows binary
+  win_shell: |
+    $tarPath = "{{ install_dir_windows }}\\tls-cert-monitor-{{ release_version }}.tar.gz"
+    $extractPath = "{{ install_dir_windows }}"
+
+    # Extract tar.gz
+    tar -xzf $tarPath -C $extractPath
+
+    # Verify executable exists
+    if (-not (Test-Path "$extractPath\\tls-cert-monitor.exe")) {
+        throw "Failed to extract tls-cert-monitor.exe"
+    }
+
+    # Remove archive
+    Remove-Item $tarPath -Force
+  args:
+    executable: powershell
+
+- name: Deploy configuration file
+  win_template:
+    src: config-windows.yaml.j2
+    dest: "{{ config_dir_windows }}\\config.yaml"
+    backup: yes
+
+- name: Download NSSM for service management
+  win_get_url:
+    url: "https://nssm.cc/release/nssm-2.24.zip"
+    dest: "{{ install_dir_windows }}\\nssm.zip"
+
+- name: Extract NSSM
+  win_unzip:
+    src: "{{ install_dir_windows }}\\nssm.zip"
+    dest: "{{ install_dir_windows }}"
+    creates: "{{ install_dir_windows }}\\nssm-2.24"
+
+- name: Remove NSSM archive
+  win_file:
+    path: "{{ install_dir_windows }}\\nssm.zip"
+    state: absent
+
+- name: Install Windows service
+  win_shell: |
+    $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
+    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+    $configPath = "{{ config_dir_windows }}\\config.yaml"
+
+    # Remove existing service if present
+    & $nssmPath stop "{{ service_name }}" 2>$null
+    & $nssmPath remove "{{ service_name }}" confirm 2>$null
+
+    # Install service
+    & $nssmPath install "{{ service_name }}" $exePath "--config" $configPath
+
+    # Configure service
+    & $nssmPath set "{{ service_name }}" DisplayName "TLS Certificate Monitor"
+    & $nssmPath set "{{ service_name }}" Description "Monitor TLS certificates for expiration and security issues"
+    & $nssmPath set "{{ service_name }}" Start SERVICE_AUTO_START
+    & $nssmPath set "{{ service_name }}" AppStdout "{{ log_dir_windows }}\\service.log"
+    & $nssmPath set "{{ service_name }}" AppStderr "{{ log_dir_windows }}\\service-error.log"
+    & $nssmPath set "{{ service_name }}" AppRotateFiles 1
+    & $nssmPath set "{{ service_name }}" AppRotateOnline 1
+    & $nssmPath set "{{ service_name }}" AppRotateBytes 10485760
+
+    # Start service
+    & $nssmPath start "{{ service_name }}"
+  args:
+    executable: powershell
+  notify: restart tls-cert-monitor-windows
+
+- name: Configure Windows Firewall rule
+  win_firewall_rule:
+    name: "TLS Certificate Monitor"
+    localport: "{{ service_port }}"
+    action: allow
+    direction: in
+    protocol: tcp
+    state: present
+    enabled: yes

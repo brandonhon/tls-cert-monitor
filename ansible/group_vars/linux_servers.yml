@@ -1,0 +1,24 @@
+---
+# Group variables for Linux servers
+
+# Default certificate directories for Linux
+cert_dirs_linux:
+  - /etc/ssl/certs
+  - /etc/pki/tls/certs
+  - /usr/local/share/ca-certificates
+  - /opt/certificates
+
+# Linux-specific service settings
+service_user_linux: "tls-monitor"
+log_dir_linux: "/var/log/tls-cert-monitor"
+
+# Scan configuration optimized for Linux
+scan_workers: 4
+enable_cache: true
+cache_ttl_seconds: 3600
+
+# Linux-specific alert settings
+alerts:
+  expiry_warning_days: 30
+  expiry_critical_days: 7
+  weak_key_bits: 2048

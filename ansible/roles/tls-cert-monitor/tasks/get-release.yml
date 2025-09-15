@@ -1,0 +1,22 @@
+---
+# Get latest release from GitHub
+
+- name: Get latest release from GitHub API
+  uri:
+    url: "https://api.github.com/repos/{{ github_repo }}/releases/latest"
+    method: GET
+    return_content: yes
+    headers:
+      Accept: "application/vnd.github.v3+json"
+  register: github_release
+  delegate_to: localhost
+  run_once: true
+
+- name: Set release version
+  set_fact:
+    release_version: "{{ github_release.json.tag_name }}"
+    release_assets: "{{ github_release.json.assets }}"
+
+- name: Display release information
+  debug:
+    msg: "Installing tls-cert-monitor version {{ release_version }}"
