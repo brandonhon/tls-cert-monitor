@@ -22,7 +22,7 @@
   "links": [],
   "panels": [
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -31,7 +31,7 @@
       },
       "id": 2,
       "panels": [],
-      "title": "Row title",
+      "title": "${host} TLS Metrics",
       "type": "row"
     },
     {
@@ -90,7 +90,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -127,7 +127,7 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 1
               }
             ]
           }
@@ -141,6 +141,13 @@
         "y": 1
       },
       "id": 8,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Metrics",
+          "url": "http://${host}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -161,11 +168,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(ssl_cert_parse_errors_total{filename!~\".*(?i)(exclude|here).*\"})",
+          "expr": "ssl_cert_parse_errors_total",
           "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
@@ -198,7 +205,7 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 1
               }
             ]
           }
@@ -212,6 +219,13 @@
         "y": 1
       },
       "id": 7,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Metrics",
+          "url": "http://${host}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -232,11 +246,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(ssl_cert_deprecated_sigalg_total{common_name!~\".*(?i)(exclude|here).*\"})",
+          "expr": "sum(ssl_cert_deprecated_sigalg_total)",
           "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
@@ -269,7 +283,7 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 1
               }
             ]
           }
@@ -283,6 +297,13 @@
         "y": 1
       },
       "id": 6,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Metrics",
+          "url": "http://${host}"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -303,12 +324,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P67C699900FEFBB16"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(ssl_cert_weak_key_total{common_name!~\".*(?i)(exclude|here).*\"})",
-          "format": "time_series",
+          "expr": "sum(ssl_cert_weak_key_total)",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -339,8 +359,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 80
+                "color": "yellow",
+                "value": 1
               }
             ]
           }
@@ -374,12 +394,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P67C699900FEFBB16"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
           "expr": "ssl_cert_duplicate_count",
-          "format": "time_series",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -454,15 +473,15 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "label_replace(\r\n  -topk(8,\r\n    -((ssl_cert_expiration_timestamp - time()) / 86400)\r\n  ),\r\n  \"filename\", \"$1\",\r\n  \"path\",\r\n  \"^/app/certs/(.*)\"\r\n)",
+          "expr": "-topk(\r\n  8,\r\n  -((ssl_cert_expiration_timestamp - time()) / 86400)\r\n)",
           "format": "time_series",
           "instant": true,
           "interval": "",
-          "legendFormat": "{{filename}}",
+          "legendFormat": "{{common_name}}",
           "range": false,
           "refId": "A"
         }
@@ -535,11 +554,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "label_replace(\r\n    ssl_cert_san_count > 0,\r\n    \"filename\", \"$1\",\r\n    \"path\",\r\n    \"^/app/certs/(.*)\"\r\n)",
+          "expr": "label_replace(\r\n    ssl_cert_san_count > 0,\r\n    \"common_name\", \"$1\",\r\n    \"path\",\r\n    \"^/etc/nginx/ssl/(.*)\"\r\n)",
           "instant": true,
           "legendFormat": "{{filename}}",
           "range": false,
@@ -582,7 +601,20 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "certificate_paths"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 447
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -601,17 +633,21 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": []
       },
       "pluginVersion": "12.1.1",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_MIMIR}"
+          },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "label_replace(\r\n    label_replace(\r\n        sum by (serial, subject, path) (ssl_cert_info)\r\n            and on(serial)\r\n            (sum by (serial) (ssl_cert_info) > 1),\r\n        \"filename\", \"$1\", \"path\", \"^/app/certs/(.*)\"\r\n    ),\r\n    \"common_name\", \"$1\", \"subject\", \"^CN=(.*)\"\r\n)",
+          "expr": "ssl_cert_duplicate_names_info",
           "format": "table",
           "instant": true,
-          "interval": "",
           "legendFormat": "__auto",
           "range": false,
           "refId": "A"
@@ -625,15 +661,34 @@
             "excludeByName": {
               "Time": true,
               "Value": true,
-              "path": true,
-              "subject": true
+              "__name__": true,
+              "duplicate_count": false,
+              "instance": true,
+              "job": true,
+              "path_count": true,
+              "serial_number": false,
+              "url": true
             },
             "includeByName": {},
-            "indexByName": {},
+            "indexByName": {
+              "Time": 0,
+              "Value": 9,
+              "__name__": 1,
+              "certificate_paths": 2,
+              "duplicate_count": 7,
+              "instance": 3,
+              "job": 4,
+              "path_count": 5,
+              "serial_number": 6,
+              "url": 8
+            },
+            "orderByMode": "manual",
             "renameByName": {
-              "common_name": "Common Name",
-              "filename": "File Name",
-              "serial": "Serial"
+              "Value": "",
+              "certificate_paths": "Filenames",
+              "duplicate_count": "Count",
+              "instance": "",
+              "serial_number": "Serial Number"
             }
           }
         }
@@ -708,7 +763,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "aenczo0z64tfka"
+            "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -735,7 +790,8 @@
               "instance": true,
               "issuer": true,
               "issuer_name": false,
-              "job": true
+              "job": true,
+              "url": true
             },
             "includeByName": {},
             "indexByName": {},
@@ -748,42 +804,159 @@
         }
       ],
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 11,
+      "panels": [],
+      "title": "Across Instances",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P67C699900FEFBB16"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Host"
+          }
+        ]
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_MIMIR}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ssl_cert_expiration_timestamp * on(serial) group_left() (\r\n    count by (serial) (\r\n      count by (serial, instance) (\r\n        ssl_cert_expiration_timestamp\r\n      )\r\n    ) > 1\r\n  )",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Duplicate Certificates Across Instances",
+      "transformations": [
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "instance": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "path": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "serial": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            }
+          }
+        },
+        {
+          "id": "groupToNestedTable",
+          "options": {
+            "fields": {
+              "instance": {
+                "aggregations": [
+                  "uniqueValues"
+                ],
+                "operation": "aggregate"
+              },
+              "serial": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            },
+            "showSubframeHeaders": true
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "__nestedFrames": false,
+              "instance (uniqueValues)": false,
+              "serial": false
+            },
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "__nestedFrames": "Path",
+              "instance (uniqueValues)": "Host",
+              "serial": "Serial"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "preload": false,
   "schemaVersion": 41,
   "tags": [],
   "templating": {
-    "list": [
-      {
-        "current": {
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "P67C699900FEFBB16"
-        },
-        "definition": "label_values(ssl_cert_info,instance)",
-        "hide": 1,
-        "includeAll": true,
-        "multi": true,
-        "name": "instance",
-        "options": [],
-        "query": {
-          "qryType": 1,
-          "query": "label_values(ssl_cert_info,instance)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 1,
-        "regex": "^?([a-zA-Z0-9.-]+)(?::\\d+)?(?:\\/.*)?$",
-        "type": "query"
-      }
-    ]
+    "list": []
   },
   "time": {
     "from": "now-5m",
@@ -793,5 +966,5 @@
   "timezone": "browser",
   "title": "SSL Certificate Health & Monitoring",
   "uid": "bet0k3yj7dla8a",
-  "version": 4
+  "version": 5
 }
