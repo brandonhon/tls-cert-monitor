@@ -1,0 +1,69 @@
+---
+# Linux uninstallation tasks
+
+- name: Stop tls-cert-monitor service
+  systemd:
+    name: "{{ service_name }}"
+    state: stopped
+  ignore_errors: yes
+
+- name: Disable tls-cert-monitor service
+  systemd:
+    name: "{{ service_name }}"
+    enabled: no
+  ignore_errors: yes
+
+- name: Remove systemd service file
+  file:
+    path: "/etc/systemd/system/{{ service_name }}.service"
+    state: absent
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Remove tls-cert-monitor binary
+  file:
+    path: "{{ install_dir_linux }}/tls-cert-monitor"
+    state: absent
+
+- name: Remove installation directory
+  file:
+    path: "{{ install_dir_linux }}"
+    state: absent
+
+- name: Backup configuration before removal
+  archive:
+    path: "{{ config_dir_linux }}"
+    dest: "/tmp/tls-cert-monitor-config-backup-{{ ansible_date_time.epoch }}.tar.gz"
+    format: gz
+  ignore_errors: yes
+
+- name: Remove configuration directory
+  file:
+    path: "{{ config_dir_linux }}"
+    state: absent
+  when: remove_config | default(false)
+
+- name: Remove log directory
+  file:
+    path: "{{ log_dir_linux }}"
+    state: absent
+  when: remove_logs | default(false)
+
+- name: Remove service user
+  user:
+    name: "{{ service_user_linux }}"
+    state: absent
+    remove: yes
+  when: remove_user | default(false)
+
+- name: Display uninstallation summary
+  debug:
+    msg:
+      - "TLS Certificate Monitor has been uninstalled"
+      - "Binary and service files removed"
+      - "Config backup saved to: /tmp/tls-cert-monitor-config-backup-{{ ansible_date_time.epoch }}.tar.gz"
+      - "Config directory {{ 'removed' if remove_config | default(false) else 'preserved' }}: {{ config_dir_linux }}"
+      - "Log directory {{ 'removed' if remove_logs | default(false) else 'preserved' }}: {{ log_dir_linux }}"
+      - "Service user {{ 'removed' if remove_user | default(false) else 'preserved' }}: {{ service_user_linux }}"

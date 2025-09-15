@@ -1,0 +1,52 @@
+---
+# Playbook to uninstall tls-cert-monitor
+- name: Uninstall TLS Certificate Monitor
+  hosts: all
+  become: yes
+  vars:
+    # Set these to true to remove config/logs/user
+    # Can be overridden with --extra-vars
+    remove_config: false
+    remove_logs: false
+    remove_user: false
+
+  tasks:
+    - name: Confirm uninstallation
+      pause:
+        prompt: |
+
+          WARNING: This will uninstall TLS Certificate Monitor from the selected hosts.
+
+          Current settings:
+            - Remove configuration: {{ remove_config }}
+            - Remove logs: {{ remove_logs }}
+            - Remove service user: {{ remove_user }}
+
+          To change these settings, use --extra-vars:
+            ansible-playbook uninstall.yml -e "remove_config=true remove_logs=true"
+
+          Press Enter to continue or Ctrl+C to abort
+      when: confirm_uninstall | default(true)
+      tags: always
+
+    - name: Include role variables
+      include_vars: "{{ item }}"
+      with_items:
+        - "../roles/tls-cert-monitor/defaults/main.yml"
+        - "../roles/tls-cert-monitor/vars/main.yml"
+      tags: always
+
+    - name: Uninstall from Linux hosts
+      include_tasks: "../roles/tls-cert-monitor/tasks/uninstall-linux.yml"
+      when: ansible_system == "Linux"
+      tags: linux
+
+    - name: Uninstall from Windows hosts
+      include_tasks: "../roles/tls-cert-monitor/tasks/uninstall-windows.yml"
+      when: ansible_os_family == "Windows"
+      tags: windows
+
+    - name: Final cleanup verification
+      debug:
+        msg: "Uninstallation completed on {{ inventory_hostname }}"
+      tags: always

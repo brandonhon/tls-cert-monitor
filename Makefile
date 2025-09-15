@@ -403,6 +403,50 @@ certs: ## Generate test certificates
 	fi
 
 # ----------------------------
+# Ansible Deployment
+# ----------------------------
+.PHONY: ansible-install
+ansible-install: ## Deploy tls-cert-monitor using Ansible
+	@printf "$(BLUE)🚀 Deploying tls-cert-monitor with Ansible...$(NC)\n"
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
+		printf "$(YELLOW)💡 Copy ansible/inventory/hosts.yml.example and customize it$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible-playbook playbooks/site.yml
+	@printf "$(GREEN)✅ Deployment completed$(NC)\n"
+
+.PHONY: ansible-uninstall
+ansible-uninstall: ## Uninstall tls-cert-monitor using Ansible
+	@printf "$(BLUE)🗑️  Uninstalling tls-cert-monitor with Ansible...$(NC)\n"
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
+		printf "$(YELLOW)💡 Copy ansible/inventory/hosts.yml.example and customize it$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible-playbook playbooks/uninstall.yml
+	@printf "$(GREEN)✅ Uninstallation completed$(NC)\n"
+
+.PHONY: ansible-install-dry
+ansible-install-dry: ## Dry-run Ansible deployment (check mode)
+	@printf "$(BLUE)🔍 Running Ansible deployment in check mode...$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/site.yml --check
+	@printf "$(GREEN)✅ Dry-run completed$(NC)\n"
+
+.PHONY: ansible-uninstall-dry
+ansible-uninstall-dry: ## Dry-run Ansible uninstall (check mode)
+	@printf "$(BLUE)🔍 Running Ansible uninstall in check mode...$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/uninstall.yml --check
+	@printf "$(GREEN)✅ Dry-run completed$(NC)\n"
+
+.PHONY: ansible-uninstall-purge
+ansible-uninstall-purge: ## Uninstall and remove all data (config, logs, user)
+	@printf "$(BLUE)🗑️  Purging tls-cert-monitor with Ansible...$(NC)\n"
+	@printf "$(RED)⚠️  WARNING: This will remove all configuration, logs, and the service user!$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/uninstall.yml -e "remove_config=true remove_logs=true remove_user=true"
+	@printf "$(GREEN)✅ Purge completed$(NC)\n"
+
+# ----------------------------
 # Cleanup
 # ----------------------------
 .PHONY: clean

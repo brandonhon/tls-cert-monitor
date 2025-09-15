@@ -116,6 +116,51 @@ make docker-build
 make docker-run
 ```
 
+### 🚀 Ansible Deployment (Enterprise)
+
+Deploy across multiple servers with full automation using Ansible:
+
+#### Quick Start
+
+```bash
+# 1. Copy and customize inventory
+cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
+# Edit with your servers
+
+# 2. Deploy to all servers
+make ansible-install
+
+# 3. Uninstall from all servers
+make ansible-uninstall
+```
+
+#### Features
+- **Cross-platform**: Supports Linux (systemd) and Windows (native service or NSSM)
+- **Service selection**: Choose native Windows service (v1.2.0+) or NSSM fallback
+- **Safe uninstall**: Backs up configuration before removal
+- **Flexible options**: Control what gets removed (config, logs, user)
+
+#### Advanced Usage
+
+```bash
+# Test deployment without making changes
+make ansible-install-dry
+
+# Uninstall specific groups
+cd ansible && ansible-playbook playbooks/uninstall.yml --limit windows_servers
+
+# Complete purge (removes config, logs, and service user)
+make ansible-uninstall-purge
+
+# Use native Windows service method
+cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=native"
+
+# Use NSSM for Windows (legacy/compatibility)
+cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=nssm"
+```
+
+See [ansible/README.md](ansible/README.md) for complete documentation.
+
 ## Configuration
 
 Create a `config.yaml` file (or copy from `config.example.yaml`):
@@ -342,6 +387,13 @@ make docker-run         # Run Docker container
 make compose-up         # Start with docker-compose
 make compose-down       # Stop docker-compose
 
+# Ansible deployment
+make ansible-install    # Deploy with Ansible
+make ansible-uninstall  # Uninstall with Ansible
+make ansible-install-dry     # Dry-run deployment
+make ansible-uninstall-dry   # Dry-run uninstall
+make ansible-uninstall-purge # Remove all data (config/logs/user)
+
 # Utilities
 make clean              # Clean build artifacts
 make clean-all          # Clean everything including venv
@@ -379,6 +431,19 @@ tls-cert-monitor/
 │   ├── install-macos-service.sh              # macOS service installer
 │   ├── tls-cert-monitor.service              # systemd service file
 │   └── com.tlscertmonitor.service.plist      # macOS LaunchDaemon config
+├── ansible/                     # Ansible deployment automation
+│   ├── playbooks/               # Ansible playbooks
+│   │   ├── site.yml             # Main deployment playbook
+│   │   └── uninstall.yml        # Uninstallation playbook
+│   ├── roles/                   # Ansible roles
+│   │   └── tls-cert-monitor/    # Main role for deployment
+│   ├── inventory/               # Inventory examples
+│   │   └── hosts.yml            # Inventory example file
+│   ├── group_vars/              # Group variables
+│   │   ├── linux_servers.yml    # Linux-specific variables
+│   │   └── windows_servers.yml  # Windows-specific variables
+│   ├── ansible.cfg              # Ansible configuration
+│   └── README.md                # Ansible deployment documentation
 ├── docker/                      # Docker development setup
 ├── config.example.yaml          # Example configuration
 ├── config.windows.example.yaml  # Windows-specific config example

@@ -1,0 +1,131 @@
+---
+# Windows uninstallation tasks
+
+- name: Check current Windows service method
+  win_shell: |
+    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+    if ($service) {
+        # Check if NSSM is managing the service
+        $servicePath = (Get-WmiObject Win32_Service | Where-Object {$_.Name -eq "{{ service_name }}"}).PathName
+        if ($servicePath -like "*nssm*") {
+            Write-Output "nssm"
+        } else {
+            Write-Output "native"
+        }
+    } else {
+        Write-Output "none"
+    }
+  register: current_service_method
+  changed_when: false
+
+- name: Stop Windows service (native method)
+  win_shell: |
+    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+
+    Write-Host "Stopping native Windows service..."
+    & $exePath --service-stop
+    Start-Sleep -Seconds 2
+
+    Write-Host "Uninstalling native Windows service..."
+    & $exePath --service-uninstall
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Native Windows service uninstalled successfully"
+    } else {
+        Write-Warning "Service uninstall returned code: $LASTEXITCODE"
+    }
+  args:
+    executable: powershell
+  when: current_service_method.stdout | trim == "native"
+  ignore_errors: yes
+
+- name: Stop and remove Windows service (NSSM method)
+  win_shell: |
+    $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
+
+    if (Test-Path $nssmPath) {
+        Write-Host "Stopping NSSM service..."
+        & $nssmPath stop "{{ service_name }}"
+        Start-Sleep -Seconds 2
+
+        Write-Host "Removing NSSM service..."
+        & $nssmPath remove "{{ service_name }}" confirm
+
+        Write-Host "NSSM service removed successfully"
+    } else {
+        Write-Warning "NSSM not found at expected location"
+    }
+  args:
+    executable: powershell
+  when: current_service_method.stdout | trim == "nssm"
+  ignore_errors: yes
+
+- name: Ensure service is removed
+  win_service:
+    name: "{{ service_name }}"
+    state: absent
+  ignore_errors: yes
+
+- name: Remove Windows Firewall rule
+  win_firewall_rule:
+    name: "TLS Certificate Monitor"
+    state: absent
+  ignore_errors: yes
+
+- name: Backup configuration before removal
+  win_shell: |
+    $configPath = "{{ config_dir_windows }}"
+    $backupPath = "C:\\temp\\tls-cert-monitor-config-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').zip"
+
+    # Create temp directory if it doesn't exist
+    if (-not (Test-Path "C:\\temp")) {
+        New-Item -ItemType Directory -Path "C:\\temp" | Out-Null
+    }
+
+    # Create backup
+    if (Test-Path $configPath) {
+        Compress-Archive -Path $configPath -DestinationPath $backupPath -Force
+        Write-Host "Configuration backed up to: $backupPath"
+    }
+
+    Write-Output $backupPath
+  register: config_backup
+  ignore_errors: yes
+
+- name: Remove tls-cert-monitor binary
+  win_file:
+    path: "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+    state: absent
+
+- name: Remove NSSM directory
+  win_file:
+    path: "{{ install_dir_windows }}\\nssm-2.24"
+    state: absent
+  when: current_service_method.stdout | trim == "nssm"
+
+- name: Remove installation directory
+  win_file:
+    path: "{{ install_dir_windows }}"
+    state: absent
+
+- name: Remove configuration directory
+  win_file:
+    path: "{{ config_dir_windows }}"
+    state: absent
+  when: remove_config | default(false)
+
+- name: Remove log directory
+  win_file:
+    path: "{{ log_dir_windows }}"
+    state: absent
+  when: remove_logs | default(false)
+
+- name: Display uninstallation summary
+  debug:
+    msg:
+      - "TLS Certificate Monitor has been uninstalled"
+      - "Service method was: {{ current_service_method.stdout | trim }}"
+      - "Binary and service files removed"
+      - "Config backup saved to: {{ config_backup.stdout | default('Not created') }}"
+      - "Config directory {{ 'removed' if remove_config | default(false) else 'preserved' }}: {{ config_dir_windows }}"
+      - "Log directory {{ 'removed' if remove_logs | default(false) else 'preserved' }}: {{ log_dir_windows }}"

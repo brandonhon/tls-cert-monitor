@@ -1,0 +1,71 @@
+---
+# TLS Certificate Monitor Ansible Inventory Example
+# Copy this file to hosts.yml and customize for your environment
+
+all:
+  children:
+    # Linux servers group
+    linux_servers:
+      hosts:
+        webserver01:
+          ansible_host: 192.168.1.10
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          # Custom certificate directories for this host
+          cert_dirs_linux:
+            - /etc/ssl/certs
+            - /etc/nginx/ssl
+            - /opt/certificates
+
+        dbserver01:
+          ansible_host: 192.168.1.20
+          ansible_user: centos
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          # Override scan interval for this host
+          scan_interval_seconds: 1800
+
+    # Windows servers group
+    windows_servers:
+      hosts:
+        winserver01:
+          ansible_host: 192.168.1.30
+          ansible_user: ansible
+          ansible_password: "{{ vault_windows_password }}"
+          ansible_connection: ssh
+          ansible_shell_type: powershell
+          # Use native Windows service (v1.2.0+)
+          windows_service_method: "native"
+
+        winserver02:
+          ansible_host: 192.168.1.31
+          ansible_user: administrator
+          ansible_password: "{{ vault_windows_password }}"
+          ansible_connection: ssh
+          ansible_shell_type: powershell
+          # Use NSSM for compatibility
+          windows_service_method: "nssm"
+          # Custom certificate directories for Windows
+          cert_dirs_windows:
+            - C:\inetpub\ssl
+            - C:\certificates
+            - C:\ProgramData\MyApp\certs
+
+  # Global variables for all hosts
+  vars:
+    # Release version (latest, or specific version like v1.2.0)
+    release_version: "latest"
+
+    # Service configuration
+    service_port: 9090
+    scan_interval_seconds: 3600
+    scan_workers: 4
+    log_level: "INFO"
+
+    # Feature flags
+    enable_hot_reload: true
+    enable_cache: true
+
+# Example using Ansible Vault for sensitive data:
+# 1. Create vault file: ansible-vault create group_vars/all/vault.yml
+# 2. Add: vault_windows_password: "your_secure_password"
+# 3. Run with: ansible-playbook site.yml --ask-vault-pass
