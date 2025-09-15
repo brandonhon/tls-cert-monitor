@@ -26,7 +26,6 @@ except ImportError:
 from tls_cert_monitor.config import load_config
 from tls_cert_monitor.logger import setup_logging
 
-
 if win32serviceutil:
 
     class TLSCertMonitorService(win32serviceutil.ServiceFramework):
@@ -294,3 +293,4 @@ if __name__ == "__main__":
         else:
             # Default to service framework handling
             win32serviceutil.HandleCommandLine(TLSCertMonitorService)
+
