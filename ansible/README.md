@@ -7,7 +7,7 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 - **Cross-platform support**: Linux and Windows hosts
 - **Automatic binary download**: Pulls latest release from GitHub
 - **OS-specific configuration**: Separate templates for Linux and Windows
-- **Service management**: systemd for Linux, NSSM for Windows
+- **Service management**: systemd for Linux, native Windows service or NSSM for Windows
 - **Security hardening**: Dedicated service user, filesystem restrictions
 - **Monitoring ready**: Health checks and metrics endpoints
 
@@ -157,6 +157,7 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 | `log_level` | `"INFO"` | Logging level |
 | `enable_cache` | `true` | Enable caching |
 | `enable_hot_reload` | `true` | Enable hot reload |
+| `windows_service_method` | `"native"` | Windows service method: "native" (v1.2.0+) or "nssm" |
 
 ### Host-Specific Variables
 
@@ -184,17 +185,23 @@ journalctl -u tls-cert-monitor -f
 systemctl restart tls-cert-monitor
 ```
 
-### Windows (NSSM)
+### Windows
 
 ```powershell
 # Check service status
 Get-Service tls-cert-monitor
 
-# View logs
+# View logs (NSSM method)
 Get-Content "C:\ProgramData\tls-cert-monitor\logs\service.log"
+
+# View logs (native method)
+Get-EventLog -LogName Application -Source "TLS Certificate Monitor" -Newest 20
 
 # Restart service
 Restart-Service tls-cert-monitor
+
+# Check service method in use (native or NSSM)
+Get-Service tls-cert-monitor | Select-Object Name, Status, ServiceType
 ```
 
 ## Verification
@@ -251,6 +258,26 @@ ansible windows_servers -m win_shell -a "Get-WmiObject win32_service | Where-Obj
 | Windows | `C:\ProgramData\tls-cert-monitor\logs\` |
 
 ## Advanced Configuration
+
+### Windows Service Method Selection
+
+Starting with v1.2.0, tls-cert-monitor supports native Windows service functionality without requiring NSSM:
+
+```yaml
+# group_vars/windows_servers.yml
+
+# Use native Windows service (requires v1.2.0+)
+windows_service_method: "native"
+
+# Use NSSM for older versions or compatibility
+windows_service_method: "nssm"
+```
+
+The native method offers:
+- No third-party dependencies
+- Direct integration with Windows Service Control Manager
+- Built-in support for service install/uninstall/start/stop operations
+- Better compatibility with security policies
 
 ### Custom Certificate Directories
 

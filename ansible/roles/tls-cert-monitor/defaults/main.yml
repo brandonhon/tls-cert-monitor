@@ -42,3 +42,8 @@ log_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\logs"
 enable_hot_reload: true
 enable_cache: true
 cache_ttl_seconds: 86400
+
+# Windows service method (native or nssm)
+# Set to 'native' to use built-in Windows service support
+# Set to 'nssm' to use NSSM (third-party service manager)
+windows_service_method: "native"

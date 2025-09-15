@@ -40,23 +40,75 @@
     dest: "{{ config_dir_windows }}\\config.yaml"
     backup: yes
 
+# Native Windows Service Installation (v1.2.0+)
+- name: Install Windows service (native method)
+  win_shell: |
+    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+    $configPath = "{{ config_dir_windows }}\\config.yaml"
+
+    # Check if service exists
+    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+
+    if ($service) {
+        Write-Host "Stopping existing service..."
+        Stop-Service -Name "{{ service_name }}" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+
+        Write-Host "Uninstalling existing service..."
+        & $exePath --service-uninstall
+        Start-Sleep -Seconds 2
+    }
+
+    # Install the service with auto-start
+    Write-Host "Installing native Windows service..."
+    & $exePath --service-install --config $configPath
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install Windows service. Exit code: $LASTEXITCODE"
+    }
+
+    # Start the service
+    Write-Host "Starting Windows service..."
+    & $exePath --service-start
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to start Windows service. Exit code: $LASTEXITCODE"
+    }
+
+    # Verify service is running
+    Start-Sleep -Seconds 3
+    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+    if ($service.Status -ne 'Running') {
+        throw "Service is not running. Status: $($service.Status)"
+    }
+
+    Write-Host "Windows service installed and started successfully"
+  args:
+    executable: powershell
+  when: windows_service_method == "native"
+  notify: restart tls-cert-monitor-windows-native
+
+# NSSM Windows Service Installation (fallback/legacy)
 - name: Download NSSM for service management
   win_get_url:
     url: "https://nssm.cc/release/nssm-2.24.zip"
     dest: "{{ install_dir_windows }}\\nssm.zip"
+  when: windows_service_method == "nssm"
 
 - name: Extract NSSM
   win_unzip:
     src: "{{ install_dir_windows }}\\nssm.zip"
     dest: "{{ install_dir_windows }}"
     creates: "{{ install_dir_windows }}\\nssm-2.24"
+  when: windows_service_method == "nssm"
 
 - name: Remove NSSM archive
   win_file:
     path: "{{ install_dir_windows }}\\nssm.zip"
     state: absent
+  when: windows_service_method == "nssm"
 
-- name: Install Windows service
+- name: Install Windows service (NSSM method)
   win_shell: |
     $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
     $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
@@ -83,7 +135,8 @@
     & $nssmPath start "{{ service_name }}"
   args:
     executable: powershell
-  notify: restart tls-cert-monitor-windows
+  when: windows_service_method == "nssm"
+  notify: restart tls-cert-monitor-windows-nssm
 
 - name: Configure Windows Firewall rule
   win_firewall_rule:
@@ -94,3 +147,21 @@
     protocol: tcp
     state: present
     enabled: yes
+
+- name: Verify service is running
+  win_shell: |
+    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+    if (-not $service) {
+        throw "Service '{{ service_name }}' not found"
+    }
+
+    if ($service.Status -ne 'Running') {
+        throw "Service is not running. Status: $($service.Status)"
+    }
+
+    Write-Host "Service '{{ service_name }}' is running successfully"
+    return $true
+  args:
+    executable: powershell
+  register: service_status
+  failed_when: service_status.rc != 0
