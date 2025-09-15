@@ -1,0 +1,208 @@
+---
+# TLS certificate setup tasks
+
+- name: Create TLS certificate directory (Linux)
+  file:
+    path: "{{ tls_cert_dir_linux }}"
+    state: directory
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0755'
+  when: ansible_system == "Linux" and enable_tls
+
+- name: Create TLS certificate directory (Windows)
+  win_file:
+    path: "{{ tls_cert_dir_windows }}"
+    state: directory
+  when: ansible_os_family == "Windows" and enable_tls
+
+# Self-signed certificate generation
+- name: Generate self-signed certificate (Linux)
+  block:
+    - name: Generate private key
+      openssl_privatekey:
+        path: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+        size: 2048
+        owner: "{{ service_user_linux }}"
+        group: "{{ service_user_linux }}"
+        mode: '0600'
+
+    - name: Generate certificate signing request
+      openssl_csr:
+        path: "{{ tls_cert_dir_linux }}/server.csr"
+        privatekey_path: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+        common_name: "{{ tls_cert_common_name }}"
+        country_name: "{{ tls_cert_country }}"
+        state_or_province_name: "{{ tls_cert_state }}"
+        locality_name: "{{ tls_cert_city }}"
+        organization_name: "{{ tls_cert_organization }}"
+        organizational_unit_name: "{{ tls_cert_organizational_unit }}"
+        subject_alt_name:
+          - "DNS:{{ ansible_fqdn | default('localhost') }}"
+          - "DNS:{{ ansible_hostname | default('localhost') }}"
+          - "DNS:localhost"
+          - "IP:{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+          - "IP:127.0.0.1"
+
+    - name: Generate self-signed certificate
+      openssl_certificate:
+        path: "{{ tls_cert_dir_linux }}/{{ tls_cert_filename }}"
+        privatekey_path: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+        csr_path: "{{ tls_cert_dir_linux }}/server.csr"
+        provider: selfsigned
+        selfsigned_not_after: "+{{ tls_cert_validity_days }}d"
+        owner: "{{ service_user_linux }}"
+        group: "{{ service_user_linux }}"
+        mode: '0644'
+
+    - name: Remove CSR file
+      file:
+        path: "{{ tls_cert_dir_linux }}/server.csr"
+        state: absent
+
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "selfsigned"
+
+- name: Generate self-signed certificate (Windows)
+  win_shell: |
+    $certDir = "{{ tls_cert_dir_windows }}"
+    $certFile = "$certDir\{{ tls_cert_filename }}"
+    $keyFile = "$certDir\{{ tls_key_filename }}"
+    $commonName = "{{ tls_cert_common_name }}"
+    $validityDays = {{ tls_cert_validity_days }}
+
+    # Generate certificate using PowerShell
+    $cert = New-SelfSignedCertificate -DnsName $commonName, "localhost", "{{ ansible_fqdn | default('localhost') }}" `
+        -CertStoreLocation "cert:\LocalMachine\My" `
+        -NotAfter (Get-Date).AddDays($validityDays) `
+        -KeySpec KeyExchange `
+        -KeyLength 2048 `
+        -HashAlgorithm SHA256
+
+    # Export certificate
+    $certBytes = $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+    [System.IO.File]::WriteAllBytes($certFile, $certBytes)
+
+    # Export private key (requires additional steps for proper formatting)
+    $keyBytes = $cert.PrivateKey.ExportPkcs8PrivateKey()
+    $keyBase64 = [System.Convert]::ToBase64String($keyBytes)
+    $keyPem = "-----BEGIN PRIVATE KEY-----`n"
+    for ($i = 0; $i -lt $keyBase64.Length; $i += 64) {
+        $line = $keyBase64.Substring($i, [Math]::Min(64, $keyBase64.Length - $i))
+        $keyPem += "$line`n"
+    }
+    $keyPem += "-----END PRIVATE KEY-----"
+    [System.IO.File]::WriteAllText($keyFile, $keyPem)
+
+    # Remove from certificate store
+    Get-ChildItem "cert:\LocalMachine\My" | Where-Object { $_.Thumbprint -eq $cert.Thumbprint } | Remove-Item
+
+    Write-Output "Certificate generated successfully"
+  args:
+    executable: powershell
+  when: ansible_os_family == "Windows" and enable_tls and tls_cert_source == "selfsigned"
+
+# File-based certificate deployment
+- name: Copy certificate file (Linux)
+  copy:
+    src: "{{ tls_cert_file_local }}"
+    dest: "{{ tls_cert_dir_linux }}/{{ tls_cert_filename }}"
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0644'
+    backup: yes
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "files" and tls_cert_file_local != ""
+
+- name: Copy private key file (Linux)
+  copy:
+    src: "{{ tls_key_file_local }}"
+    dest: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0600'
+    backup: yes
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "files" and tls_key_file_local != ""
+
+- name: Copy certificate file (Windows)
+  win_copy:
+    src: "{{ tls_cert_file_local }}"
+    dest: "{{ tls_cert_dir_windows }}\\{{ tls_cert_filename }}"
+    backup: yes
+  when: ansible_os_family == "Windows" and enable_tls and tls_cert_source == "files" and tls_cert_file_local != ""
+
+- name: Copy private key file (Windows)
+  win_copy:
+    src: "{{ tls_key_file_local }}"
+    dest: "{{ tls_cert_dir_windows }}\\{{ tls_key_filename }}"
+    backup: yes
+  when: ansible_os_family == "Windows" and enable_tls and tls_cert_source == "files" and tls_key_file_local != ""
+
+# Let's Encrypt certificate (Linux only)
+- name: Install certbot for Let's Encrypt (Linux)
+  package:
+    name:
+      - certbot
+      - python3-certbot-apache
+    state: present
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
+
+- name: Generate Let's Encrypt certificate (Linux)
+  command: >
+    certbot certonly --standalone
+    --email {{ letsencrypt_email }}
+    --agree-tos --non-interactive
+    {{ '--staging' if letsencrypt_staging else '' }}
+    -d {{ tls_cert_common_name }}
+  args:
+    creates: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/fullchain.pem"
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt" and letsencrypt_email != ""
+
+- name: Copy Let's Encrypt certificate (Linux)
+  copy:
+    src: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/fullchain.pem"
+    dest: "{{ tls_cert_dir_linux }}/{{ tls_cert_filename }}"
+    remote_src: yes
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0644'
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
+
+- name: Copy Let's Encrypt private key (Linux)
+  copy:
+    src: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/privkey.pem"
+    dest: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+    remote_src: yes
+    owner: "{{ service_user_linux }}"
+    group: "{{ service_user_linux }}"
+    mode: '0600'
+  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
+
+# Validation
+- name: Validate certificate files exist (Linux)
+  stat:
+    path: "{{ item }}"
+  register: cert_files_linux
+  loop:
+    - "{{ tls_cert_dir_linux }}/{{ tls_cert_filename }}"
+    - "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
+  when: ansible_system == "Linux" and enable_tls
+  failed_when: not cert_files_linux.results | selectattr('stat.exists') | list
+
+- name: Validate certificate files exist (Windows)
+  win_stat:
+    path: "{{ item }}"
+  register: cert_files_windows
+  loop:
+    - "{{ tls_cert_dir_windows }}\\{{ tls_cert_filename }}"
+    - "{{ tls_cert_dir_windows }}\\{{ tls_key_filename }}"
+  when: ansible_os_family == "Windows" and enable_tls
+  failed_when: not cert_files_windows.results | selectattr('stat.exists') | list
+
+- name: Display TLS certificate information
+  debug:
+    msg:
+      - "TLS enabled: {{ enable_tls }}"
+      - "Certificate source: {{ tls_cert_source }}"
+      - "Certificate file: {{ tls_cert_dir_linux if ansible_system == 'Linux' else tls_cert_dir_windows }}/{{ tls_cert_filename }}"
+      - "Private key file: {{ tls_cert_dir_linux if ansible_system == 'Linux' else tls_cert_dir_windows }}/{{ tls_key_filename }}"
+      - "HTTPS endpoint: https://{{ ansible_fqdn | default(ansible_default_ipv4.address) }}:{{ service_port }}"
+  when: enable_tls

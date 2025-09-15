@@ -61,6 +61,14 @@ all:
     scan_workers: 4
     log_level: "INFO"
 
+    # TLS/SSL configuration
+    enable_tls: false
+    tls_cert_source: "selfsigned"        # "selfsigned", "files", "letsencrypt"
+    tls_cert_common_name: "monitor.local"
+    # tls_cert_file_local: "/local/path/to/cert.pem"    # For tls_cert_source: "files"
+    # tls_key_file_local: "/local/path/to/key.pem"      # For tls_cert_source: "files"
+    # letsencrypt_email: "admin@example.com"            # For tls_cert_source: "letsencrypt"
+
     # Feature flags
     enable_hot_reload: true
     enable_cache: true

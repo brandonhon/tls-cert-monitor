@@ -47,3 +47,31 @@ cache_ttl_seconds: 86400
 # Set to 'native' to use built-in Windows service support
 # Set to 'nssm' to use NSSM (third-party service manager)
 windows_service_method: "native"
+
+# TLS/SSL configuration for metrics endpoint
+enable_tls: false
+tls_cert_source: "selfsigned"  # "selfsigned", "files", "letsencrypt"
+
+# Self-signed certificate options (when tls_cert_source: "selfsigned")
+tls_cert_common_name: "{{ ansible_fqdn | default('localhost') }}"
+tls_cert_country: "US"
+tls_cert_state: "CA"
+tls_cert_city: "San Francisco"
+tls_cert_organization: "TLS Certificate Monitor"
+tls_cert_organizational_unit: "IT"
+tls_cert_validity_days: 365
+
+# File-based certificates (when tls_cert_source: "files")
+# Local paths to certificate files that will be copied to target
+tls_cert_file_local: ""        # Local path to certificate file
+tls_key_file_local: ""         # Local path to private key file
+
+# Let's Encrypt options (when tls_cert_source: "letsencrypt")
+letsencrypt_email: ""          # Email for Let's Encrypt registration
+letsencrypt_staging: false     # Use staging environment for testing
+
+# Target paths for TLS files on remote hosts
+tls_cert_dir_linux: "/etc/tls-cert-monitor/ssl"
+tls_cert_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\ssl"
+tls_cert_filename: "server.crt"
+tls_key_filename: "server.key"

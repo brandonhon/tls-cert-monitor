@@ -137,6 +137,7 @@ make ansible-uninstall
 #### Features
 - **Cross-platform**: Supports Linux (systemd) and Windows (native service or NSSM)
 - **Service selection**: Choose native Windows service (v1.2.0+) or NSSM fallback
+- **TLS/SSL support**: Deploy with self-signed, custom, or Let's Encrypt certificates
 - **Safe uninstall**: Backs up configuration before removal
 - **Flexible options**: Control what gets removed (config, logs, user)
 
@@ -145,6 +146,15 @@ make ansible-uninstall
 ```bash
 # Test deployment without making changes
 make ansible-install-dry
+
+# Deploy with TLS enabled (self-signed certificates)
+cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true"
+
+# Deploy with custom certificates
+cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=files tls_cert_file_local=/path/to/cert.pem tls_key_file_local=/path/to/key.pem"
+
+# Deploy with Let's Encrypt (Linux only)
+cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com"
 
 # Uninstall specific groups
 cd ansible && ansible-playbook playbooks/uninstall.yml --limit windows_servers

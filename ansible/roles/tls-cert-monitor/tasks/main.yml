@@ -20,5 +20,9 @@
   include_tasks: install-windows.yml
   when: ansible_os_family == "Windows"
 
+- name: Setup TLS certificates
+  include_tasks: setup-tls.yml
+  when: enable_tls
+
 - name: Verify installation
   include_tasks: verify.yml

@@ -35,9 +35,14 @@ server:
 
   # TLS configuration (optional)
   tls:
-    enabled: false
+    enabled: {{ enable_tls | lower }}
+{% if enable_tls %}
+    cert_file: "{{ tls_cert_dir_windows }}\\{{ tls_cert_filename }}"
+    key_file: "{{ tls_cert_dir_windows }}\\{{ tls_key_filename }}"
+{% else %}
     cert_file: ""
     key_file: ""
+{% endif %}
 
 # Cache configuration
 cache:

@@ -158,6 +158,8 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 | `enable_cache` | `true` | Enable caching |
 | `enable_hot_reload` | `true` | Enable hot reload |
 | `windows_service_method` | `"native"` | Windows service method: "native" (v1.2.0+) or "nssm" |
+| `enable_tls` | `false` | Enable TLS/SSL for metrics endpoint |
+| `tls_cert_source` | `"selfsigned"` | Certificate source: "selfsigned", "files", or "letsencrypt" |
 
 ### Host-Specific Variables
 
@@ -278,6 +280,80 @@ The native method offers:
 - Direct integration with Windows Service Control Manager
 - Built-in support for service install/uninstall/start/stop operations
 - Better compatibility with security policies
+
+### TLS/SSL Certificate Configuration
+
+The playbook supports multiple methods for securing the metrics endpoint with TLS certificates:
+
+#### Option 1: Self-Signed Certificates (Default)
+
+Automatically generates self-signed certificates for quick setup:
+
+```yaml
+# group_vars/all.yml
+enable_tls: true
+tls_cert_source: "selfsigned"
+tls_cert_common_name: "monitor.example.com"
+tls_cert_validity_days: 365
+```
+
+#### Option 2: Custom Certificate Files
+
+Deploy your own certificate files:
+
+```yaml
+# group_vars/all.yml
+enable_tls: true
+tls_cert_source: "files"
+tls_cert_file_local: "/path/to/your/certificate.pem"
+tls_key_file_local: "/path/to/your/private-key.pem"
+```
+
+#### Option 3: Let's Encrypt (Linux Only)
+
+Automatically obtain and deploy Let's Encrypt certificates:
+
+```yaml
+# group_vars/all.yml
+enable_tls: true
+tls_cert_source: "letsencrypt"
+letsencrypt_email: "admin@example.com"
+tls_cert_common_name: "monitor.example.com"
+letsencrypt_staging: false  # Set to true for testing
+```
+
+#### TLS Configuration Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `enable_tls` | `false` | Enable TLS for the metrics endpoint |
+| `tls_cert_source` | `"selfsigned"` | Certificate source method |
+| `tls_cert_common_name` | `{{ ansible_fqdn }}` | Certificate common name |
+| `tls_cert_validity_days` | `365` | Self-signed cert validity period |
+| `tls_cert_file_local` | `""` | Local path to certificate file |
+| `tls_key_file_local` | `""` | Local path to private key file |
+| `letsencrypt_email` | `""` | Email for Let's Encrypt registration |
+| `letsencrypt_staging` | `false` | Use Let's Encrypt staging environment |
+
+#### Deployment Examples
+
+```bash
+# Deploy with self-signed certificates
+ansible-playbook playbooks/site.yml -e "enable_tls=true"
+
+# Deploy with custom certificates
+ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=files tls_cert_file_local=/certs/server.crt tls_key_file_local=/certs/server.key"
+
+# Deploy with Let's Encrypt
+ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com"
+
+# Test with Let's Encrypt staging
+ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com letsencrypt_staging=true"
+```
+
+After deployment with TLS enabled, access the application at:
+- **HTTP**: `http://hostname:9090` (disabled when TLS is enabled)
+- **HTTPS**: `https://hostname:9090`
 
 ### Custom Certificate Directories
 
