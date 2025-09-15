@@ -88,6 +88,11 @@ certs/
 *.pfx
 *.key
 
+# Ansible deployment files
+ansible/
+*.retry
+.ansible_vault_*
+
 # Other
 ignore/
 Makefile.backup

@@ -201,5 +201,12 @@ tmp/
 # Fixtures
 tests/fixtures
 
+# Ansible specific
+ansible/inventory/hosts.yml
+ansible/group_vars/*/vault.yml
+ansible/.vault_pass
+*.retry
+.ansible_vault_*
+
 # Other
 ignore/
