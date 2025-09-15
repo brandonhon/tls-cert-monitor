@@ -25,7 +25,7 @@ from tls_cert_monitor.scanner import CertificateScanner
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan handler for startup and shutdown events."""
     logger = get_logger("api")
-    
+
     try:
         # Startup
         logger.info("TLS Certificate Monitor API started")
