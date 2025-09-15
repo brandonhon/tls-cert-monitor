@@ -42,7 +42,7 @@ class TestWindowsServiceOperations:
         mock_sys.executable = "python.exe"
         mock_win32service.SERVICE_AUTO_START = 2
 
-        result = install_service(config_path="/test/config.yaml", auto_start=True)
+        result = install_service(service_config_path="/test/config.yaml", service_auto_start=True)
 
         assert result is True
         mock_win32serviceutil.InstallService.assert_called_once()
@@ -222,7 +222,7 @@ class TestServiceConfigurationHandling:
         mock_win32service.SERVICE_DEMAND_START = 3
         config_path = "/custom/path/config.yaml"
 
-        result = install_service(config_path=config_path, auto_start=False)
+        result = install_service(service_config_path=config_path, service_auto_start=False)
 
         assert result is True
         # Verify that the config path would be passed to the service
@@ -233,7 +233,7 @@ class TestServiceConfigurationHandling:
         """Test service installation with manual start type."""
         mock_win32service.SERVICE_DEMAND_START = 3
 
-        result = install_service(auto_start=False)
+        result = install_service(service_auto_start=False)
 
         assert result is True
 
