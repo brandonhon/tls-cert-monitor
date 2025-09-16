@@ -35,7 +35,8 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 ansible/
 ├── ansible.cfg              # Ansible configuration
 ├── playbooks/
-│   └── site.yml            # Main playbook
+│   ├── site.yml            # Main deployment playbook
+│   └── uninstall.yml       # Uninstallation playbook
 ├── roles/
 │   └── tls-cert-monitor/
 │       ├── defaults/        # Default variables
@@ -114,6 +115,80 @@ ansible-playbook playbooks/site.yml --check
 # Verbose output
 ansible-playbook playbooks/site.yml -vv
 ```
+
+### Alternative: Using Make Targets
+
+From the project root directory, you can also use these convenient Make targets:
+
+```bash
+# Deploy using Ansible
+make ansible-install
+
+# Uninstall using Ansible
+make ansible-uninstall
+
+# Dry-run deployment
+make ansible-install-dry
+
+# Dry-run uninstall
+make ansible-uninstall-dry
+
+# Complete purge (removes config, logs, user)
+make ansible-uninstall-purge
+```
+
+## Uninstallation
+
+The uninstall playbook provides safe removal of tls-cert-monitor with flexible options:
+
+### Basic Uninstall
+
+```bash
+# Uninstall from all hosts (preserves config, logs, and user)
+ansible-playbook playbooks/uninstall.yml
+
+# Uninstall from specific group
+ansible-playbook playbooks/uninstall.yml --limit linux_servers
+
+# Dry run (check what would be removed)
+ansible-playbook playbooks/uninstall.yml --check
+```
+
+### Advanced Uninstall Options
+
+```bash
+# Remove configuration files (after backup)
+ansible-playbook playbooks/uninstall.yml -e "remove_config=true"
+
+# Remove log files
+ansible-playbook playbooks/uninstall.yml -e "remove_logs=true"
+
+# Remove service user (Linux only)
+ansible-playbook playbooks/uninstall.yml -e "remove_user=true"
+
+# Complete removal (all data)
+ansible-playbook playbooks/uninstall.yml -e "remove_config=true remove_logs=true remove_user=true"
+
+# Skip confirmation prompt
+ansible-playbook playbooks/uninstall.yml -e "confirm_uninstall=false"
+```
+
+### What Gets Removed
+
+| Component | Default | With Options |
+|-----------|---------|--------------|
+| **Binary & Service** | ✅ Always removed | ✅ Always removed |
+| **Configuration** | ❌ Preserved (backed up) | ✅ `remove_config=true` |
+| **Log files** | ❌ Preserved | ✅ `remove_logs=true` |
+| **Service user** | ❌ Preserved | ✅ `remove_user=true` (Linux) |
+| **TLS certificates** | ❌ Preserved (backed up) | ✅ With `remove_config=true` |
+
+### Safety Features
+
+- **Configuration backup**: Automatically created before removal
+- **Confirmation prompt**: Interactive confirmation (can be skipped)
+- **Service detection**: Automatically detects native vs NSSM Windows services
+- **Graceful errors**: Continues if service is already stopped/removed
 
 ## Windows SSH Setup
 
