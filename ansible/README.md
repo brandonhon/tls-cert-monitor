@@ -55,13 +55,18 @@ ansible/
 
 ### 1. Setup Inventory
 
-Copy and customize the inventory file:
+Customize the inventory file for your environment:
 
 ```bash
+# Edit the inventory file directly
+vim inventory/hosts.yml
+
+# Or create environment-specific inventories
 cp inventory/hosts.yml inventory/production.yml
+cp inventory/hosts.yml inventory/staging.yml
 ```
 
-Edit `inventory/production.yml` with your hosts:
+Edit `inventory/hosts.yml` (or your environment-specific file) with your hosts:
 
 ```yaml
 all:
@@ -103,11 +108,14 @@ cert_dirs_windows:
 ### 3. Run Deployment
 
 ```bash
-# Deploy to all hosts
+# Deploy to all hosts (uses default inventory/hosts.yml)
 ansible-playbook playbooks/site.yml
 
 # Deploy to specific group
 ansible-playbook playbooks/site.yml --limit linux_servers
+
+# Deploy using environment-specific inventory
+ansible-playbook playbooks/site.yml -i inventory/production.yml
 
 # Check mode (dry run)
 ansible-playbook playbooks/site.yml --check
@@ -149,6 +157,9 @@ ansible-playbook playbooks/uninstall.yml
 
 # Uninstall from specific group
 ansible-playbook playbooks/uninstall.yml --limit linux_servers
+
+# Uninstall using environment-specific inventory
+ansible-playbook playbooks/uninstall.yml -i inventory/production.yml
 
 # Dry run (check what would be removed)
 ansible-playbook playbooks/uninstall.yml --check
