@@ -204,9 +204,31 @@ tests/fixtures
 # Ansible specific
 ansible/inventory/hosts.yml
 ansible/group_vars/*/vault.yml
+ansible/host_vars/*/vault.yml
 ansible/.vault_pass
+ansible/.vault_password
+ansible/vault_pass.txt
 *.retry
 .ansible_vault_*
+ansible/.ansible/
+ansible/logs/
+ansible/*.log
+
+# Ansible TLS certificates (exclude real certificates from version control)
+ansible/certs/
+ansible/ssl/
+ansible/tls/
+ansible/**/*.pem
+ansible/**/*.crt
+ansible/**/*.key
+ansible/**/*.p12
+ansible/**/*.pfx
+ansible/files/ssl/
+ansible/files/certs/
+ansible/files/tls/
+
+# Let's Encrypt working directory (if certbot runs locally)
+ansible/letsencrypt/
 
 # Other
 ignore/
