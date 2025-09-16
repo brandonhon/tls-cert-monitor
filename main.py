@@ -200,6 +200,7 @@ def main(
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
+    # Handle special flags first (before any potential import issues)
     if banana:
         print("🍌 ERROR: Monkey detected in system. Deploying bananas...")
         return
@@ -219,39 +220,38 @@ def main(
                 stop_service,
                 uninstall_service,
             )
-
-            if not is_windows_service_available():
-                print("ERROR: Windows service functionality is not available.")
-                print("This requires Windows and the pywin32 package.")
-                sys.exit(1)
-
-            config_path = str(config) if config else None
-
-            if service_install:
-                auto_start = not service_manual
-                success = install_service(config_path, auto_start)
-                sys.exit(0 if success else 1)
-            elif service_uninstall:
-                success = uninstall_service()
-                sys.exit(0 if success else 1)
-            elif service_start:
-                success = start_service()
-                sys.exit(0 if success else 1)
-            elif service_stop:
-                success = stop_service()
-                sys.exit(0 if success else 1)
-            elif service_status:
-                status = get_service_status()
-                print(f"Service status: {status}")
-                sys.exit(0)
-
-        except ImportError:
-            print("ERROR: Windows service functionality requires the pywin32 package.")
-            print("Install it with: pip install pywin32")
+        except ImportError as e:
+            print("ERROR: Windows service functionality is not available.")
+            print(f"Import error: {e}")
+            print("This requires Windows and the pywin32 package.")
             sys.exit(1)
-        except Exception as e:
-            print(f"Service operation failed: {e}")
+
+        if not is_windows_service_available():
+            print("ERROR: Windows service functionality is not available.")
+            print("This requires Windows and the pywin32 package.")
             sys.exit(1)
+
+        config_path = str(config) if config else None
+
+        if service_install:
+            auto_start = not service_manual
+            success = install_service(config_path, auto_start)
+            sys.exit(0 if success else 1)
+        elif service_uninstall:
+            success = uninstall_service()
+            sys.exit(0 if success else 1)
+        elif service_start:
+            success = start_service()
+            sys.exit(0 if success else 1)
+        elif service_stop:
+            success = stop_service()
+            sys.exit(0 if success else 1)
+        elif service_status:
+            status = get_service_status()
+            print(f"Service status: {status}")
+            sys.exit(0)
+
+        return  # Exit after handling service commands
 
     try:
         monitor = TLSCertMonitor(str(config) if config else None, dry_run=dry_run)
