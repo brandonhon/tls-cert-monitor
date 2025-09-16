@@ -217,6 +217,7 @@ ansible_galaxy.log
 
 # Ansible working directories and cache (wherever they appear)
 .ansible/
+.ansible/.lock
 **/.ansible/
 ansible/logs/
 ansible/*.log
