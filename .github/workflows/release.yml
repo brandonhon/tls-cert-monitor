@@ -135,8 +135,7 @@ jobs:
         
         $FLAGS = @(
           "--onefile",
-          "--standalone", 
-          "--disable-console",
+          "--standalone",
           "--enable-plugin=pkg-resources",
           "--assume-yes-for-downloads",
           "--follow-imports",
@@ -151,11 +150,22 @@ jobs:
         python -m nuitka $FLAGS main.py
         
         Write-Host "📄 Verifying Windows binary..."
-        Get-ChildItem -Path dist -Name "*.exe" | ForEach-Object { 
+        Get-ChildItem -Path dist -Name "*.exe" | ForEach-Object {
           Write-Host "Binary: $_"
           $path = Join-Path -Path dist -ChildPath $_
           (Get-Item $path).Length
         }
+
+    - name: Test Windows binary help flag
+      run: |
+        Write-Host "🧪 Testing Windows binary help flag..."
+        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
+
+        Write-Host "Testing --help flag:"
+        & $binaryPath --help
+
+        Write-Host "Testing --version flag:"
+        & $binaryPath --version
 
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
