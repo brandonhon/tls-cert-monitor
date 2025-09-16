@@ -123,13 +123,19 @@ Deploy across multiple servers with full automation using Ansible:
 #### Quick Start
 
 ```bash
-# 1. Customize inventory with your servers
+# 1. Get setup information
+make ansible-setup-info
+
+# 2. Customize inventory with your servers
 # Edit ansible/inventory/hosts.yml with SSH connection details
 
-# 2. Deploy to all servers
+# 3. Test SSH connectivity
+make ansible-ping
+
+# 4. Deploy to all servers
 make ansible-install
 
-# 3. Uninstall from all servers
+# 5. Uninstall from all servers
 make ansible-uninstall
 ```
 
@@ -167,6 +173,15 @@ cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=nat
 
 # Use NSSM for Windows (legacy/compatibility)
 cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=nssm"
+
+# Test connectivity and troubleshooting
+make ansible-ping           # Test SSH connectivity to all hosts
+make ansible-win-ping       # Test Windows connectivity (SSH/WinRM)
+make ansible-inventory      # Show parsed inventory configuration
+
+# Manage encrypted passwords with Ansible Vault
+make ansible-vault-create   # Create encrypted vault file
+make ansible-vault-edit     # Edit encrypted vault file
 ```
 
 See [ansible/README.md](ansible/README.md) for complete documentation.

@@ -405,12 +405,33 @@ certs: ## Generate test certificates
 # ----------------------------
 # Ansible Deployment
 # ----------------------------
+.PHONY: ansible-setup-info
+ansible-setup-info: ## Show Ansible setup information and SSH requirements
+	@printf "$(BLUE)📋 Ansible Setup Information$(NC)\n\n"
+	@printf "$(YELLOW)📂 Configuration Files:$(NC)\n"
+	@printf "  • ansible/inventory/hosts.yml - Define your hosts with SSH connection details\n"
+	@printf "  • ansible/group_vars/ - Configure defaults for Linux/Windows hosts\n"
+	@printf "  • ansible/group_vars/all/vault.yml - Store encrypted passwords (optional)\n\n"
+	@printf "$(YELLOW)🔑 SSH Authentication Methods:$(NC)\n"
+	@printf "  • SSH Key (recommended): ansible_ssh_private_key_file: ~/.ssh/id_rsa\n"
+	@printf "  • Password: ansible_password: \"{{ vault_password }}\"\n\n"
+	@printf "$(YELLOW)🪟 Windows Connection Options:$(NC)\n"
+	@printf "  • SSH (recommended): ansible_connection: ssh, ansible_shell_type: powershell\n"
+	@printf "  • WinRM (traditional): ansible_connection: winrm\n\n"
+	@printf "$(YELLOW)🧪 Testing Commands:$(NC)\n"
+	@printf "  • make ansible-ping - Test SSH connectivity\n"
+	@printf "  • make ansible-win-ping - Test Windows connectivity\n"
+	@printf "  • make ansible-inventory - Show parsed inventory\n\n"
+	@printf "$(YELLOW)📚 Documentation:$(NC)\n"
+	@printf "  • See ansible/README.md for complete SSH configuration guide\n\n"
+
 .PHONY: ansible-install
-ansible-install: ## Deploy tls-cert-monitor using Ansible
+ansible-install: ## Deploy tls-cert-monitor using Ansible (configure SSH in inventory first)
 	@printf "$(BLUE)🚀 Deploying tls-cert-monitor with Ansible...$(NC)\n"
 	@if [ ! -f ansible/inventory/hosts.yml ]; then \
 		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
-		printf "$(YELLOW)💡 Copy ansible/inventory/hosts.yml.example and customize it$(NC)\n"; \
+		printf "$(YELLOW)💡 Edit ansible/inventory/hosts.yml with your SSH connection details$(NC)\n"; \
+		printf "$(YELLOW)💡 Run 'make ansible-setup-info' for configuration help$(NC)\n"; \
 		exit 1; \
 	fi
 	@cd ansible && ansible-playbook playbooks/site.yml
@@ -421,7 +442,7 @@ ansible-uninstall: ## Uninstall tls-cert-monitor using Ansible
 	@printf "$(BLUE)🗑️  Uninstalling tls-cert-monitor with Ansible...$(NC)\n"
 	@if [ ! -f ansible/inventory/hosts.yml ]; then \
 		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
-		printf "$(YELLOW)💡 Copy ansible/inventory/hosts.yml.example and customize it$(NC)\n"; \
+		printf "$(YELLOW)💡 Edit ansible/inventory/hosts.yml with your SSH connection details$(NC)\n"; \
 		exit 1; \
 	fi
 	@cd ansible && ansible-playbook playbooks/uninstall.yml
@@ -445,6 +466,51 @@ ansible-uninstall-purge: ## Uninstall and remove all data (config, logs, user)
 	@printf "$(RED)⚠️  WARNING: This will remove all configuration, logs, and the service user!$(NC)\n"
 	@cd ansible && ansible-playbook playbooks/uninstall.yml -e "remove_config=true remove_logs=true remove_user=true"
 	@printf "$(GREEN)✅ Purge completed$(NC)\n"
+
+.PHONY: ansible-ping
+ansible-ping: ## Test SSH connectivity to all hosts
+	@printf "$(BLUE)🏓 Testing SSH connectivity to all hosts...$(NC)\n"
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
+		printf "$(YELLOW)💡 Edit ansible/inventory/hosts.yml with your SSH connection details$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible all -m ping
+	@printf "$(GREEN)✅ SSH connectivity test completed$(NC)\n"
+
+.PHONY: ansible-win-ping
+ansible-win-ping: ## Test Windows connectivity (both SSH and WinRM)
+	@printf "$(BLUE)🪟 Testing Windows connectivity...$(NC)\n"
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible windows_servers -m win_ping 2>/dev/null || ansible windows_servers -m ping
+	@printf "$(GREEN)✅ Windows connectivity test completed$(NC)\n"
+
+.PHONY: ansible-inventory
+ansible-inventory: ## Show parsed inventory information
+	@printf "$(BLUE)📋 Displaying inventory information...$(NC)\n"
+	@if [ ! -f ansible/inventory/hosts.yml ]; then \
+		printf "$(RED)❌ No inventory file found at ansible/inventory/hosts.yml$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible-inventory --list --yaml
+
+.PHONY: ansible-vault-create
+ansible-vault-create: ## Create encrypted vault file for passwords
+	@printf "$(BLUE)🔐 Creating Ansible vault file...$(NC)\n"
+	@cd ansible && ansible-vault create group_vars/all/vault.yml
+	@printf "$(GREEN)✅ Vault file created at ansible/group_vars/all/vault.yml$(NC)\n"
+
+.PHONY: ansible-vault-edit
+ansible-vault-edit: ## Edit encrypted vault file
+	@printf "$(BLUE)🔐 Editing Ansible vault file...$(NC)\n"
+	@if [ ! -f ansible/group_vars/all/vault.yml ]; then \
+		printf "$(RED)❌ Vault file not found. Run 'make ansible-vault-create' first$(NC)\n"; \
+		exit 1; \
+	fi
+	@cd ansible && ansible-vault edit group_vars/all/vault.yml
 
 # ----------------------------
 # Cleanup
