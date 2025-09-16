@@ -208,9 +208,16 @@ ansible/host_vars/*/vault.yml
 ansible/.vault_pass
 ansible/.vault_password
 ansible/vault_pass.txt
+
+# Ansible runtime files (global patterns)
 *.retry
 .ansible_vault_*
-ansible/.ansible/
+.ansible_async_*
+ansible_galaxy.log
+
+# Ansible working directories and cache (wherever they appear)
+.ansible/
+**/.ansible/
 ansible/logs/
 ansible/*.log
 
