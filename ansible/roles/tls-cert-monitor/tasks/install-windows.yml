@@ -13,7 +13,7 @@
 
 - name: Download Windows binary
   win_get_url:
-    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/windows-{{ arch_name }}.tar.gz"
+    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/{{ platform_name }}-{{ arch_name }}.tar.gz"
     dest: "{{ install_dir_windows }}\\tls-cert-monitor-{{ release_version }}.tar.gz"
 
 - name: Extract Windows binary

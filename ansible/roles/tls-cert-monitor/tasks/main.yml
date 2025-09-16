@@ -5,9 +5,14 @@
   include_vars: "{{ ansible_system | lower }}.yml"
   ignore_errors: yes
 
-- name: Set architecture
+- name: Set platform and architecture for binary download
   set_fact:
-    arch_name: "{{ arch_map[ansible_architecture] | default(ansible_architecture) }}"
+    platform_name: "{{ platform_map[ansible_system] | default(ansible_system | lower) }}"
+    arch_name: "{{ arch_map[ansible_architecture] | default('amd64') }}"
+
+- name: Debug platform and architecture detection
+  debug:
+    msg: "Detected OS: {{ ansible_system }}, Architecture: {{ ansible_architecture }}, Platform: {{ platform_name }}, Arch: {{ arch_name }}"
 
 - name: Get latest release information
   include_tasks: get-release.yml
@@ -15,6 +20,10 @@
 - name: Install on Linux
   include_tasks: install-linux.yml
   when: ansible_system == "Linux"
+
+- name: Install on macOS
+  include_tasks: install-macos.yml
+  when: ansible_system == "Darwin"
 
 - name: Install on Windows
   include_tasks: install-windows.yml

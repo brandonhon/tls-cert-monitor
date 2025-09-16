@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tlscertmonitor.service</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{ install_dir_macos }}/tls-cert-monitor</string>
+        <string>--config</string>
+        <string>{{ config_dir_macos }}/config.yaml</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{{ install_dir_macos }}</string>
+    <key>UserName</key>
+    <string>{{ service_user_macos }}</string>
+    <key>GroupName</key>
+    <string>{{ service_user_macos }}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{ log_dir_macos }}/tls-cert-monitor.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{ log_dir_macos }}/tls-cert-monitor-error.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

@@ -33,7 +33,7 @@
 
 - name: Download Linux binary
   get_url:
-    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/linux-{{ arch_name }}.tar.gz"
+    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/{{ platform_name }}-{{ arch_name }}.tar.gz"
     dest: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
     mode: '0644'
 

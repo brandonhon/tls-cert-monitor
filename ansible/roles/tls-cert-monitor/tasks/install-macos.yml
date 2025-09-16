@@ -1,0 +1,102 @@
+---
+# macOS installation tasks
+
+- name: Install required packages
+  package:
+    name:
+      - tar
+      - gzip
+    state: present
+
+- name: Create service user
+  user:
+    name: "{{ service_user_macos }}"
+    system: yes
+    shell: /bin/false
+    home: "{{ install_dir_macos }}"
+    create_home: no
+    comment: "TLS Certificate Monitor Service User"
+
+- name: Create required directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0755'
+  loop:
+    - "{{ install_dir_macos }}"
+    - "{{ config_dir_macos }}"
+    - "{{ config_dir_macos }}/certificates"
+    - "{{ log_dir_macos }}"
+
+- name: Download macOS binary
+  get_url:
+    url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/{{ platform_name }}-{{ arch_name }}.tar.gz"
+    dest: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    mode: '0644'
+
+- name: Extract binary
+  unarchive:
+    src: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    dest: "{{ install_dir_macos }}"
+    remote_src: yes
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0755'
+    creates: "{{ install_dir_macos }}/tls-cert-monitor-darwin-{{ arch_name }}"
+
+- name: Create symlink for binary
+  file:
+    src: "{{ install_dir_macos }}/tls-cert-monitor-darwin-{{ arch_name }}"
+    dest: "{{ install_dir_macos }}/tls-cert-monitor"
+    state: link
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+
+- name: Clean up download
+  file:
+    path: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
+    state: absent
+
+- name: Deploy configuration file
+  template:
+    src: config-macos.yaml.j2
+    dest: "{{ config_dir_macos }}/config.yaml"
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0640'
+    backup: yes
+
+- name: Deploy LaunchDaemon plist
+  template:
+    src: com.tlscertmonitor.service.plist.j2
+    dest: /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+    owner: root
+    group: wheel
+    mode: '0644'
+  notify:
+    - reload launchd
+    - restart tls-cert-monitor-macos
+
+- name: Configure log rotation
+  copy:
+    content: |
+      {{ log_dir_macos }}/*.log {
+          daily
+          rotate 14
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 {{ service_user_macos }} {{ service_user_macos }}
+      }
+    dest: /etc/newsyslog.d/{{ service_name }}.conf
+    mode: '0644'
+
+- name: Load and start LaunchDaemon
+  shell: |
+    launchctl unload /Library/LaunchDaemons/com.tlscertmonitor.service.plist 2>/dev/null || true
+    launchctl load /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+    launchctl start com.tlscertmonitor.service
+  become: yes

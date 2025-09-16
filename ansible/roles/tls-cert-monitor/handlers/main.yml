@@ -12,6 +12,20 @@
     state: restarted
   when: ansible_system == "Linux"
 
+# macOS LaunchDaemon handlers
+- name: reload launchd
+  shell: launchctl load /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+  become: yes
+  when: ansible_system == "Darwin"
+
+- name: restart tls-cert-monitor-macos
+  shell: |
+    launchctl unload /Library/LaunchDaemons/com.tlscertmonitor.service.plist 2>/dev/null || true
+    launchctl load /Library/LaunchDaemons/com.tlscertmonitor.service.plist
+    launchctl start com.tlscertmonitor.service
+  become: yes
+  when: ansible_system == "Darwin"
+
 # Native Windows service handlers (v1.2.0+)
 - name: restart tls-cert-monitor-windows-native
   win_shell: |

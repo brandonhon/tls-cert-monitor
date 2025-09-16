@@ -10,6 +10,15 @@
     mode: '0755'
   when: ansible_system == "Linux" and enable_tls
 
+- name: Create TLS certificate directory (macOS)
+  file:
+    path: "{{ tls_cert_dir_macos }}"
+    state: directory
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0755'
+  when: ansible_system == "Darwin" and enable_tls
+
 - name: Create TLS certificate directory (Windows)
   win_file:
     path: "{{ tls_cert_dir_windows }}"
@@ -61,6 +70,51 @@
         state: absent
 
   when: ansible_system == "Linux" and enable_tls and tls_cert_source == "selfsigned"
+
+# Self-signed certificate generation for macOS
+- name: Generate self-signed certificate (macOS)
+  block:
+    - name: Generate private key
+      openssl_privatekey:
+        path: "{{ tls_cert_dir_macos }}/{{ tls_key_filename }}"
+        size: 2048
+        owner: "{{ service_user_macos }}"
+        group: "{{ service_user_macos }}"
+        mode: '0600'
+
+    - name: Generate certificate signing request
+      openssl_csr:
+        path: "{{ tls_cert_dir_macos }}/server.csr"
+        privatekey_path: "{{ tls_cert_dir_macos }}/{{ tls_key_filename }}"
+        common_name: "{{ tls_cert_common_name }}"
+        country_name: "{{ tls_cert_country }}"
+        state_or_province_name: "{{ tls_cert_state }}"
+        locality_name: "{{ tls_cert_city }}"
+        organization_name: "{{ tls_cert_organization }}"
+        organizational_unit_name: "{{ tls_cert_organizational_unit }}"
+        subject_alt_name:
+          - "DNS:{{ ansible_fqdn | default('localhost') }}"
+          - "DNS:{{ ansible_hostname | default('localhost') }}"
+          - "DNS:localhost"
+          - "IP:{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+          - "IP:127.0.0.1"
+
+    - name: Generate self-signed certificate
+      openssl_certificate:
+        path: "{{ tls_cert_dir_macos }}/{{ tls_cert_filename }}"
+        privatekey_path: "{{ tls_cert_dir_macos }}/{{ tls_key_filename }}"
+        csr_path: "{{ tls_cert_dir_macos }}/server.csr"
+        provider: selfsigned
+        selfsigned_not_after: "+{{ tls_cert_validity_days }}d"
+        owner: "{{ service_user_macos }}"
+        group: "{{ service_user_macos }}"
+        mode: '0644'
+
+    - name: Remove CSR file
+      file:
+        path: "{{ tls_cert_dir_macos }}/server.csr"
+        state: absent
+  when: ansible_system == "Darwin" and enable_tls and tls_cert_source == "selfsigned"
 
 - name: Generate self-signed certificate (Windows)
   win_shell: |
@@ -121,6 +175,27 @@
     mode: '0600'
     backup: yes
   when: ansible_system == "Linux" and enable_tls and tls_cert_source == "files" and tls_key_file_local != ""
+
+# File-based certificates for macOS
+- name: Copy certificate file (macOS)
+  copy:
+    src: "{{ tls_cert_file_local }}"
+    dest: "{{ tls_cert_dir_macos }}/{{ tls_cert_filename }}"
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0644'
+    backup: yes
+  when: ansible_system == "Darwin" and enable_tls and tls_cert_source == "files" and tls_cert_file_local != ""
+
+- name: Copy private key file (macOS)
+  copy:
+    src: "{{ tls_key_file_local }}"
+    dest: "{{ tls_cert_dir_macos }}/{{ tls_key_filename }}"
+    owner: "{{ service_user_macos }}"
+    group: "{{ service_user_macos }}"
+    mode: '0600'
+    backup: yes
+  when: ansible_system == "Darwin" and enable_tls and tls_cert_source == "files" and tls_key_file_local != ""
 
 - name: Copy certificate file (Windows)
   win_copy:
