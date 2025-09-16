@@ -123,9 +123,8 @@ Deploy across multiple servers with full automation using Ansible:
 #### Quick Start
 
 ```bash
-# 1. Copy and customize inventory
-cp ansible/inventory/hosts.yml.example ansible/inventory/hosts.yml
-# Edit with your servers
+# 1. Customize inventory with your servers
+# Edit ansible/inventory/hosts.yml with SSH connection details
 
 # 2. Deploy to all servers
 make ansible-install
@@ -136,6 +135,7 @@ make ansible-uninstall
 
 #### Features
 - **Cross-platform**: Supports Linux (systemd) and Windows (native service or NSSM)
+- **Multiple connection methods**: SSH key/password authentication, WinRM for Windows
 - **Service selection**: Choose native Windows service (v1.2.0+) or NSSM fallback
 - **TLS/SSL support**: Deploy with self-signed, custom, or Let's Encrypt certificates
 - **Safe uninstall**: Backs up configuration before removal

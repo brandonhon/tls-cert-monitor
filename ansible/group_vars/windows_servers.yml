@@ -1,6 +1,19 @@
 ---
 # Group variables for Windows servers
 
+# SSH connection defaults for Windows hosts
+# These can be overridden per host in inventory
+ansible_user: "Administrator"  # Common Windows admin user
+ansible_connection: ssh
+ansible_shell_type: powershell
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ansible_become: false  # Windows SSH typically runs as admin already
+
+# Alternative connection method using WinRM (uncomment if preferred)
+# ansible_connection: winrm
+# ansible_winrm_transport: ntlm
+# ansible_winrm_server_cert_validation: ignore
+
 # Default certificate directories for Windows
 cert_dirs_windows:
   - C:\ProgramData\ssl\certs

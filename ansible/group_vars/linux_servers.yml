@@ -1,6 +1,14 @@
 ---
 # Group variables for Linux servers
 
+# SSH connection defaults for Linux hosts
+# These can be overridden per host in inventory
+ansible_user: "{{ lookup('env', 'USER') }}"  # Use current user by default
+ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ansible_become: true
+ansible_become_method: sudo
+
 # Default certificate directories for Linux
 cert_dirs_linux:
   - /etc/ssl/certs

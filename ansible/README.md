@@ -25,7 +25,7 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 - `tar` and `gzip` packages
 
 #### Windows
-- SSH access (OpenSSH Server)
+- SSH access (OpenSSH Server) or WinRM
 - PowerShell 5.1+
 - Administrator privileges
 
@@ -73,19 +73,43 @@ all:
   children:
     linux_servers:
       hosts:
+        # SSH key authentication (recommended)
         webserver01:
           ansible_host: 192.168.1.10
           ansible_user: ubuntu
           ansible_ssh_private_key_file: ~/.ssh/id_rsa
 
+        # Password authentication
+        webserver02:
+          ansible_host: 192.168.1.11
+          ansible_user: deploy
+          ansible_password: "{{ vault_linux_password }}"
+          ansible_become_password: "{{ vault_sudo_password }}"
+
+        # Custom SSH port and user
+        webserver03:
+          ansible_host: 192.168.1.12
+          ansible_port: 2222
+          ansible_user: admin
+
     windows_servers:
       hosts:
+        # Windows with SSH (recommended for newer Windows)
         winserver01:
           ansible_host: 192.168.1.30
           ansible_user: ansible
           ansible_password: "{{ vault_windows_password }}"
           ansible_connection: ssh
           ansible_shell_type: powershell
+
+        # Windows with WinRM (traditional method)
+        winserver02:
+          ansible_host: 192.168.1.31
+          ansible_user: Administrator
+          ansible_password: "{{ vault_windows_password }}"
+          ansible_connection: winrm
+          ansible_winrm_transport: ntlm
+          ansible_winrm_server_cert_validation: ignore
 ```
 
 ### 2. Configure Variables
@@ -228,6 +252,176 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Wi
 
 # For key-based authentication (recommended)
 # Copy public key to C:\Users\username\.ssh\authorized_keys
+```
+
+## SSH Connection Configuration
+
+The playbook supports multiple SSH connection methods and authentication options for both Linux and Windows hosts.
+
+### Connection Defaults
+
+Default SSH settings are configured in group variables and can be overridden per host:
+
+#### Linux Defaults (`group_vars/linux_servers.yml`)
+```yaml
+# SSH connection defaults for Linux hosts
+ansible_user: "{{ lookup('env', 'USER') }}"  # Uses current user by default
+ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ansible_become: true
+ansible_become_method: sudo
+```
+
+#### Windows Defaults (`group_vars/windows_servers.yml`)
+```yaml
+# SSH connection defaults for Windows hosts
+ansible_user: "Administrator"
+ansible_connection: ssh
+ansible_shell_type: powershell
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+ansible_become: false  # Windows SSH typically runs as admin already
+```
+
+### Authentication Methods
+
+#### SSH Key Authentication (Recommended)
+
+**Linux:**
+```yaml
+hosts:
+  webserver01:
+    ansible_host: 192.168.1.10
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+```
+
+**Windows:**
+```yaml
+hosts:
+  winserver01:
+    ansible_host: 192.168.1.30
+    ansible_user: ansible
+    ansible_ssh_private_key_file: ~/.ssh/windows_key
+```
+
+#### Password Authentication
+
+**Linux:**
+```yaml
+hosts:
+  webserver01:
+    ansible_host: 192.168.1.10
+    ansible_user: deploy
+    ansible_password: "{{ vault_linux_password }}"
+    ansible_become_password: "{{ vault_sudo_password }}"  # For sudo
+```
+
+**Windows:**
+```yaml
+hosts:
+  winserver01:
+    ansible_host: 192.168.1.30
+    ansible_user: Administrator
+    ansible_password: "{{ vault_windows_password }}"
+```
+
+### Advanced SSH Configuration
+
+#### Custom SSH Port
+```yaml
+hosts:
+  dbserver01:
+    ansible_host: 192.168.1.12
+    ansible_port: 2222
+    ansible_user: admin
+```
+
+#### SSH Connection Timeouts
+```yaml
+# Global settings (in group_vars or inventory vars)
+ansible_ssh_timeout: 30
+ansible_connect_timeout: 30
+```
+
+#### Custom SSH Arguments
+```yaml
+hosts:
+  secure_server:
+    ansible_host: 192.168.1.20
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=yes -o ProxyCommand='ssh -W %h:%p jump-host'"
+```
+
+### Windows Connection Methods
+
+#### SSH Connection (Recommended for Windows 10/11 and Server 2019+)
+```yaml
+hosts:
+  winserver01:
+    ansible_host: 192.168.1.30
+    ansible_user: ansible
+    ansible_connection: ssh
+    ansible_shell_type: powershell
+    ansible_password: "{{ vault_windows_password }}"
+```
+
+#### WinRM Connection (Traditional Windows)
+```yaml
+hosts:
+  winserver01:
+    ansible_host: 192.168.1.30
+    ansible_user: Administrator
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: 5986  # 5985 for HTTP, 5986 for HTTPS
+    ansible_password: "{{ vault_windows_password }}"
+```
+
+### Security Best Practices
+
+#### Using Ansible Vault for Passwords
+
+Create encrypted variables for sensitive data:
+
+```bash
+# Create vault file for passwords
+ansible-vault create group_vars/all/vault.yml
+
+# Example vault content:
+vault_linux_password: "secure_linux_password"
+vault_sudo_password: "secure_sudo_password"
+vault_windows_password: "secure_windows_password"
+```
+
+#### SSH Key Management
+
+```bash
+# Generate SSH key pair for Ansible
+ssh-keygen -t ed25519 -f ~/.ssh/ansible_key -C "ansible@yourcompany.com"
+
+# Copy public key to target hosts
+ssh-copy-id -i ~/.ssh/ansible_key.pub user@target-host
+
+# Use in inventory
+ansible_ssh_private_key_file: ~/.ssh/ansible_key
+```
+
+#### Connection Verification
+
+Test connectivity before running playbooks:
+
+```bash
+# Test SSH connectivity to all hosts
+ansible all -m ping
+
+# Test specific group
+ansible linux_servers -m ping
+
+# Test with vault password
+ansible all -m ping --ask-vault-pass
+
+# Test Windows connectivity
+ansible windows_servers -m win_ping
 ```
 
 ## Configuration Variables
