@@ -191,6 +191,7 @@ Thumbs.db
 *~
 .vscode/
 *.backup
+*.bak
 
 # Local development
 local/
