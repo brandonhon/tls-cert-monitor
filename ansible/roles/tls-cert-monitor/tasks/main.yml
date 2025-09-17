@@ -8,6 +8,21 @@
     platform_name: "{{ platform_map[ansible_system] | default(ansible_system | lower) }}"
     arch_name: "{{ arch_map[ansible_architecture] | default('amd64') }}"
 
+- name: Include Linux vars
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/linux_servers.yml"
+  when: "'linux_servers' in group_names"
+
+- name: Include macOS vars
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/macos_servers.yml"
+  when: "'macos_servers' in group_names"
+
+- name: Include Windows vars
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/windows_servers.yml"
+  when: "'windows_servers' in group_names"
+
 - name: Debug platform and architecture detection
   debug:
     msg: "Detected OS: {{ ansible_system }}, Architecture: {{ ansible_architecture }}, Platform: {{ platform_name }}, Arch: {{ arch_name }}"

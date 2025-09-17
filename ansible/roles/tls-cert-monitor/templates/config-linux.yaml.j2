@@ -46,7 +46,7 @@ exclude_file_patterns:
 {% endfor %}
 {% else %}
   - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
-  - ".*\\.key$"          # Exclude private key files
+  - ".*\\\\.key$"          # Exclude private key files
   - ".*backup.*"         # Exclude backup files
 {% endif %}
 
@@ -94,12 +94,4 @@ allowed_ips:
 {% for ip in tls_cert_monitor_config.allowed_ips %}
   - "{{ ip }}"
 {% endfor %}
-{% elif allowed_ips is defined %}
-{% for ip in allowed_ips %}
-  - "{{ ip }}"
-{% endfor %}
-{% else %}
-  - "127.0.0.1"           # Localhost IPv4
-  - "::1"                 # Localhost IPv6
-  - "192.168.1.0/24"      # Local network (CIDR notation)
 {% endif %}

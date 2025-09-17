@@ -55,14 +55,6 @@
     path: "/tmp/tls-cert-monitor-{{ release_version }}.tar.gz"
     state: absent
 
-- name: Debug variables for IP whitelist
-  debug:
-    msg:
-      - "tls_cert_monitor_config.allowed_ips: {{ tls_cert_monitor_config.allowed_ips | default('NOT DEFINED') }}"
-      - "allowed_ips: {{ allowed_ips | default('NOT DEFINED') }}"
-      - "enable_ip_whitelist: {{ enable_ip_whitelist | default('NOT DEFINED') }}"
-      - "tls_cert_monitor_config.enable_ip_whitelist: {{ tls_cert_monitor_config.enable_ip_whitelist | default('NOT DEFINED') }}"
-
 - name: Deploy configuration file
   template:
     src: config-linux.yaml.j2
