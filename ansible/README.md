@@ -92,16 +92,11 @@ all:
           ansible_password: "{{ linux_password }}"
           ansible_become_password: "{{ sudo_password }}"
 
-        # Custom SSH port and user with IP whitelist
+        # Custom SSH port and user
         webserver03:
           ansible_host: 192.168.1.12
           ansible_port: 2222
           ansible_user: admin
-          # Allow specific IPs to access the monitoring service
-          allowed_ips:
-            - "192.168.1.0/24"      # Local network
-            - "10.0.0.100"          # Management server
-            - "203.0.113.50"        # External monitoring
 
     windows_servers:
       hosts:
@@ -148,6 +143,16 @@ cert_dirs_linux:
   - /etc/ssl/certs
   - /etc/nginx/ssl
   - /opt/certificates
+
+# Configure IP whitelist (optional)
+tls_cert_monitor_config:
+  enable_ip_whitelist: true
+  allowed_ips:
+    - "127.0.0.1"           # Localhost IPv4
+    - "::1"                 # Localhost IPv6
+    - "192.168.1.0/24"      # Local network (CIDR notation)
+    - "10.0.0.100"          # Management server
+    - "203.0.113.50"        # External monitoring
 
 # group_vars/macos_servers.yml
 cert_dirs_macos:
