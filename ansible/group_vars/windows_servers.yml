@@ -1,5 +1,6 @@
 ---
 # Group variables for Windows servers
+# Configuration format matching config.windows.example.yaml
 
 # SSH connection defaults for Windows hosts
 # These can be overridden per host in inventory
@@ -14,29 +15,92 @@ ansible_become: false  # Windows SSH typically runs as admin already
 # ansible_winrm_transport: ntlm
 # ansible_winrm_server_cert_validation: ignore
 
-# Default certificate directories for Windows
-cert_dirs_windows:
-  - C:\ProgramData\ssl\certs
-  - C:\inetpub\certificates
-  - C:\certificates
-  - C:\Program Files\Common Files\SSL
+# TLS Certificate Monitor Configuration matching config.windows.example.yaml format
+tls_cert_monitor_config:
+  # Server settings
+  port: 3200
+  bind_address: "0.0.0.0"
 
-# Windows-specific service settings
-log_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\logs"
+  # Certificate monitoring - Windows common certificate locations
+  certificate_directories:
+    # Windows Certificate Store locations (if certificates are exported to files)
+    - "C:\\ProgramData\\Microsoft\\Crypto\\RSA\\MachineKeys"
+    - "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Roaming\\Microsoft\\SystemCertificates"
 
-# Scan configuration optimized for Windows
-scan_workers: 2  # More conservative for Windows
-enable_cache: true
-cache_ttl_seconds: 3600
+    # IIS certificate locations
+    - "C:\\inetpub\\certs"
+    - "C:\\Windows\\System32\\inetsrv\\config\\certs"
 
-# Windows-specific alert settings
-alerts:
-  expiry_warning_days: 30
-  expiry_critical_days: 7
-  weak_key_bits: 2048
+    # Common application certificate directories
+    - "C:\\Program Files\\Common Files\\SSL"
+    - "C:\\certs"
+    - "C:\\certificates"
+    - "C:\\ssl"
 
-# Additional P12/PFX passwords common on Windows
-p12_additional_passwords:
-  - "Password123"
-  - "default"
-  - "admin"
+    # Apache/Nginx on Windows
+    - "C:\\Apache24\\conf\\ssl"
+    - "C:\\nginx\\conf\\ssl"
+
+    # Java application certificates
+    - "C:\\Program Files\\Java\\jre*\\lib\\security"
+    - "C:\\Program Files (x86)\\Java\\jre*\\lib\\security"
+
+  # Directories to exclude from scanning (optional)
+  exclude_directories:
+    - "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Roaming\\Microsoft\\SystemCertificates\\Disallowed"
+    - "C:\\ProgramData\\Microsoft\\Crypto\\RSA\\MachineKeys\\archived"
+    - "C:\\certs\\backup"
+    - "C:\\certificates\\old"
+
+  # File patterns to exclude from scanning (optional)
+  exclude_file_patterns:
+    - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
+    - ".*\\.key$"         # Exclude private key files
+    - ".*backup.*"        # Exclude backup files
+    - ".*\\.bak$"         # Exclude Windows .bak files
+    - ".*temp.*"          # Exclude temporary files
+
+  # P12/PFX certificate passwords
+  p12_passwords:
+    - ""                    # Empty password (no password)
+    - "changeit"           # Java keystore default
+    - "password"           # Common default
+    - "123456"             # Common weak password
+    - "admin"              # Common Windows admin password
+    - "Password1"          # Common Windows complexity password
+    - "P@ssw0rd"           # Common Windows complexity password
+    - "certificate"        # Self-descriptive password
+    - "Password123"
+    - "default"
+
+  # Scan interval (how often to scan for certificates)
+  scan_interval: "5m"
+
+  # Performance settings
+  workers: 2  # More conservative for Windows
+
+  # Logging
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_file: "C:\\ProgramData\\TLSCertMonitor\\logs\\tls-monitor.log"
+
+  # Operation modes
+  dry_run: false
+  hot_reload: true
+
+  # Cache settings - Windows paths
+  cache_type: "memory"       # "memory", "file", or "both"
+  cache_dir: "C:\\ProgramData\\TLSCertMonitor\\cache"
+  cache_ttl: "1h"
+  cache_max_size: 10485760   # 10MB (memory)
+
+  # Security settings
+  enable_ip_whitelist: true
+  allowed_ips:
+    - "127.0.0.1"           # Localhost IPv4
+    - "::1"                 # Localhost IPv6
+    - "192.168.1.0/24"      # Local network (CIDR notation)
+
+# Service settings
+config_dir_windows: "C:\\ProgramData\\TLSCertMonitor"
+log_dir_windows: "C:\\ProgramData\\TLSCertMonitor\\logs"
+bin_dir_windows: "C:\\Program Files\\TLSCertMonitor"

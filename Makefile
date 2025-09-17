@@ -437,6 +437,13 @@ ansible-install: ## Deploy tls-cert-monitor using Ansible (configure SSH in inve
 	@cd ansible && ansible-playbook playbooks/site.yml
 	@printf "$(GREEN)✅ Deployment completed$(NC)\n"
 
+.PHONY: ansible-install-pass
+ansible-install-pass: ## Deploy using interactive password authentication (-kbK)
+	@printf "$(BLUE)🚀 Deploying tls-cert-monitor with password authentication...$(NC)\n"
+	@printf "$(YELLOW)💡 You will be prompted for SSH and sudo passwords$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/site.yml -kbK
+	@printf "$(GREEN)✅ Deployment completed$(NC)\n"
+
 .PHONY: ansible-uninstall
 ansible-uninstall: ## Uninstall tls-cert-monitor using Ansible
 	@printf "$(BLUE)🗑️  Uninstalling tls-cert-monitor with Ansible...$(NC)\n"
@@ -448,10 +455,17 @@ ansible-uninstall: ## Uninstall tls-cert-monitor using Ansible
 	@cd ansible && ansible-playbook playbooks/uninstall.yml
 	@printf "$(GREEN)✅ Uninstallation completed$(NC)\n"
 
+.PHONY: ansible-uninstall-pass
+ansible-uninstall-pass: ## Uninstall using interactive password authentication (-kbK)
+	@printf "$(BLUE)🗑️  Uninstalling tls-cert-monitor with password authentication...$(NC)\n"
+	@printf "$(YELLOW)💡 You will be prompted for SSH and sudo passwords$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/uninstall.yml -kbK
+	@printf "$(GREEN)✅ Uninstallation completed$(NC)\n"
+
 .PHONY: ansible-install-dry
 ansible-install-dry: ## Dry-run Ansible deployment (check mode)
 	@printf "$(BLUE)🔍 Running Ansible deployment in check mode...$(NC)\n"
-	@cd ansible && ansible-playbook playbooks/site.yml --check
+	@cd ansible && ansible-playbook playbooks/site.yml --check --skip-tags=download
 	@printf "$(GREEN)✅ Dry-run completed$(NC)\n"
 
 .PHONY: ansible-uninstall-dry

@@ -1,9 +1,7 @@
 ---
 # Main tasks for tls-cert-monitor role
 
-- name: Include OS-specific variables
-  include_vars: "{{ ansible_system | lower }}.yml"
-  ignore_errors: yes
+# Variables are automatically loaded from group_vars/linux_servers.yml and group_vars/windows_servers.yml
 
 - name: Set platform and architecture for binary download
   set_fact:

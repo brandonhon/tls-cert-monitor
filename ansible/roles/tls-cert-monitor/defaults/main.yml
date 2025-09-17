@@ -60,7 +60,7 @@ windows_service_method: "native"
 
 # TLS/SSL configuration for metrics endpoint
 enable_tls: false
-tls_cert_source: "selfsigned"  # "selfsigned", "files", "letsencrypt"
+tls_cert_source: "selfsigned"  # "selfsigned" or "files"
 
 # Self-signed certificate options (when tls_cert_source: "selfsigned")
 tls_cert_common_name: "{{ ansible_fqdn | default('localhost') }}"
@@ -76,9 +76,7 @@ tls_cert_validity_days: 365
 tls_cert_file_local: ""        # Local path to certificate file
 tls_key_file_local: ""         # Local path to private key file
 
-# Let's Encrypt options (when tls_cert_source: "letsencrypt")
-letsencrypt_email: ""          # Email for Let's Encrypt registration
-letsencrypt_staging: false     # Use staging environment for testing
+# Removed Let's Encrypt support for simplicity
 
 # Target paths for TLS files on remote hosts
 tls_cert_dir_linux: "/etc/tls-cert-monitor/ssl"

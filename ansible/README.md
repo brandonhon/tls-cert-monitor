@@ -1,10 +1,10 @@
 # TLS Certificate Monitor Ansible Deployment
 
-This Ansible playbook automates the deployment of [tls-cert-monitor](https://github.com/brandonhon/tls-cert-monitor) across Linux and Windows hosts.
+This Ansible playbook automates the deployment of [tls-cert-monitor](https://github.com/brandonhon/tls-cert-monitor) across Linux, macOS, and Windows hosts.
 
 ## Features
 
-- **Cross-platform support**: Linux and Windows hosts
+- **Cross-platform support**: Linux, macOS, and Windows hosts
 - **Automatic binary download**: Pulls latest release from GitHub
 - **OS-specific configuration**: Separate templates for Linux and Windows
 - **Service management**: systemd for Linux, native Windows service or NSSM for Windows
@@ -23,6 +23,11 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 - SSH access with sudo privileges
 - systemd-based distribution
 - `tar` and `gzip` packages
+
+#### macOS
+- SSH access with sudo privileges
+- macOS 10.14+ (Mojave or newer)
+- `tar` and `gzip` packages (typically pre-installed)
 
 #### Windows
 - SSH access (OpenSSH Server) or WinRM
@@ -48,6 +53,7 @@ ansible/
 │   └── hosts.yml           # Inventory example
 └── group_vars/
     ├── linux_servers.yml   # Linux group variables
+    ├── macos_servers.yml   # macOS group variables
     └── windows_servers.yml # Windows group variables
 ```
 
@@ -83,8 +89,8 @@ all:
         webserver02:
           ansible_host: 192.168.1.11
           ansible_user: deploy
-          ansible_password: "{{ vault_linux_password }}"
-          ansible_become_password: "{{ vault_sudo_password }}"
+          ansible_password: "{{ linux_password }}"
+          ansible_become_password: "{{ sudo_password }}"
 
         # Custom SSH port and user
         webserver03:
@@ -98,7 +104,7 @@ all:
         winserver01:
           ansible_host: 192.168.1.30
           ansible_user: ansible
-          ansible_password: "{{ vault_windows_password }}"
+          ansible_password: "{{ windows_password }}"
           ansible_connection: ssh
           ansible_shell_type: powershell
 
@@ -106,10 +112,25 @@ all:
         winserver02:
           ansible_host: 192.168.1.31
           ansible_user: Administrator
-          ansible_password: "{{ vault_windows_password }}"
+          ansible_password: "{{ windows_password }}"
           ansible_connection: winrm
           ansible_winrm_transport: ntlm
           ansible_winrm_server_cert_validation: ignore
+
+    macos_servers:
+      hosts:
+        # macOS with SSH key authentication (recommended)
+        macserver01:
+          ansible_host: 192.168.1.40
+          ansible_user: admin
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+
+        # macOS with password authentication
+        macserver02:
+          ansible_host: 192.168.1.41
+          ansible_user: admin
+          ansible_password: "{{ macos_password }}"
+          ansible_become_password: "{{ sudo_password }}"
 ```
 
 ### 2. Configure Variables
@@ -121,6 +142,12 @@ Edit group variables in `group_vars/`:
 cert_dirs_linux:
   - /etc/ssl/certs
   - /etc/nginx/ssl
+  - /opt/certificates
+
+# group_vars/macos_servers.yml
+cert_dirs_macos:
+  - /etc/ssl/certs
+  - /usr/local/etc/ssl
   - /opt/certificates
 
 # group_vars/windows_servers.yml
@@ -156,8 +183,14 @@ From the project root directory, you can also use these convenient Make targets:
 # Deploy using Ansible
 make ansible-install
 
+# Deploy with interactive password prompts
+make ansible-install-pass
+
 # Uninstall using Ansible
 make ansible-uninstall
+
+# Uninstall with interactive password prompts
+make ansible-uninstall-pass
 
 # Dry-run deployment
 make ansible-install-dry
@@ -295,6 +328,15 @@ hosts:
     ansible_ssh_private_key_file: ~/.ssh/id_rsa
 ```
 
+**macOS:**
+```yaml
+hosts:
+  macserver01:
+    ansible_host: 192.168.1.40
+    ansible_user: admin
+    ansible_ssh_private_key_file: ~/.ssh/macos_key
+```
+
 **Windows:**
 ```yaml
 hosts:
@@ -312,8 +354,8 @@ hosts:
   webserver01:
     ansible_host: 192.168.1.10
     ansible_user: deploy
-    ansible_password: "{{ vault_linux_password }}"
-    ansible_become_password: "{{ vault_sudo_password }}"  # For sudo
+    ansible_password: "{{ linux_password }}"
+    ansible_become_password: "{{ sudo_password }}"  # For sudo
 ```
 
 **Windows:**
@@ -322,7 +364,7 @@ hosts:
   winserver01:
     ansible_host: 192.168.1.30
     ansible_user: Administrator
-    ansible_password: "{{ vault_windows_password }}"
+    ansible_password: "{{ windows_password }}"
 ```
 
 ### Advanced SSH Configuration
@@ -361,7 +403,7 @@ hosts:
     ansible_user: ansible
     ansible_connection: ssh
     ansible_shell_type: powershell
-    ansible_password: "{{ vault_windows_password }}"
+    ansible_password: "{{ windows_password }}"
 ```
 
 #### WinRM Connection (Traditional Windows)
@@ -374,23 +416,67 @@ hosts:
     ansible_winrm_transport: ntlm
     ansible_winrm_server_cert_validation: ignore
     ansible_port: 5986  # 5985 for HTTP, 5986 for HTTPS
-    ansible_password: "{{ vault_windows_password }}"
+    ansible_password: "{{ windows_password }}"
 ```
 
 ### Security Best Practices
 
-#### Using Ansible Vault for Passwords
+#### Password Management Options
 
-Create encrypted variables for sensitive data:
+You have several options for managing passwords securely:
+
+**Option 1: Interactive Password Prompts (Recommended)**
+
+Use the Make targets with password prompts for enhanced security:
 
 ```bash
-# Create vault file for passwords
+# Deploy with interactive password prompts
+make ansible-install-pass     # Prompts for SSH, sudo, and become passwords
+make ansible-uninstall-pass   # Prompts for passwords during uninstall
+```
+
+These targets use Ansible's `-kbK` flags:
+- `-k` (--ask-pass): Prompts for SSH connection password
+- `-b` (--become): Enable privilege escalation
+- `-K` (--ask-become-pass): Prompts for privilege escalation password
+
+**Option 2: Group Variables**
+
+Define passwords in group variable files:
+
+```bash
+# Create group variables file
+vim group_vars/all/passwords.yml
+
+# Example content:
+linux_password: "secure_linux_password"
+sudo_password: "secure_sudo_password"
+windows_password: "secure_windows_password"
+macos_password: "secure_macos_password"
+```
+
+**Option 3: Environment Variables**
+
+Set passwords as environment variables:
+
+```bash
+export ANSIBLE_PASSWORD="your_ssh_password"
+export ANSIBLE_BECOME_PASSWORD="your_sudo_password"
+```
+
+**Option 4: Ansible Vault (Advanced)**
+
+For maximum security, encrypt sensitive variables:
+
+```bash
+# Create encrypted vault file
 ansible-vault create group_vars/all/vault.yml
 
 # Example vault content:
-vault_linux_password: "secure_linux_password"
-vault_sudo_password: "secure_sudo_password"
-vault_windows_password: "secure_windows_password"
+linux_password: "secure_linux_password"
+sudo_password: "secure_sudo_password"
+windows_password: "secure_windows_password"
+macos_password: "secure_macos_password"
 ```
 
 #### SSH Key Management
@@ -439,7 +525,7 @@ ansible windows_servers -m win_ping
 | `enable_hot_reload` | `true` | Enable hot reload |
 | `windows_service_method` | `"native"` | Windows service method: "native" (v1.2.0+) or "nssm" |
 | `enable_tls` | `false` | Enable TLS/SSL for metrics endpoint |
-| `tls_cert_source` | `"selfsigned"` | Certificate source: "selfsigned", "files", or "letsencrypt" |
+| `tls_cert_source` | `"selfsigned"` | Certificate source: "selfsigned" or "files" |
 
 ### Host-Specific Variables
 
@@ -589,19 +675,6 @@ tls_cert_file_local: "/path/to/your/certificate.pem"
 tls_key_file_local: "/path/to/your/private-key.pem"
 ```
 
-#### Option 3: Let's Encrypt (Linux Only)
-
-Automatically obtain and deploy Let's Encrypt certificates:
-
-```yaml
-# group_vars/all.yml
-enable_tls: true
-tls_cert_source: "letsencrypt"
-letsencrypt_email: "admin@example.com"
-tls_cert_common_name: "monitor.example.com"
-letsencrypt_staging: false  # Set to true for testing
-```
-
 #### TLS Configuration Variables
 
 | Variable | Default | Description |
@@ -612,8 +685,6 @@ letsencrypt_staging: false  # Set to true for testing
 | `tls_cert_validity_days` | `365` | Self-signed cert validity period |
 | `tls_cert_file_local` | `""` | Local path to certificate file |
 | `tls_key_file_local` | `""` | Local path to private key file |
-| `letsencrypt_email` | `""` | Email for Let's Encrypt registration |
-| `letsencrypt_staging` | `false` | Use Let's Encrypt staging environment |
 
 #### Deployment Examples
 
@@ -623,12 +694,6 @@ ansible-playbook playbooks/site.yml -e "enable_tls=true"
 
 # Deploy with custom certificates
 ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=files tls_cert_file_local=/certs/server.crt tls_key_file_local=/certs/server.key"
-
-# Deploy with Let's Encrypt
-ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com"
-
-# Test with Let's Encrypt staging
-ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com letsencrypt_staging=true"
 ```
 
 After deployment with TLS enabled, access the application at:

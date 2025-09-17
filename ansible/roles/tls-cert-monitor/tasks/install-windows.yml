@@ -15,6 +15,9 @@
   win_get_url:
     url: "https://github.com/{{ github_repo }}/releases/download/{{ release_version }}/{{ platform_name }}-{{ arch_name }}.tar.gz"
     dest: "{{ install_dir_windows }}\\tls-cert-monitor-{{ release_version }}.tar.gz"
+    validate_certs: no
+  tags:
+    - download
 
 - name: Extract Windows binary
   win_shell: |
@@ -93,7 +96,10 @@
   win_get_url:
     url: "https://nssm.cc/release/nssm-2.24.zip"
     dest: "{{ install_dir_windows }}\\nssm.zip"
+    validate_certs: no
   when: windows_service_method == "nssm"
+  tags:
+    - download
 
 - name: Extract NSSM
   win_unzip:

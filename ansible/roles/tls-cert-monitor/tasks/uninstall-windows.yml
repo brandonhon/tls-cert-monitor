@@ -112,13 +112,13 @@
   win_file:
     path: "{{ config_dir_windows }}"
     state: absent
-  when: remove_config | default(false)
+  when: (remove_config | default(false)) | bool
 
 - name: Remove log directory
   win_file:
     path: "{{ log_dir_windows }}"
     state: absent
-  when: remove_logs | default(false)
+  when: (remove_logs | default(false)) | bool
 
 - name: Display uninstallation summary
   debug:
@@ -127,5 +127,5 @@
       - "Service method was: {{ current_service_method.stdout | trim }}"
       - "Binary and service files removed"
       - "Config backup saved to: {{ config_backup.stdout | default('Not created') }}"
-      - "Config directory {{ 'removed' if remove_config | default(false) else 'preserved' }}: {{ config_dir_windows }}"
-      - "Log directory {{ 'removed' if remove_logs | default(false) else 'preserved' }}: {{ log_dir_windows }}"
+      - "Config directory {{ 'removed' if (remove_config | default(false)) | bool else 'preserved' }}: {{ config_dir_windows }}"
+      - "Log directory {{ 'removed' if (remove_logs | default(false)) | bool else 'preserved' }}: {{ log_dir_windows }}"

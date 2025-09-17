@@ -15,7 +15,6 @@
 - name: Set release version
   set_fact:
     release_version: "{{ github_release.json.tag_name }}"
-    release_assets: "{{ github_release.json.assets }}"
 
 - name: Display release information
   debug:

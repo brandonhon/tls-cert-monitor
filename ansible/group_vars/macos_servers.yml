@@ -1,8 +1,8 @@
 ---
-# Group variables for Linux servers
+# Group variables for macOS servers
 # Configuration format matching config.example.yaml
 
-# SSH connection defaults for Linux hosts
+# SSH connection defaults for macOS hosts
 # These can be overridden per host in inventory
 ansible_user: "{{ lookup('env', 'USER') }}"  # Use current user by default
 ansible_ssh_private_key_file: "~/.ssh/id_rsa"
@@ -16,24 +16,27 @@ tls_cert_monitor_config:
   port: 3200
   bind_address: "0.0.0.0"
 
-  # Certificate monitoring
+  # Certificate monitoring - macOS common certificate locations
   certificate_directories:
     - "/etc/ssl/certs"
-    - "/etc/pki/tls/certs"
+    - "/System/Library/Keychains"
     - "/usr/local/share/ca-certificates"
     - "/opt/certificates"
+    - "/Library/Keychains"
+    - "/System/Library/OpenSSL"
 
   # Directories to exclude from scanning (optional)
   exclude_directories:
+    - "/System/Library/Keychains/SystemRootCertificates.keychain"
     - "/etc/ssl/certs/private"
     - "/etc/ssl/certs/backup"
-    - "/etc/pki/tls/certs/archived"
 
   # File patterns to exclude from scanning (optional)
   exclude_file_patterns:
     - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
     - ".*\\.key$"         # Exclude private key files
     - ".*backup.*"        # Exclude backup files
+    - ".*\\.keychain$"    # Exclude Keychain files (handled separately)
 
   # P12/PFX certificate passwords
   p12_passwords:
@@ -70,7 +73,7 @@ tls_cert_monitor_config:
     - "192.168.1.0/24"      # Local network (CIDR notation)
 
 # Service settings
-service_user_linux: "tls-monitor"
-config_dir_linux: "/etc/tls-cert-monitor"
-log_dir_linux: "/var/log/tls-cert-monitor"
-bin_dir_linux: "/usr/local/bin"
+service_user_macos: "tls-monitor"
+config_dir_macos: "/etc/tls-cert-monitor"
+log_dir_macos: "/var/log/tls-cert-monitor"
+bin_dir_macos: "/usr/local/bin"

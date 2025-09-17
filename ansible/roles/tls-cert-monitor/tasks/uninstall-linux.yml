@@ -43,20 +43,20 @@
   file:
     path: "{{ config_dir_linux }}"
     state: absent
-  when: remove_config | default(false)
+  when: (remove_config | default(false)) | bool
 
 - name: Remove log directory
   file:
     path: "{{ log_dir_linux }}"
     state: absent
-  when: remove_logs | default(false)
+  when: (remove_logs | default(false)) | bool
 
 - name: Remove service user
   user:
     name: "{{ service_user_linux }}"
     state: absent
     remove: yes
-  when: remove_user | default(false)
+  when: (remove_user | default(false)) | bool
 
 - name: Display uninstallation summary
   debug:
@@ -64,6 +64,6 @@
       - "TLS Certificate Monitor has been uninstalled"
       - "Binary and service files removed"
       - "Config backup saved to: /tmp/tls-cert-monitor-config-backup-{{ ansible_date_time.epoch }}.tar.gz"
-      - "Config directory {{ 'removed' if remove_config | default(false) else 'preserved' }}: {{ config_dir_linux }}"
-      - "Log directory {{ 'removed' if remove_logs | default(false) else 'preserved' }}: {{ log_dir_linux }}"
-      - "Service user {{ 'removed' if remove_user | default(false) else 'preserved' }}: {{ service_user_linux }}"
+      - "Config directory {{ 'removed' if (remove_config | default(false)) | bool else 'preserved' }}: {{ config_dir_linux }}"
+      - "Log directory {{ 'removed' if (remove_logs | default(false)) | bool else 'preserved' }}: {{ log_dir_linux }}"
+      - "Service user {{ 'removed' if (remove_user | default(false)) | bool else 'preserved' }}: {{ service_user_linux }}"
