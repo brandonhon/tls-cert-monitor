@@ -15,6 +15,11 @@ from tls_cert_monitor.config import Config
 from tls_cert_monitor.logger import get_logger, log_cache_operation
 
 
+def bytes_to_mib(bytes_value: int) -> float:
+    """Convert bytes to MiB (mebibytes)."""
+    return bytes_value / (1024 * 1024)
+
+
 @dataclass
 class CacheEntry:
     """Cache entry with metadata."""
@@ -173,7 +178,9 @@ class CacheManager:
             return {
                 "entries_total": len(self._memory_cache),
                 "current_size_bytes": self._current_size,
+                "current_size_mib": round(bytes_to_mib(self._current_size), 2),
                 "max_size_bytes": self.max_size,
+                "max_size_mib": round(bytes_to_mib(self.max_size), 2),
                 "hit_rate": hit_rate,
                 "total_accesses": self._access_count,
                 "cache_hits": self._hit_count,

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from tls_cert_monitor import __version__
-from tls_cert_monitor.cache import CacheManager
+from tls_cert_monitor.cache import CacheManager, bytes_to_mib
 from tls_cert_monitor.config import Config
 from tls_cert_monitor.logger import get_logger
 from tls_cert_monitor.metrics import MetricsCollector
@@ -611,9 +611,12 @@ async def _get_system_health(config: Config) -> Dict[str, Any]:
                     usage = shutil.disk_usage(directory)
                     dir_key = directory.replace("/", "_").replace("\\", "_")
                     health_data[f"diskspace_{dir_key}"] = {
-                        "total": usage.total,
-                        "used": usage.used,
-                        "free": usage.free,
+                        "total_bytes": usage.total,
+                        "total_mib": round(bytes_to_mib(usage.total), 2),
+                        "used_bytes": usage.used,
+                        "used_mib": round(bytes_to_mib(usage.used), 2),
+                        "free_bytes": usage.free,
+                        "free_mib": round(bytes_to_mib(usage.free), 2),
                         "percent_used": round((usage.used / usage.total) * 100, 2),
                     }
             except Exception as e:
@@ -637,6 +640,7 @@ async def _get_system_health(config: Config) -> Dict[str, Any]:
             health_data["diskspace"] = {
                 "status": "ok" if min_free > 1024**3 else "warning",
                 "min_free_bytes": min_free,
+                "min_free_mib": round(bytes_to_mib(min_free), 2),
                 "directories_checked": len(total_disk_usage),
             }
     except Exception as e:
