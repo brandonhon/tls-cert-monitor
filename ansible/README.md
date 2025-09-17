@@ -92,11 +92,16 @@ all:
           ansible_password: "{{ linux_password }}"
           ansible_become_password: "{{ sudo_password }}"
 
-        # Custom SSH port and user
+        # Custom SSH port and user with IP whitelist
         webserver03:
           ansible_host: 192.168.1.12
           ansible_port: 2222
           ansible_user: admin
+          # Allow specific IPs to access the monitoring service
+          allowed_ips:
+            - "192.168.1.0/24"      # Local network
+            - "10.0.0.100"          # Management server
+            - "203.0.113.50"        # External monitoring
 
     windows_servers:
       hosts:
@@ -200,6 +205,35 @@ make ansible-uninstall-dry
 
 # Complete purge (removes config, logs, user)
 make ansible-uninstall-purge
+```
+
+#### Advanced Deployment Options
+
+For more complex deployments, you can use `ansible-playbook` directly with additional options:
+
+```bash
+# Deploy with IP whitelist enabled and custom allowed IPs
+ansible-playbook playbooks/site.yml -e "enable_ip_whitelist=true" \
+  -e "allowed_ips=['192.168.1.0/24','10.0.0.100','203.0.113.50']"
+
+# Deploy to specific host with custom configuration
+ansible-playbook playbooks/site.yml --limit webserver01 \
+  -e "service_port=9090 log_level=DEBUG"
+
+# Deploy with TLS enabled and custom certificates
+ansible-playbook playbooks/site.yml \
+  -e "enable_tls=true tls_cert_source=files" \
+  -e "tls_cert_file_local=/path/to/cert.pem tls_key_file_local=/path/to/key.pem"
+
+# Deploy with IP whitelist for all hosts in a group
+ansible-playbook playbooks/site.yml --limit linux_servers \
+  -e "enable_ip_whitelist=true" \
+  -e "allowed_ips=['192.168.0.0/16','10.0.0.0/8']"
+
+# Deploy with custom scan settings and IP restrictions
+ansible-playbook playbooks/site.yml \
+  -e "scan_interval_seconds=1800 scan_workers=8" \
+  -e "enable_ip_whitelist=true allowed_ips=['127.0.0.1','::1']"
 ```
 
 ## Uninstallation

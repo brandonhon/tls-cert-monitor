@@ -481,6 +481,14 @@ ansible-uninstall-purge: ## Uninstall and remove all data (config, logs, user)
 	@cd ansible && ansible-playbook playbooks/uninstall.yml -e "remove_config=true remove_logs=true remove_user=true"
 	@printf "$(GREEN)✅ Purge completed$(NC)\n"
 
+.PHONY: ansible-uninstall-purge-pass
+ansible-uninstall-purge-pass: ## Uninstall using interactive password authentication (-kbK)
+	@printf "$(BLUE)🗑️  Purging tls-cert-monitor with password authentication...$(NC)\n"
+	@printf "$(RED)⚠️  WARNING: This will remove all configuration, logs, and the service user!$(NC)\n"
+	@printf "$(YELLOW)💡 You will be prompted for SSH and sudo passwords$(NC)\n"
+	@cd ansible && ansible-playbook playbooks/uninstall.yml -e "remove_config=true remove_logs=true remove_user=true" -kbK
+	@printf "$(GREEN)✅ Purge completed$(NC)\n"
+
 .PHONY: ansible-ping
 ansible-ping: ## Test SSH connectivity to all hosts
 	@printf "$(BLUE)🏓 Testing SSH connectivity to all hosts...$(NC)\n"
