@@ -88,10 +88,14 @@ cache_ttl: "{{ tls_cert_monitor_config.cache_ttl | default('1h') }}"
 cache_max_size: {{ tls_cert_monitor_config.cache_max_size | default(10485760) }}   # 10MB (memory)
 
 # Security settings
-enable_ip_whitelist: {{ tls_cert_monitor_config.enable_ip_whitelist | default(true) | lower }}
+enable_ip_whitelist: {{ tls_cert_monitor_config.enable_ip_whitelist | default(enable_ip_whitelist) | default(true) | lower }}
 allowed_ips:
 {% if tls_cert_monitor_config.allowed_ips is defined %}
 {% for ip in tls_cert_monitor_config.allowed_ips %}
+  - "{{ ip }}"
+{% endfor %}
+{% elif allowed_ips is defined %}
+{% for ip in allowed_ips %}
   - "{{ ip }}"
 {% endfor %}
 {% else %}
