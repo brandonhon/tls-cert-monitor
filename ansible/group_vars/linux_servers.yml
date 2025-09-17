@@ -31,13 +31,13 @@ tls_cert_monitor_config:
 
   # File patterns to exclude from scanning (optional)
   exclude_file_patterns:
-    - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
-    - ".*\\\\.key$"         # Exclude private key files
+    - "dhparam.pem"       # Exclude Diffie-Hellman parameter files
+    - ".*\\\\.key$"       # Exclude private key files (must escape backslashes)
     - ".*backup.*"        # Exclude backup files
 
   # P12/PFX certificate passwords
   p12_passwords:
-    - ""                    # Empty password (no password)
+    - ""                   # Empty password (no password)
     - "changeit"           # Java keystore default
     - "password"           # Common default
     - "123456"             # Common weak password

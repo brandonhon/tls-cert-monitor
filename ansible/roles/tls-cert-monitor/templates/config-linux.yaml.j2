@@ -46,7 +46,7 @@ exclude_file_patterns:
 {% endfor %}
 {% else %}
   - "dhparam.pem"        # Exclude Diffie-Hellman parameter files
-  - ".*\\\\.key$"          # Exclude private key files
+  - ".*\\\\.key$"        # Exclude private key files (must escape backslashes)
   - ".*backup.*"         # Exclude backup files
 {% endif %}
 
