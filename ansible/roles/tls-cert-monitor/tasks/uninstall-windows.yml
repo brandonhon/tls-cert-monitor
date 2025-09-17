@@ -1,63 +1,36 @@
 ---
 # Windows uninstallation tasks
 
-- name: Check current Windows service method
+- name: Check if Windows service exists
   win_shell: |
     $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
     if ($service) {
-        # Check if NSSM is managing the service
-        $servicePath = (Get-WmiObject Win32_Service | Where-Object {$_.Name -eq "{{ service_name }}"}).PathName
-        if ($servicePath -like "*nssm*") {
-            Write-Output "nssm"
-        } else {
-            Write-Output "native"
-        }
+        Write-Output "exists"
     } else {
         Write-Output "none"
     }
-  register: current_service_method
+  register: service_exists
   changed_when: false
 
-- name: Stop Windows service (native method)
+- name: Stop and uninstall Windows service
   win_shell: |
     $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
 
-    Write-Host "Stopping native Windows service..."
+    Write-Host "Stopping Windows service..."
     & $exePath --service-stop
     Start-Sleep -Seconds 2
 
-    Write-Host "Uninstalling native Windows service..."
+    Write-Host "Uninstalling Windows service..."
     & $exePath --service-uninstall
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Native Windows service uninstalled successfully"
+        Write-Host "Windows service uninstalled successfully"
     } else {
         Write-Warning "Service uninstall returned code: $LASTEXITCODE"
     }
   args:
     executable: powershell
-  when: current_service_method.stdout | trim == "native"
-  ignore_errors: yes
-
-- name: Stop and remove Windows service (NSSM method)
-  win_shell: |
-    $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
-
-    if (Test-Path $nssmPath) {
-        Write-Host "Stopping NSSM service..."
-        & $nssmPath stop "{{ service_name }}"
-        Start-Sleep -Seconds 2
-
-        Write-Host "Removing NSSM service..."
-        & $nssmPath remove "{{ service_name }}" confirm
-
-        Write-Host "NSSM service removed successfully"
-    } else {
-        Write-Warning "NSSM not found at expected location"
-    }
-  args:
-    executable: powershell
-  when: current_service_method.stdout | trim == "nssm"
+  when: service_exists.stdout | trim == "exists"
   ignore_errors: yes
 
 - name: Ensure service is removed
@@ -97,11 +70,6 @@
     path: "{{ install_dir_windows }}\\tls-cert-monitor.exe"
     state: absent
 
-- name: Remove NSSM directory
-  win_file:
-    path: "{{ install_dir_windows }}\\nssm-2.24"
-    state: absent
-  when: current_service_method.stdout | trim == "nssm"
 
 - name: Remove installation directory
   win_file:
@@ -124,7 +92,7 @@
   debug:
     msg:
       - "TLS Certificate Monitor has been uninstalled"
-      - "Service method was: {{ current_service_method.stdout | trim }}"
+      - "Service status was: {{ service_exists.stdout | trim }}"
       - "Binary and service files removed"
       - "Config backup saved to: {{ config_backup.stdout | default('Not created') }}"
       - "Config directory {{ 'removed' if (remove_config | default(false)) | bool else 'preserved' }}: {{ config_dir_windows }}"

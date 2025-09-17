@@ -55,13 +55,5 @@
     }
   args:
     executable: powershell
-  when: ansible_os_family == "Windows" and windows_service_method == "native"
+  when: ansible_os_family == "Windows"
 
-# NSSM Windows service handlers (legacy/fallback)
-- name: restart tls-cert-monitor-windows-nssm
-  win_shell: |
-    $nssmPath = "{{ install_dir_windows }}\\nssm-2.24\\win64\\nssm.exe"
-    & $nssmPath restart "{{ service_name }}"
-  args:
-    executable: powershell
-  when: ansible_os_family == "Windows" and windows_service_method == "nssm"

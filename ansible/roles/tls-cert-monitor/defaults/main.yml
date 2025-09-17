@@ -53,9 +53,8 @@ enable_hot_reload: true
 enable_cache: true
 cache_ttl_seconds: 86400
 
-# Windows service method (native or nssm)
-# Set to 'native' to use built-in Windows service support
-# Set to 'nssm' to use NSSM (third-party service manager)
+# Windows service method
+# Uses built-in Windows service support
 windows_service_method: "native"
 
 # TLS/SSL configuration for metrics endpoint
@@ -76,7 +75,6 @@ tls_cert_validity_days: 365
 tls_cert_file_local: ""        # Local path to certificate file
 tls_key_file_local: ""         # Local path to private key file
 
-# Removed Let's Encrypt support for simplicity
 
 # Target paths for TLS files on remote hosts
 tls_cert_dir_linux: "/etc/tls-cert-monitor/ssl"

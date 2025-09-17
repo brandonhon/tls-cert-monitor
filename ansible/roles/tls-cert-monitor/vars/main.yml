@@ -20,4 +20,4 @@ platform_map:
 service_manager:
   Linux: systemd
   Darwin: launchd
-  Windows: nssm
+  Windows: native

@@ -211,45 +211,6 @@
     backup: yes
   when: ansible_os_family == "Windows" and enable_tls and tls_cert_source == "files" and tls_key_file_local != ""
 
-# Let's Encrypt certificate (Linux only)
-- name: Install certbot for Let's Encrypt (Linux)
-  package:
-    name:
-      - certbot
-      - python3-certbot-apache
-    state: present
-  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
-
-- name: Generate Let's Encrypt certificate (Linux)
-  command: >
-    certbot certonly --standalone
-    --email {{ letsencrypt_email }}
-    --agree-tos --non-interactive
-    {{ '--staging' if letsencrypt_staging else '' }}
-    -d {{ tls_cert_common_name }}
-  args:
-    creates: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/fullchain.pem"
-  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt" and letsencrypt_email != ""
-
-- name: Copy Let's Encrypt certificate (Linux)
-  copy:
-    src: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/fullchain.pem"
-    dest: "{{ tls_cert_dir_linux }}/{{ tls_cert_filename }}"
-    remote_src: yes
-    owner: "{{ service_user_linux }}"
-    group: "{{ service_user_linux }}"
-    mode: '0644'
-  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
-
-- name: Copy Let's Encrypt private key (Linux)
-  copy:
-    src: "/etc/letsencrypt/live/{{ tls_cert_common_name }}/privkey.pem"
-    dest: "{{ tls_cert_dir_linux }}/{{ tls_key_filename }}"
-    remote_src: yes
-    owner: "{{ service_user_linux }}"
-    group: "{{ service_user_linux }}"
-    mode: '0600'
-  when: ansible_system == "Linux" and enable_tls and tls_cert_source == "letsencrypt"
 
 # Validation
 - name: Validate certificate files exist (Linux)

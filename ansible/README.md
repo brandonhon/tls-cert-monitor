@@ -7,7 +7,7 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 - **Cross-platform support**: Linux, macOS, and Windows hosts
 - **Automatic binary download**: Pulls latest release from GitHub
 - **OS-specific configuration**: Separate templates for Linux and Windows
-- **Service management**: systemd for Linux, native Windows service or NSSM for Windows
+- **Service management**: systemd for Linux, native Windows service for Windows
 - **Security hardening**: Dedicated service user, filesystem restrictions
 - **Monitoring ready**: Health checks and metrics endpoints
 
@@ -255,7 +255,7 @@ ansible-playbook playbooks/uninstall.yml -e "confirm_uninstall=false"
 
 - **Configuration backup**: Automatically created before removal
 - **Confirmation prompt**: Interactive confirmation (can be skipped)
-- **Service detection**: Automatically detects native vs NSSM Windows services
+- **Service detection**: Automatically detects Windows services
 - **Graceful errors**: Continues if service is already stopped/removed
 
 ## Windows SSH Setup
@@ -523,7 +523,7 @@ ansible windows_servers -m win_ping
 | `log_level` | `"INFO"` | Logging level |
 | `enable_cache` | `true` | Enable caching |
 | `enable_hot_reload` | `true` | Enable hot reload |
-| `windows_service_method` | `"native"` | Windows service method: "native" (v1.2.0+) or "nssm" |
+| `windows_service_method` | `"native"` | Windows service method (only "native" supported) |
 | `enable_tls` | `false` | Enable TLS/SSL for metrics endpoint |
 | `tls_cert_source` | `"selfsigned"` | Certificate source: "selfsigned" or "files" |
 
@@ -559,7 +559,7 @@ systemctl restart tls-cert-monitor
 # Check service status
 Get-Service tls-cert-monitor
 
-# View logs (NSSM method)
+# View logs
 Get-Content "C:\ProgramData\tls-cert-monitor\logs\service.log"
 
 # View logs (native method)
@@ -568,7 +568,7 @@ Get-EventLog -LogName Application -Source "TLS Certificate Monitor" -Newest 20
 # Restart service
 Restart-Service tls-cert-monitor
 
-# Check service method in use (native or NSSM)
+# Check service status
 Get-Service tls-cert-monitor | Select-Object Name, Status, ServiceType
 ```
 
@@ -627,18 +627,15 @@ ansible windows_servers -m win_shell -a "Get-WmiObject win32_service | Where-Obj
 
 ## Advanced Configuration
 
-### Windows Service Method Selection
+### Windows Service Method
 
-Starting with v1.2.0, tls-cert-monitor supports native Windows service functionality without requiring NSSM:
+The application uses native Windows service functionality:
 
 ```yaml
 # group_vars/windows_servers.yml
 
-# Use native Windows service (requires v1.2.0+)
+# Windows service method (native only)
 windows_service_method: "native"
-
-# Use NSSM for older versions or compatibility
-windows_service_method: "nssm"
 ```
 
 The native method offers:

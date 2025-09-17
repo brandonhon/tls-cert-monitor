@@ -140,10 +140,9 @@ make ansible-uninstall
 ```
 
 #### Features
-- **Cross-platform**: Supports Linux (systemd) and Windows (native service or NSSM)
+- **Cross-platform**: Supports Linux (systemd) and Windows (native service)
 - **Multiple connection methods**: SSH key/password authentication, WinRM for Windows
-- **Service selection**: Choose native Windows service (v1.2.0+) or NSSM fallback
-- **TLS/SSL support**: Deploy with self-signed, custom, or Let's Encrypt certificates
+- **TLS/SSL support**: Deploy with self-signed or custom certificates
 - **Safe uninstall**: Backs up configuration before removal
 - **Flexible options**: Control what gets removed (config, logs, user)
 
@@ -159,20 +158,11 @@ cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true"
 # Deploy with custom certificates
 cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=files tls_cert_file_local=/path/to/cert.pem tls_key_file_local=/path/to/key.pem"
 
-# Deploy with Let's Encrypt (Linux only)
-cd ansible && ansible-playbook playbooks/site.yml -e "enable_tls=true tls_cert_source=letsencrypt letsencrypt_email=admin@example.com tls_cert_common_name=monitor.example.com"
-
 # Uninstall specific groups
 cd ansible && ansible-playbook playbooks/uninstall.yml --limit windows_servers
 
 # Complete purge (removes config, logs, and service user)
 make ansible-uninstall-purge
-
-# Use native Windows service method
-cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=native"
-
-# Use NSSM for Windows (legacy/compatibility)
-cd ansible && ansible-playbook playbooks/site.yml -e "windows_service_method=nssm"
 
 # Test connectivity and troubleshooting
 make ansible-ping           # Test SSH connectivity to all hosts
@@ -450,7 +440,7 @@ tls-cert-monitor/
 │   └── build.yml                # Multi-platform build and release
 ├── scripts/                     # Installation and service scripts
 │   ├── install-linux-service.sh              # Linux systemd service installer
-│   ├── install-windows-service.bat           # Windows service installer (NSSM)
+│   ├── install-windows-service.bat           # Windows service installer (legacy)
 │   ├── install-windows-service-native.bat    # Windows native service installer
 │   ├── Install-WindowsService.ps1            # PowerShell Windows service installer
 │   ├── install-macos-service.sh              # macOS service installer
@@ -577,9 +567,9 @@ sudo journalctl -u tls-cert-monitor -f
 
 ### Windows Service
 
-Install as a Windows service using native Windows service support (recommended) or NSSM.
+Install as a Windows service using native Windows service support.
 
-#### Option 1: Native Windows Service (Recommended)
+#### Windows Service Installation
 
 The application now includes built-in Windows service support without requiring third-party tools:
 
@@ -625,50 +615,6 @@ Stop-Service -Name TLSCertMonitor
 Get-Service -Name TLSCertMonitor
 ```
 
-#### Option 2: NSSM (Legacy)
-
-If you prefer using NSSM (Non-Sucking Service Manager):
-
-**Prerequisites:**
-1. Download [NSSM](https://nssm.cc/download) and add to PATH
-2. Download the Windows binary: `windows-amd64.tar.gz`
-3. Extract and place the installation script in the same directory
-
-**Installation:**
-```cmd
-# Run as Administrator
-scripts\install-windows-service.bat
-```
-
-**Manual NSSM Installation:**
-```cmd
-# Install NSSM service
-nssm install TLSCertMonitor "C:\Program Files\TLSCertMonitor\tls-cert-monitor.exe"
-nssm set TLSCertMonitor AppParameters "--config=C:\ProgramData\TLSCertMonitor\config.yaml"
-nssm set TLSCertMonitor DisplayName "TLS Certificate Monitor"
-nssm set TLSCertMonitor Description "Monitors TLS/SSL certificates and provides Prometheus metrics"
-nssm set TLSCertMonitor Start SERVICE_AUTO_START
-
-# Configure logging
-nssm set TLSCertMonitor AppStdout "C:\ProgramData\TLSCertMonitor\logs\service.log"
-nssm set TLSCertMonitor AppStderr "C:\ProgramData\TLSCertMonitor\logs\service-error.log"
-
-# Start service
-nssm start TLSCertMonitor
-```
-
-**NSSM Service Management:**
-```cmd
-# Check status
-sc query TLSCertMonitor
-
-# Start/Stop service
-sc start TLSCertMonitor
-sc stop TLSCertMonitor
-
-# Uninstall service
-nssm remove TLSCertMonitor
-```
 
 ### macOS Service (LaunchDaemon)
 
