@@ -44,28 +44,24 @@ class TLSCertMonitor:
         """Ensure Nuitka temp directory exists for compiled binaries."""
         import os
         import platform
+        import tempfile
 
-        # For Windows, we still need runtime fallback since no build-time temp dir is set
-        # For Linux/macOS, Nuitka uses {PROGRAM_DIR}/.nuitka_temp which should work fine
         system = platform.system()
 
         if system == "Windows":
-            # Windows needs runtime temp directory resolution
-            import tempfile
-
+            # Windows runtime temp directory resolution
             candidates = [
                 Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "tls-cert-monitor",
                 Path(os.environ.get("LOCALAPPDATA", r"C:\Users\Default\AppData\Local"))
-                / "tls-cert-monitor"
-                / "temp",
+                / "tls-cert-monitor",
                 Path(tempfile.gettempdir()) / "tls-cert-monitor",
             ]
 
-            # Find first writable location for Windows
+            # Find first working directory
             for candidate in candidates:
                 try:
                     candidate.mkdir(parents=True, exist_ok=True)
-                    # Test basic write access
+                    # Test write access
                     test_file = candidate / ".write_test"
                     test_file.touch()
                     test_file.unlink()
@@ -75,19 +71,32 @@ class TLSCertMonitor:
                 except (OSError, PermissionError):
                     continue
         else:
-            # Linux/macOS use {PROGRAM_DIR}/.nuitka_temp - just ensure executable dir exists
+            # Linux/macOS: Ensure /var/tmp/tls-cert-monitor exists for Nuitka
+            temp_dir = Path("/var/tmp/tls-cert-monitor")
             try:
-                # Get the directory where the executable is located
-                import sys
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                # Set world-writable permissions so any user can use it
+                temp_dir.chmod(0o1777)  # Sticky bit + rwxrwxrwx
+            except (OSError, PermissionError):
+                # If we can't create /var/tmp/tls-cert-monitor, try fallbacks
+                fallback_candidates = [
+                    Path.home() / ".cache" / "tls-cert-monitor",
+                    Path("/tmp/tls-cert-monitor"),
+                    Path(tempfile.gettempdir()) / "tls-cert-monitor",
+                ]
 
-                if getattr(sys, "frozen", False):
-                    # Running as compiled binary
-                    exe_dir = Path(sys.executable).parent
-                    temp_dir = exe_dir / ".nuitka_temp"
-                    temp_dir.mkdir(exist_ok=True)
-            except Exception:
-                # If we can't create it, Nuitka will handle it
-                pass
+                for candidate in fallback_candidates:
+                    try:
+                        candidate.mkdir(parents=True, exist_ok=True)
+                        # Test write access
+                        test_file = candidate / ".write_test"
+                        test_file.touch()
+                        test_file.unlink()
+                        # Override Nuitka's temp directory
+                        os.environ["ONEFILE_TEMPDIR"] = str(candidate)
+                        break
+                    except (OSError, PermissionError):
+                        continue
 
     async def initialize(self) -> None:
         """Initialize all application components."""
