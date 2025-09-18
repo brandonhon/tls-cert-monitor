@@ -44,8 +44,8 @@ class TLSCertMonitor:
         """Ensure Nuitka temp directory exists for compiled binaries."""
         import os
         import platform
-        import tempfile
         import stat
+        import tempfile
 
         def test_executable_dir(path: Path) -> bool:
             """Test if a directory allows executable file creation."""
@@ -57,14 +57,20 @@ class TLSCertMonitor:
                 test_file.chmod(stat.S_IRWXU)  # Make executable
                 # Try to run it (if this fails, directory is noexec)
                 import subprocess
+
                 subprocess.run([str(test_file)], check=True, capture_output=True, timeout=1)
                 test_file.unlink()
                 return True
-            except (OSError, PermissionError, subprocess.SubprocessError, subprocess.TimeoutExpired):
+            except (
+                OSError,
+                PermissionError,
+                subprocess.SubprocessError,
+                subprocess.TimeoutExpired,
+            ):
                 try:
                     if test_file.exists():
                         test_file.unlink()
-                except:
+                except Exception:
                     pass
                 return False
 
@@ -73,8 +79,10 @@ class TLSCertMonitor:
         # Try platform-appropriate locations with fallbacks
         if system == "Windows":
             candidates = [
-                Path(os.environ.get('TEMP', r'C:\Windows\Temp')) / "tls-cert-monitor",  # User temp
-                Path(os.environ.get('LOCALAPPDATA', r'C:\Users\Default\AppData\Local')) / "tls-cert-monitor" / "temp",
+                Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "tls-cert-monitor",  # User temp
+                Path(os.environ.get("LOCALAPPDATA", r"C:\Users\Default\AppData\Local"))
+                / "tls-cert-monitor"
+                / "temp",
                 Path(tempfile.gettempdir()) / "tls-cert-monitor",  # System temp fallback
             ]
         elif system == "Darwin":  # macOS
@@ -86,7 +94,10 @@ class TLSCertMonitor:
             ]
         else:  # Linux
             candidates = [
-                Path.home() / ".cache" / "tls-cert-monitor" / "temp",  # User cache (most likely to work)
+                Path.home()
+                / ".cache"
+                / "tls-cert-monitor"
+                / "temp",  # User cache (most likely to work)
                 Path("/tmp/tls-cert-monitor"),  # System temp
                 Path("/var/tmp/tls-cert-monitor"),  # Alternative temp
                 Path(tempfile.gettempdir()) / "tls-cert-monitor",  # Final fallback
@@ -104,19 +115,20 @@ class TLSCertMonitor:
             # Create a unique temp directory as last resort
             try:
                 import uuid
+
                 fallback = Path(tempfile.gettempdir()) / f"tls-cert-monitor-{uuid.uuid4().hex[:8]}"
                 if test_executable_dir(fallback):
                     working_dir = fallback
-            except:
+            except Exception:
                 pass
 
         # Set environment variable for Nuitka to find at runtime
         if working_dir:
             try:
-                os.environ['ONEFILE_TEMPDIR'] = str(working_dir)
+                os.environ["ONEFILE_TEMPDIR"] = str(working_dir)
                 # Also try the older variable name
-                os.environ['NUITKA_ONEFILE_TEMP'] = str(working_dir)
-            except:
+                os.environ["NUITKA_ONEFILE_TEMP"] = str(working_dir)
+            except Exception:
                 pass
 
     async def initialize(self) -> None:

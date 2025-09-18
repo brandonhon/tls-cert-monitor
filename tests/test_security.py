@@ -49,9 +49,11 @@ class TestConfigSecurity:
         ]
 
         # Mock Path.resolve() to avoid filesystem checks in tests
-        with patch("pathlib.Path.resolve") as mock_resolve, patch(
-            "pathlib.Path.exists"
-        ) as mock_exists, patch("pathlib.Path.is_dir") as mock_is_dir:
+        with (
+            patch("pathlib.Path.resolve") as mock_resolve,
+            patch("pathlib.Path.exists") as mock_exists,
+            patch("pathlib.Path.is_dir") as mock_is_dir,
+        ):
             mock_resolve.side_effect = lambda: Path("/mocked/path")
             mock_exists.return_value = True
             mock_is_dir.return_value = True

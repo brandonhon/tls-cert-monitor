@@ -155,9 +155,11 @@ def install_service(
         win32serviceutil.InstallService(
             TLSCertMonitorService._svc_name_,
             TLSCertMonitorService._svc_display_name_,
-            startType=win32service.SERVICE_AUTO_START
-            if service_auto_start
-            else win32service.SERVICE_DEMAND_START,
+            startType=(
+                win32service.SERVICE_AUTO_START
+                if service_auto_start
+                else win32service.SERVICE_DEMAND_START
+            ),
             description=TLSCertMonitorService._svc_description_,
             exeName=sys.executable,
             exeArgs=f'"{__file__}" {" ".join(service_args[1:])}' if len(service_args) > 1 else None,

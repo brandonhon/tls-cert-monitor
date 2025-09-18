@@ -379,9 +379,9 @@ class CacheManager:
         return {
             "cache_entries_total": stats["entries_total"],
             "cache_file_path": str(self.cache_file),
-            "cache_file_writable": os.access(self.cache_dir, os.W_OK)
-            if self.cache_dir.exists()
-            else False,
+            "cache_file_writable": (
+                os.access(self.cache_dir, os.W_OK) if self.cache_dir.exists() else False
+            ),
             "cache_hit_rate": round(stats["hit_rate"], 3),
             "cache_total_accesses": stats["total_accesses"],
         }

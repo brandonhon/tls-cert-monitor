@@ -39,9 +39,10 @@ class TestCertificateScanner:
     @pytest.fixture
     def scanner(self, mock_config, mock_cache, mock_metrics):
         """Create a certificate scanner instance."""
-        with patch("tls_cert_monitor.scanner.get_logger") as mock_get_logger, patch(
-            "tls_cert_monitor.scanner.ThreadPoolExecutor"
-        ) as mock_executor:
+        with (
+            patch("tls_cert_monitor.scanner.get_logger") as mock_get_logger,
+            patch("tls_cert_monitor.scanner.ThreadPoolExecutor") as mock_executor,
+        ):
             mock_get_logger.return_value = MagicMock()
             mock_executor.return_value = MagicMock()
             return CertificateScanner(
