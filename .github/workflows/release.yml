@@ -180,7 +180,8 @@ jobs:
           "--windows-file-description=TLS Certificate Monitor Tool",
           "--disable-ccache",
           "--mingw64",
-          "--lto=no"
+          "--lto=no",
+          "--onefile-tempdir-spec=%PROGRAMDATA%\tls-cert-monitor\temp"
         )
 
         # Add version info if we have a valid tag
@@ -313,7 +314,7 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-amd64 \
-          --onefile-tempdir-spec=/opt/tls-cert-monitor/tmp \
+          --onefile-tempdir-spec=/var/tmp/tls-cert-monitor \
           main.py
         
         echo "📄 Verifying macOS binary..."
@@ -385,7 +386,7 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-arm64 \
-          --onefile-tempdir-spec=/opt/tls-cert-monitor/tmp \
+          --onefile-tempdir-spec=/var/tmp/tls-cert-monitor \
           main.py
         
         echo "📄 Verifying macOS ARM64 binary..."

@@ -40,9 +40,63 @@ class TLSCertMonitor:
         # Initialize logger early to avoid AttributeError
         self.logger = logging.getLogger(__name__)
 
+    def _ensure_temp_directory(self) -> None:
+        """Ensure Nuitka temp directory exists for compiled binaries."""
+        import os
+        import platform
+        import tempfile
+
+        system = platform.system()
+
+        # Determine temp directory based on platform
+        if system == "Windows":
+            # Use ProgramData for system-wide access
+            temp_dir = Path(os.environ.get('PROGRAMDATA', r'C:\ProgramData')) / 'tls-cert-monitor' / 'temp'
+        elif system == "Darwin":  # macOS
+            # Use /var/tmp for system-wide access
+            temp_dir = Path("/var/tmp/tls-cert-monitor")
+        else:  # Linux
+            # Try multiple locations in order of preference
+            candidates = [
+                Path("/var/tmp/tls-cert-monitor"),  # First choice
+                Path("/tmp/tls-cert-monitor"),      # Second choice
+                Path.home() / ".cache" / "tls-cert-monitor" / "temp",  # User fallback
+                Path("/opt/tls-cert-monitor/tmp"),  # Legacy fallback
+            ]
+
+            # Find first writable location
+            temp_dir = None
+            for candidate in candidates:
+                try:
+                    candidate.mkdir(parents=True, exist_ok=True)
+                    # Test if we can actually write to it
+                    test_file = candidate / ".write_test"
+                    test_file.touch()
+                    test_file.unlink()
+                    temp_dir = candidate
+                    break
+                except (OSError, PermissionError):
+                    continue
+
+            # If none work, use Python's tempfile directory as last resort
+            if temp_dir is None:
+                temp_dir = Path(tempfile.gettempdir()) / "tls-cert-monitor"
+
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            # Set environment variable for Nuitka to use
+            os.environ['NUITKA_ONEFILE_TEMP'] = str(temp_dir)
+        except (OSError, PermissionError):
+            # If we can't create the directory, continue anyway
+            # The application might not be running as a Nuitka binary
+            pass
+
     async def initialize(self) -> None:
         """Initialize all application components."""
         try:
+            # Ensure Nuitka temp directory exists (for compiled binaries)
+            self._ensure_temp_directory()
+
             # Load configuration
             self.config = load_config(self.config_path)
 
