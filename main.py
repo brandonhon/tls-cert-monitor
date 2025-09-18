@@ -45,51 +45,79 @@ class TLSCertMonitor:
         import os
         import platform
         import tempfile
+        import stat
+
+        def test_executable_dir(path: Path) -> bool:
+            """Test if a directory allows executable file creation."""
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+                # Test if we can write and execute
+                test_file = path / ".exec_test"
+                test_file.write_text("#!/bin/sh\necho test")
+                test_file.chmod(stat.S_IRWXU)  # Make executable
+                # Try to run it (if this fails, directory is noexec)
+                import subprocess
+                subprocess.run([str(test_file)], check=True, capture_output=True, timeout=1)
+                test_file.unlink()
+                return True
+            except (OSError, PermissionError, subprocess.SubprocessError, subprocess.TimeoutExpired):
+                try:
+                    if test_file.exists():
+                        test_file.unlink()
+                except:
+                    pass
+                return False
 
         system = platform.system()
 
-        # Determine temp directory based on platform
+        # Try platform-appropriate locations with fallbacks
         if system == "Windows":
-            # Use ProgramData for system-wide access (use env var since runtime can resolve it)
-            temp_dir = Path(os.environ.get('PROGRAMDATA', r'C:\ProgramData')) / 'tls-cert-monitor' / 'temp'
-        elif system == "Darwin":  # macOS
-            # Use /var/tmp for system-wide access
-            temp_dir = Path("/var/tmp/tls-cert-monitor")
-        else:  # Linux
-            # Try multiple locations in order of preference
             candidates = [
-                Path("/var/tmp/tls-cert-monitor"),  # First choice
-                Path("/tmp/tls-cert-monitor"),      # Second choice
-                Path.home() / ".cache" / "tls-cert-monitor" / "temp",  # User fallback
-                Path("/opt/tls-cert-monitor/tmp"),  # Legacy fallback
+                Path(os.environ.get('TEMP', r'C:\Windows\Temp')) / "tls-cert-monitor",  # User temp
+                Path(os.environ.get('LOCALAPPDATA', r'C:\Users\Default\AppData\Local')) / "tls-cert-monitor" / "temp",
+                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # System temp fallback
+            ]
+        elif system == "Darwin":  # macOS
+            candidates = [
+                Path.home() / "Library" / "Caches" / "tls-cert-monitor",  # User cache
+                Path("/usr/local/var/tmp/tls-cert-monitor"),  # Local system
+                Path("/tmp/tls-cert-monitor"),  # System temp
+                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # Final fallback
+            ]
+        else:  # Linux
+            candidates = [
+                Path.home() / ".cache" / "tls-cert-monitor" / "temp",  # User cache (most likely to work)
+                Path("/tmp/tls-cert-monitor"),  # System temp
+                Path("/var/tmp/tls-cert-monitor"),  # Alternative temp
+                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # Final fallback
             ]
 
-            # Find first writable location
-            temp_dir = None
-            for candidate in candidates:
-                try:
-                    candidate.mkdir(parents=True, exist_ok=True)
-                    # Test if we can actually write to it
-                    test_file = candidate / ".write_test"
-                    test_file.touch()
-                    test_file.unlink()
-                    temp_dir = candidate
-                    break
-                except (OSError, PermissionError):
-                    continue
+        # Find first working location
+        working_dir = None
+        for candidate in candidates:
+            if test_executable_dir(candidate):
+                working_dir = candidate
+                break
 
-            # If none work, use Python's tempfile directory as last resort
-            if temp_dir is None:
-                temp_dir = Path(tempfile.gettempdir()) / "tls-cert-monitor"
+        # If still no working directory, try one more fallback
+        if working_dir is None:
+            # Create a unique temp directory as last resort
+            try:
+                import uuid
+                fallback = Path(tempfile.gettempdir()) / f"tls-cert-monitor-{uuid.uuid4().hex[:8]}"
+                if test_executable_dir(fallback):
+                    working_dir = fallback
+            except:
+                pass
 
-        try:
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            # Set environment variable for Nuitka to use
-            os.environ['NUITKA_ONEFILE_TEMP'] = str(temp_dir)
-        except (OSError, PermissionError):
-            # If we can't create the directory, continue anyway
-            # The application might not be running as a Nuitka binary
-            pass
+        # Set environment variable for Nuitka to find at runtime
+        if working_dir:
+            try:
+                os.environ['ONEFILE_TEMPDIR'] = str(working_dir)
+                # Also try the older variable name
+                os.environ['NUITKA_ONEFILE_TEMP'] = str(working_dir)
+            except:
+                pass
 
     async def initialize(self) -> None:
         """Initialize all application components."""

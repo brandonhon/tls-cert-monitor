@@ -60,7 +60,6 @@ RUN echo '#!/bin/bash' > /app/build.sh && \
     echo '    main.py \' >> /app/build.sh && \
     echo '    --output-dir=/app/dist \' >> /app/build.sh && \
     echo '    --output-filename=tls-cert-monitor \' >> /app/build.sh && \
-    echo '    --onefile-tempdir-spec=/var/tmp/tls-cert-monitor' >> /app/build.sh && \
     echo '' >> /app/build.sh && \
     echo 'echo "Build completed successfully!"' >> /app/build.sh && \
     echo 'ls -la /app/dist/' >> /app/build.sh && \
