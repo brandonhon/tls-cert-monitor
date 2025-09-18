@@ -54,6 +54,9 @@ jobs:
     name: Build Linux Binary (AMD64)
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -91,6 +94,8 @@ jobs:
       uses: sigstore/cosign-installer@v3
 
     - name: Sign Linux binary with cosign
+      env:
+        COSIGN_EXPERIMENTAL: 1
       run: |
         echo "🔏 Signing Linux binary with cosign..."
         cosign sign-blob --yes dist/tls-cert-monitor --output-signature dist/tls-cert-monitor.sig --output-certificate dist/tls-cert-monitor.crt
@@ -111,6 +116,9 @@ jobs:
     name: Build Windows Binary (AMD64)
     runs-on: windows-latest
     needs: test
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -129,8 +137,8 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
-    - name: Cache Nuitka
-      uses: actions/cache@v4
+    - name: Restore Nuitka cache
+      uses: actions/cache/restore@v4
       with:
         path: |
           ~/.cache/Nuitka
@@ -139,7 +147,6 @@ jobs:
         key: nuitka-${{ runner.os }}-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
         restore-keys: |
           nuitka-${{ runner.os }}-
-        save-always: true
 
     - name: Build Windows binary
       run: |
@@ -232,10 +239,21 @@ jobs:
         Write-Host "Testing --version flag:"
         & $binaryPath --version
 
+    - name: Save Nuitka cache
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.cache/Nuitka
+          ~/AppData/Local/Nuitka
+          %LOCALAPPDATA%\Nuitka
+        key: nuitka-${{ runner.os }}-${{ hashFiles('main.py', 'tls_cert_monitor/**/*.py', 'requirements*.txt') }}
+
     - name: Install cosign
       uses: sigstore/cosign-installer@v3
 
     - name: Sign Windows binary with cosign
+      env:
+        COSIGN_EXPERIMENTAL: 1
       run: |
         Write-Host "🔏 Signing Windows binary with cosign..."
         cosign sign-blob --yes "dist/${{ env.PROJECT_NAME }}.exe" --output-signature "dist/${{ env.PROJECT_NAME }}.exe.sig" --output-certificate "dist/${{ env.PROJECT_NAME }}.exe.crt"
@@ -256,6 +274,9 @@ jobs:
     name: Build macOS Binary (AMD64)
     runs-on: macos-13  # Intel-based runner for AMD64
     needs: test
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -303,6 +324,8 @@ jobs:
       uses: sigstore/cosign-installer@v3
 
     - name: Sign macOS binary with cosign
+      env:
+        COSIGN_EXPERIMENTAL: 1
       run: |
         echo "🔏 Signing macOS binary with cosign..."
         cosign sign-blob --yes dist/${{ env.PROJECT_NAME }}-darwin-amd64 --output-signature dist/${{ env.PROJECT_NAME }}-darwin-amd64.sig --output-certificate dist/${{ env.PROJECT_NAME }}-darwin-amd64.crt
@@ -323,6 +346,9 @@ jobs:
     name: Build macOS Binary (ARM64)
     runs-on: macos-14  # Apple Silicon runner for ARM64
     needs: test
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -370,6 +396,8 @@ jobs:
       uses: sigstore/cosign-installer@v3
 
     - name: Sign macOS ARM64 binary with cosign
+      env:
+        COSIGN_EXPERIMENTAL: 1
       run: |
         echo "🔏 Signing macOS ARM64 binary with cosign..."
         cosign sign-blob --yes dist/${{ env.PROJECT_NAME }}-darwin-arm64 --output-signature dist/${{ env.PROJECT_NAME }}-darwin-arm64.sig --output-certificate dist/${{ env.PROJECT_NAME }}-darwin-arm64.crt
@@ -390,6 +418,10 @@ jobs:
     name: Build and Push Container Images
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     
     steps:
     - name: Checkout code
@@ -432,6 +464,8 @@ jobs:
         cache-to: type=gha,mode=max
 
     - name: Sign container images with cosign
+      env:
+        COSIGN_EXPERIMENTAL: 1
       run: |
         echo "🔏 Signing container images with cosign..."
 
@@ -453,6 +487,8 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-linux-amd64, build-windows-amd64, build-macos-amd64, build-macos-arm64, build-container]
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
