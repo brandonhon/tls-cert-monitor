@@ -87,11 +87,24 @@ jobs:
         file dist/tls-cert-monitor
         ls -lh dist/tls-cert-monitor
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Sign Linux binary with cosign
+      run: |
+        echo "🔏 Signing Linux binary with cosign..."
+        cosign sign-blob --yes dist/tls-cert-monitor --output-signature dist/tls-cert-monitor.sig --output-certificate dist/tls-cert-monitor.crt
+        echo "✅ Linux binary signed successfully"
+        ls -la dist/
+
     - name: Upload Linux binary
       uses: actions/upload-artifact@v4
       with:
         name: linux-amd64-binary
-        path: dist/tls-cert-monitor
+        path: |
+          dist/tls-cert-monitor
+          dist/tls-cert-monitor.sig
+          dist/tls-cert-monitor.crt
         retention-days: 30
 
   build-windows-amd64:
@@ -132,7 +145,17 @@ jobs:
       run: |
         Write-Host "🪟 Building Windows binary with Nuitka..."
         New-Item -ItemType Directory -Path dist -Force
-        
+
+        # Add Windows Defender exclusion for build directory
+        Write-Host "Adding Windows Defender exclusion for build directory..."
+        try {
+          Add-MpPreference -ExclusionPath "$PWD\dist" -ErrorAction SilentlyContinue
+          Write-Host "✅ Added Windows Defender exclusion"
+        } catch {
+          Write-Host "⚠️ Could not add Windows Defender exclusion (may require admin): $($_.Exception.Message)"
+        }
+
+        # Base Nuitka flags for antivirus compatibility
         $FLAGS = @(
           "--onefile",
           "--standalone",
@@ -144,16 +167,58 @@ jobs:
           "--include-module=cryptography",
           "--include-module=prometheus_client",
           "--output-dir=dist",
-          "--output-filename=${{ env.PROJECT_NAME }}.exe"
+          "--output-filename=${{ env.PROJECT_NAME }}.exe",
+          "--windows-company-name=TLS Cert Monitor",
+          "--windows-product-name=${{ env.PROJECT_NAME }}",
+          "--windows-file-description=TLS Certificate Monitor Tool",
+          "--disable-ccache",
+          "--mingw64",
+          "--lto=no"
         )
-        
+
+        # Add version info if we have a valid tag
+        $tagName = "${{ github.ref_name }}"
+        if ($tagName -match "^v\d+\.\d+\.\d+") {
+          $version = $tagName -replace "^v", ""
+          $FLAGS += "--windows-file-version=$version"
+          $FLAGS += "--windows-product-version=$version"
+        }
+
+        # Add icon if it exists
+        if (Test-Path "assets/icon.ico") {
+          $FLAGS += "--windows-icon-from-ico=assets/icon.ico"
+          Write-Host "✅ Using Windows icon"
+        } else {
+          Write-Host "⚠️ No Windows icon found, skipping"
+        }
+
         python -m nuitka $FLAGS main.py
-        
+
         Write-Host "📄 Verifying Windows binary..."
-        Get-ChildItem -Path dist -Name "*.exe" | ForEach-Object {
-          Write-Host "Binary: $_"
-          $path = Join-Path -Path dist -ChildPath $_
-          (Get-Item $path).Length
+        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
+        if (Test-Path $binaryPath) {
+          $fileInfo = Get-Item $binaryPath
+          Write-Host "✅ Binary created: $($fileInfo.Name)"
+          Write-Host "📊 Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+
+          # Add additional Windows Defender exclusion for the binary
+          try {
+            Add-MpPreference -ExclusionPath $fileInfo.FullName -ErrorAction SilentlyContinue
+            Write-Host "✅ Added Windows Defender exclusion for binary"
+          } catch {
+            Write-Host "⚠️ Could not add binary exclusion: $($_.Exception.Message)"
+          }
+
+          # Set binary attributes to help with antivirus detection
+          try {
+            $fileInfo.Attributes = $fileInfo.Attributes -bor [System.IO.FileAttributes]::NotContentIndexed
+            Write-Host "✅ Set binary attributes"
+          } catch {
+            Write-Host "⚠️ Could not set binary attributes: $($_.Exception.Message)"
+          }
+        } else {
+          Write-Host "❌ Binary not found!"
+          exit 1
         }
 
     - name: Test Windows binary help flag
@@ -167,11 +232,24 @@ jobs:
         Write-Host "Testing --version flag:"
         & $binaryPath --version
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Sign Windows binary with cosign
+      run: |
+        Write-Host "🔏 Signing Windows binary with cosign..."
+        cosign sign-blob --yes "dist/${{ env.PROJECT_NAME }}.exe" --output-signature "dist/${{ env.PROJECT_NAME }}.exe.sig" --output-certificate "dist/${{ env.PROJECT_NAME }}.exe.crt"
+        Write-Host "✅ Windows binary signed successfully"
+        Get-ChildItem -Path dist
+
     - name: Upload Windows binary
       uses: actions/upload-artifact@v4
       with:
         name: windows-amd64-binary
-        path: dist/${{ env.PROJECT_NAME }}.exe
+        path: |
+          dist/${{ env.PROJECT_NAME }}.exe
+          dist/${{ env.PROJECT_NAME }}.exe.sig
+          dist/${{ env.PROJECT_NAME }}.exe.crt
         retention-days: 30
 
   build-macos-amd64:
@@ -214,17 +292,31 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-amd64 \
+          --onefile-tempdir-spec=/opt/tls-cert-monitor/tmp \
           main.py
         
         echo "📄 Verifying macOS binary..."
         ls -la dist/
         file dist/${{ env.PROJECT_NAME }}-darwin-amd64
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Sign macOS binary with cosign
+      run: |
+        echo "🔏 Signing macOS binary with cosign..."
+        cosign sign-blob --yes dist/${{ env.PROJECT_NAME }}-darwin-amd64 --output-signature dist/${{ env.PROJECT_NAME }}-darwin-amd64.sig --output-certificate dist/${{ env.PROJECT_NAME }}-darwin-amd64.crt
+        echo "✅ macOS binary signed successfully"
+        ls -la dist/
+
     - name: Upload macOS binary
       uses: actions/upload-artifact@v4
       with:
         name: macos-amd64-binary
-        path: dist/${{ env.PROJECT_NAME }}-darwin-amd64
+        path: |
+          dist/${{ env.PROJECT_NAME }}-darwin-amd64
+          dist/${{ env.PROJECT_NAME }}-darwin-amd64.sig
+          dist/${{ env.PROJECT_NAME }}-darwin-amd64.crt
         retention-days: 30
 
   build-macos-arm64:
@@ -267,17 +359,31 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-arm64 \
+          --onefile-tempdir-spec=/opt/tls-cert-monitor/tmp \
           main.py
         
         echo "📄 Verifying macOS ARM64 binary..."
         ls -la dist/
         file dist/${{ env.PROJECT_NAME }}-darwin-arm64
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Sign macOS ARM64 binary with cosign
+      run: |
+        echo "🔏 Signing macOS ARM64 binary with cosign..."
+        cosign sign-blob --yes dist/${{ env.PROJECT_NAME }}-darwin-arm64 --output-signature dist/${{ env.PROJECT_NAME }}-darwin-arm64.sig --output-certificate dist/${{ env.PROJECT_NAME }}-darwin-arm64.crt
+        echo "✅ macOS ARM64 binary signed successfully"
+        ls -la dist/
+
     - name: Upload macOS ARM64 binary
       uses: actions/upload-artifact@v4
       with:
         name: macos-arm64-binary
-        path: dist/${{ env.PROJECT_NAME }}-darwin-arm64
+        path: |
+          dist/${{ env.PROJECT_NAME }}-darwin-arm64
+          dist/${{ env.PROJECT_NAME }}-darwin-arm64.sig
+          dist/${{ env.PROJECT_NAME }}-darwin-arm64.crt
         retention-days: 30
 
   build-container:
@@ -310,7 +416,11 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
 
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
     - name: Build and push container image
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -320,6 +430,24 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+    - name: Sign container images with cosign
+      run: |
+        echo "🔏 Signing container images with cosign..."
+
+        # Get all the tags from the metadata step
+        TAGS="${{ steps.meta.outputs.tags }}"
+
+        # Sign each tag
+        echo "$TAGS" | while read -r tag; do
+          if [ -n "$tag" ]; then
+            echo "Signing image: $tag"
+            cosign sign --yes "$tag"
+            echo "✅ Signed: $tag"
+          fi
+        done
+
+        echo "✅ All container images signed successfully"
 
   release:
     name: Create GitHub Release
@@ -343,28 +471,28 @@ jobs:
         # Linux binary
         if [ -f linux-amd64-binary/tls-cert-monitor ]; then
           chmod +x linux-amd64-binary/tls-cert-monitor
-          tar -czf release-assets/linux-amd64.tar.gz -C linux-amd64-binary tls-cert-monitor
-          echo "✅ Created linux-amd64.tar.gz"
+          tar -czf release-assets/linux-amd64.tar.gz -C linux-amd64-binary tls-cert-monitor tls-cert-monitor.sig tls-cert-monitor.crt
+          echo "✅ Created linux-amd64.tar.gz (with signature)"
         fi
-        
-        # Windows binary  
+
+        # Windows binary
         if [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
-          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.exe
-          echo "✅ Created windows-amd64.tar.gz"
+          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.exe ${{ env.PROJECT_NAME }}.exe.sig ${{ env.PROJECT_NAME }}.exe.crt
+          echo "✅ Created windows-amd64.tar.gz (with signature)"
         fi
-        
+
         # macOS AMD64 binary
         if [ -f macos-amd64-binary/${{ env.PROJECT_NAME }}-darwin-amd64 ]; then
           chmod +x macos-amd64-binary/${{ env.PROJECT_NAME }}-darwin-amd64
-          tar -czf release-assets/darwin-amd64.tar.gz -C macos-amd64-binary ${{ env.PROJECT_NAME }}-darwin-amd64
-          echo "✅ Created darwin-amd64.tar.gz"
+          tar -czf release-assets/darwin-amd64.tar.gz -C macos-amd64-binary ${{ env.PROJECT_NAME }}-darwin-amd64 ${{ env.PROJECT_NAME }}-darwin-amd64.sig ${{ env.PROJECT_NAME }}-darwin-amd64.crt
+          echo "✅ Created darwin-amd64.tar.gz (with signature)"
         fi
-        
+
         # macOS ARM64 binary
         if [ -f macos-arm64-binary/${{ env.PROJECT_NAME }}-darwin-arm64 ]; then
           chmod +x macos-arm64-binary/${{ env.PROJECT_NAME }}-darwin-arm64
-          tar -czf release-assets/darwin-arm64.tar.gz -C macos-arm64-binary ${{ env.PROJECT_NAME }}-darwin-arm64
-          echo "✅ Created darwin-arm64.tar.gz"
+          tar -czf release-assets/darwin-arm64.tar.gz -C macos-arm64-binary ${{ env.PROJECT_NAME }}-darwin-arm64 ${{ env.PROJECT_NAME }}-darwin-arm64.sig ${{ env.PROJECT_NAME }}-darwin-arm64.crt
+          echo "✅ Created darwin-arm64.tar.gz (with signature)"
         fi
         
         echo "📋 Release assets created:"
@@ -408,8 +536,43 @@ jobs:
         echo "" >> release_notes.md
         echo "- **Linux (AMD64)**: \`linux-amd64.tar.gz\`" >> release_notes.md
         echo "- **Windows (AMD64)**: \`windows-amd64.tar.gz\`" >> release_notes.md
-        echo "- **macOS (Intel)**: \`darwin-amd64.tar.gz\`" >> release_notes.md  
+        echo "- **macOS (Intel)**: \`darwin-amd64.tar.gz\`" >> release_notes.md
         echo "- **macOS (Apple Silicon)**: \`darwin-arm64.tar.gz\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 🔒 Code Signing" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "All binaries and container images are signed with [Sigstore cosign](https://sigstore.dev/) for enhanced security:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "- **Binaries**: Each archive includes \`.sig\` (signature) and \`.crt\` (certificate) files" >> release_notes.md
+        echo "- **Container Images**: Signed with keyless signing using GitHub OIDC" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Verifying Signatures" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Binary verification:**" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Verify binary signature" >> release_notes.md
+        echo "cosign verify-blob --certificate tls-cert-monitor.crt --signature tls-cert-monitor.sig --certificate-identity-regexp 'https://github.com/${{ github.repository }}' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' tls-cert-monitor" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Container image verification:**" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Verify container image signature" >> release_notes.md
+        echo "cosign verify ghcr.io/${{ github.repository_owner }}/${{ env.PROJECT_NAME }}:${TAG_NAME} --certificate-identity-regexp 'https://github.com/${{ github.repository }}' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 🪟 Windows Antivirus Notes" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "If Windows Defender or antivirus software flags the executable:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "1. **Verify the signature** using the commands above" >> release_notes.md
+        echo "2. **Add exclusion**: Add \`tls-cert-monitor.exe\` to your antivirus exclusions" >> release_notes.md
+        echo "3. **Windows Defender**: Run as Administrator and execute:" >> release_notes.md
+        echo "   \`\`\`powershell" >> release_notes.md
+        echo "   Add-MpPreference -ExclusionPath \"C:\\path\\to\\tls-cert-monitor.exe\"" >> release_notes.md
+        echo "   \`\`\`" >> release_notes.md
+        echo "4. **Enterprise environments**: Contact your IT administrator to whitelist the application" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "The binary is compiled with Nuitka and includes cryptographic libraries, which may trigger false positives." >> release_notes.md
         echo "" >> release_notes.md
         echo "## 🐳 Container Images" >> release_notes.md
         echo "" >> release_notes.md

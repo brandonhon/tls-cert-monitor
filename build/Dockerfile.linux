@@ -59,7 +59,8 @@ RUN echo '#!/bin/bash' > /app/build.sh && \
     echo 'python -m nuitka $NUITKA_FLAGS \' >> /app/build.sh && \
     echo '    main.py \' >> /app/build.sh && \
     echo '    --output-dir=/app/dist \' >> /app/build.sh && \
-    echo '    --output-filename=tls-cert-monitor' >> /app/build.sh && \
+    echo '    --output-filename=tls-cert-monitor \' >> /app/build.sh && \
+    echo '    --onefile-tempdir-spec=/opt/tls-cert-monitor/tmp' >> /app/build.sh && \
     echo '' >> /app/build.sh && \
     echo 'echo "Build completed successfully!"' >> /app/build.sh && \
     echo 'ls -la /app/dist/' >> /app/build.sh && \
