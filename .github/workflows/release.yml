@@ -181,7 +181,7 @@ jobs:
           "--disable-ccache",
           "--mingw64",
           "--lto=no",
-          "--onefile-tempdir-spec=C:\ProgramData\tls-cert-monitor\temp"
+          "--onefile-tempdir-spec=\ProgramData\tls-cert-monitor\temp"
         )
 
         # Add version info if we have a valid tag

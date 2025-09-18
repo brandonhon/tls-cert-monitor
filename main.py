@@ -50,7 +50,7 @@ class TLSCertMonitor:
 
         # Determine temp directory based on platform
         if system == "Windows":
-            # Use ProgramData for system-wide access
+            # Use ProgramData for system-wide access (use env var since runtime can resolve it)
             temp_dir = Path(os.environ.get('PROGRAMDATA', r'C:\ProgramData')) / 'tls-cert-monitor' / 'temp'
         elif system == "Darwin":  # macOS
             # Use /var/tmp for system-wide access
