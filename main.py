@@ -44,91 +44,49 @@ class TLSCertMonitor:
         """Ensure Nuitka temp directory exists for compiled binaries."""
         import os
         import platform
-        import stat
-        import tempfile
 
-        def test_executable_dir(path: Path) -> bool:
-            """Test if a directory allows executable file creation."""
-            try:
-                path.mkdir(parents=True, exist_ok=True)
-                # Test if we can write and execute
-                test_file = path / ".exec_test"
-                test_file.write_text("#!/bin/sh\necho test")
-                test_file.chmod(stat.S_IRWXU)  # Make executable
-                # Try to run it (if this fails, directory is noexec)
-                import subprocess
-
-                subprocess.run([str(test_file)], check=True, capture_output=True, timeout=1)
-                test_file.unlink()
-                return True
-            except (
-                OSError,
-                PermissionError,
-                subprocess.SubprocessError,
-                subprocess.TimeoutExpired,
-            ):
-                try:
-                    if test_file.exists():
-                        test_file.unlink()
-                except Exception:
-                    pass
-                return False
-
+        # For Windows, we still need runtime fallback since no build-time temp dir is set
+        # For Linux/macOS, Nuitka uses {PROGRAM_DIR}/.nuitka_temp which should work fine
         system = platform.system()
 
-        # Try platform-appropriate locations with fallbacks
         if system == "Windows":
+            # Windows needs runtime temp directory resolution
+            import tempfile
+
             candidates = [
-                Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "tls-cert-monitor",  # User temp
+                Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "tls-cert-monitor",
                 Path(os.environ.get("LOCALAPPDATA", r"C:\Users\Default\AppData\Local"))
                 / "tls-cert-monitor"
                 / "temp",
-                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # System temp fallback
-            ]
-        elif system == "Darwin":  # macOS
-            candidates = [
-                Path.home() / "Library" / "Caches" / "tls-cert-monitor",  # User cache
-                Path("/usr/local/var/tmp/tls-cert-monitor"),  # Local system
-                Path("/tmp/tls-cert-monitor"),  # System temp
-                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # Final fallback
-            ]
-        else:  # Linux
-            candidates = [
-                Path.home()
-                / ".cache"
-                / "tls-cert-monitor"
-                / "temp",  # User cache (most likely to work)
-                Path("/tmp/tls-cert-monitor"),  # System temp
-                Path("/var/tmp/tls-cert-monitor"),  # Alternative temp
-                Path(tempfile.gettempdir()) / "tls-cert-monitor",  # Final fallback
+                Path(tempfile.gettempdir()) / "tls-cert-monitor",
             ]
 
-        # Find first working location
-        working_dir = None
-        for candidate in candidates:
-            if test_executable_dir(candidate):
-                working_dir = candidate
-                break
-
-        # If still no working directory, try one more fallback
-        if working_dir is None:
-            # Create a unique temp directory as last resort
+            # Find first writable location for Windows
+            for candidate in candidates:
+                try:
+                    candidate.mkdir(parents=True, exist_ok=True)
+                    # Test basic write access
+                    test_file = candidate / ".write_test"
+                    test_file.touch()
+                    test_file.unlink()
+                    # Set environment variable for Nuitka
+                    os.environ["ONEFILE_TEMPDIR"] = str(candidate)
+                    break
+                except (OSError, PermissionError):
+                    continue
+        else:
+            # Linux/macOS use {PROGRAM_DIR}/.nuitka_temp - just ensure executable dir exists
             try:
-                import uuid
+                # Get the directory where the executable is located
+                import sys
 
-                fallback = Path(tempfile.gettempdir()) / f"tls-cert-monitor-{uuid.uuid4().hex[:8]}"
-                if test_executable_dir(fallback):
-                    working_dir = fallback
+                if getattr(sys, "frozen", False):
+                    # Running as compiled binary
+                    exe_dir = Path(sys.executable).parent
+                    temp_dir = exe_dir / ".nuitka_temp"
+                    temp_dir.mkdir(exist_ok=True)
             except Exception:
-                pass
-
-        # Set environment variable for Nuitka to find at runtime
-        if working_dir:
-            try:
-                os.environ["ONEFILE_TEMPDIR"] = str(working_dir)
-                # Also try the older variable name
-                os.environ["NUITKA_ONEFILE_TEMP"] = str(working_dir)
-            except Exception:
+                # If we can't create it, Nuitka will handle it
                 pass
 
     async def initialize(self) -> None:

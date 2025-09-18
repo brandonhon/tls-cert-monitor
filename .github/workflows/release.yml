@@ -313,6 +313,7 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-amd64 \
+          --onefile-tempdir-spec="{PROGRAM_DIR}/.nuitka_temp" \
           main.py
         
         echo "📄 Verifying macOS binary..."
@@ -384,6 +385,7 @@ jobs:
           --include-module=prometheus_client \
           --output-dir=dist \
           --output-filename=${{ env.PROJECT_NAME }}-darwin-arm64 \
+          --onefile-tempdir-spec="{PROGRAM_DIR}/.nuitka_temp" \
           main.py
         
         echo "📄 Verifying macOS ARM64 binary..."
