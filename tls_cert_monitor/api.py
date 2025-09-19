@@ -3,6 +3,7 @@ FastAPI application for TLS Certificate Monitor.
 """
 
 import asyncio
+import html
 import ipaddress
 import os
 import shutil
@@ -523,20 +524,20 @@ def create_app(
 
         <h3>📂 Monitored Directories</h3>
         <div style="margin-top: 15px;">
-            {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{directory}</code></div>' for directory in current_config.certificate_directories)}
+            {"".join(f'<div style="background: #f0f8f0; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #4CAF50;"><code>{html.escape(directory)}</code></div>' for directory in current_config.certificate_directories)}
         </div>
 
         {f'''
         <h3>🚫 Excluded Directories</h3>
         <div style="margin-top: 15px;">
-            {"".join(f'<div style="background: #fef2f2; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ef4444;"><code>{directory}</code></div>' for directory in current_config.exclude_directories)}
+            {"".join(f'<div style="background: #fef2f2; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ef4444;"><code>{html.escape(directory)}</code></div>' for directory in current_config.exclude_directories)}
         </div>
         ''' if current_config.exclude_directories else ''}
 
         {f'''
         <h3>🔍 Excluded File Patterns</h3>
         <div style="margin-top: 15px;">
-            {"".join(f'<div style="background: #fff4e6; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ff8c00;"><code>{pattern}</code></div>' for pattern in current_config.exclude_file_patterns)}
+            {"".join(f'<div style="background: #fff4e6; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 3px solid #ff8c00;"><code>{html.escape(pattern)}</code></div>' for pattern in current_config.exclude_file_patterns)}
         </div>
         ''' if current_config.exclude_file_patterns else ''}
     </div>

@@ -383,65 +383,75 @@ class MetricsCollector:
 
         self.logger.debug("Scan metrics reset (current counts cleared and gauges zeroed)")
 
+    def _recreate_metric(self, metric_attr: str, metric_class, name: str, description: str, labels: List[str]) -> None:
+        """
+        Helper method to recreate a single metric.
+        
+        Args:
+            metric_attr: Attribute name to store the metric
+            metric_class: Prometheus metric class (Gauge, Info, etc.)
+            name: Metric name
+            description: Metric description
+            labels: List of label names
+        """
+        try:
+            # Unregister existing metric
+            current_metric = getattr(self, metric_attr, None)
+            if current_metric:
+                try:
+                    self.registry.unregister(current_metric)
+                except KeyError:
+                    pass
+            
+            # Create new metric
+            new_metric = metric_class(name, description, labels, registry=self.registry)
+            setattr(self, metric_attr, new_metric)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to recreate metric {metric_attr}: {e}")
+
     def clear_all_certificate_metrics(self) -> None:
         """Clear all labeled certificate metrics. Used when exclude patterns change."""
         try:
-            # Clear all labeled metrics by recreating them
-            # This is necessary because Prometheus labeled metrics can't be selectively cleared
-
-            # Store the registry reference
-            registry = self.registry
-
-            # Unregister all labeled certificate metrics
-            labeled_metrics = [
-                self.ssl_cert_expiration_timestamp,
-                self.ssl_cert_san_count,
-                self.ssl_cert_info,
-                self.ssl_cert_duplicate_names,
-                self.ssl_cert_issuer_code,
-            ]
-
-            for metric in labeled_metrics:
-                try:
-                    registry.unregister(metric)
-                except KeyError:
-                    # Metric might not be registered yet
-                    pass
-
-            # Recreate all labeled metrics
-            self.ssl_cert_expiration_timestamp = Gauge(
+            # Recreate all labeled certificate metrics using helper method
+            self._recreate_metric(
+                "ssl_cert_expiration_timestamp", 
+                Gauge,
                 "ssl_cert_expiration_timestamp",
                 "Certificate expiration time (Unix timestamp)",
-                ["common_name", "issuer", "path", "serial"],
-                registry=registry,
+                ["common_name", "issuer", "path", "serial"]
             )
-
-            self.ssl_cert_san_count = Gauge(
+            
+            self._recreate_metric(
+                "ssl_cert_san_count",
+                Gauge, 
                 "ssl_cert_san_count",
                 "Number of Subject Alternative Names",
-                ["common_name", "path"],
-                registry=registry,
+                ["common_name", "path"]
             )
-
-            self.ssl_cert_info = Info(
+            
+            self._recreate_metric(
                 "ssl_cert_info",
+                Info,
+                "ssl_cert_info", 
                 "Certificate information with labels",
-                ["path", "common_name", "issuer", "serial", "subject"],
-                registry=registry,
+                ["path", "common_name", "issuer", "serial", "subject"]
             )
-
-            self.ssl_cert_duplicate_names = Info(
+            
+            self._recreate_metric(
                 "ssl_cert_duplicate_names",
-                "Names of certificates that are duplicates",
-                ["serial_number"],
-                registry=registry,
+                Info,
+                "ssl_cert_duplicate_names",
+                "Names of certificates that are duplicates", 
+                ["serial_number"]
             )
-
-            self.ssl_cert_issuer_code = Gauge(
+            
+            self._recreate_metric(
+                "ssl_cert_issuer_code",
+                Gauge,
                 "ssl_cert_issuer_code",
                 "Numeric issuer classification",
-                ["common_name", "issuer", "path"],
-                registry=registry,
+                ["common_name", "issuer", "path"]
             )
 
             self.logger.debug("All labeled certificate metrics cleared and recreated")
@@ -455,18 +465,13 @@ class MetricsCollector:
         self._current_scan_parse_errors = 0
         self.ssl_cert_parse_errors_total.set(0)
 
-        # Clear individual error details
-        try:
-            self.registry.unregister(self.ssl_cert_parse_error_names)
-        except KeyError:
-            # Metric might not be registered yet
-            pass
-
-        self.ssl_cert_parse_error_names = Info(
+        # Recreate parse error names metric using helper method
+        self._recreate_metric(
+            "ssl_cert_parse_error_names",
+            Info,
             "ssl_cert_parse_error_names",
             "Names of certificates that have parsing errors",
-            ["filename", "error_type", "error_message"],
-            registry=self.registry,
+            ["filename", "error_type", "error_message"]
         )
 
         self.logger.debug("Parse error metrics recreated")

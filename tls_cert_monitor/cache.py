@@ -366,11 +366,11 @@ class CacheManager:
             *args: Arguments to create key from
 
         Returns:
-            Cache key string
+            Cache key string (full SHA256 hash for security)
         """
-        # Create a hash of the arguments
+        # Create a hash of the arguments - use full hash to prevent collisions
         key_data = str(args).encode("utf-8")
-        return hashlib.sha256(key_data).hexdigest()[:16]
+        return hashlib.sha256(key_data).hexdigest()
 
     async def get_health_status(self) -> Dict[str, Any]:
         """Get cache health status."""

@@ -246,7 +246,6 @@ class TLSCertMonitor:
     is_flag=True,
     help="Install service with manual start (use with --service-install)",
 )
-@click.option("--banana", is_flag=True, hidden=True, help="🍌")
 def main(
     config: Optional[Path],
     version: bool,
@@ -257,15 +256,10 @@ def main(
     service_stop: bool,
     service_status: bool,
     service_manual: bool,
-    banana: bool,
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
     # Handle special flags first (before any potential import issues)
-    if banana:
-        print("🍌 ERROR: Monkey detected in system. Deploying bananas...")
-        return
-
     if version:
         print(f"TLS Certificate Monitor v{__version__}")
         return

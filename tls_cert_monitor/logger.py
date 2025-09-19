@@ -238,6 +238,3 @@ def log_metrics_collection(
     logger.debug(f"Metric collected: {metric_name}={value}", extra=extra)
 
 
-def log_system_info(logger: logging.Logger, info: dict) -> None:
-    """Log system information."""
-    logger.info("System information", extra=info)
