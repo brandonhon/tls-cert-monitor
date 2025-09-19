@@ -233,8 +233,8 @@ class TestCacheManager:
             # Different arguments should produce different key
             assert key1 != key3
 
-            # Key should be reasonable length
-            assert len(key1) == 16  # Truncated SHA256
+            # Key should be reasonable length (full SHA256 hash)
+            assert len(key1) == 64  # Full SHA256 hash for security
 
     async def test_cache_size_limits(self):
         """Test cache size limit enforcement."""
