@@ -5,7 +5,7 @@ Prometheus metrics collection for TLS Certificate Monitor.
 import socket
 import time
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type, Union
 
 import psutil
 from prometheus_client import (
@@ -383,10 +383,17 @@ class MetricsCollector:
 
         self.logger.debug("Scan metrics reset (current counts cleared and gauges zeroed)")
 
-    def _recreate_metric(self, metric_attr: str, metric_class, name: str, description: str, labels: List[str]) -> None:
+    def _recreate_metric(
+        self,
+        metric_attr: str,
+        metric_class: Type[Union[Gauge, Info]],
+        name: str,
+        description: str,
+        labels: List[str],
+    ) -> None:
         """
         Helper method to recreate a single metric.
-        
+
         Args:
             metric_attr: Attribute name to store the metric
             metric_class: Prometheus metric class (Gauge, Info, etc.)
@@ -402,11 +409,11 @@ class MetricsCollector:
                     self.registry.unregister(current_metric)
                 except KeyError:
                     pass
-            
+
             # Create new metric
             new_metric = metric_class(name, description, labels, registry=self.registry)
             setattr(self, metric_attr, new_metric)
-            
+
         except Exception as e:
             self.logger.error(f"Failed to recreate metric {metric_attr}: {e}")
 
@@ -415,43 +422,43 @@ class MetricsCollector:
         try:
             # Recreate all labeled certificate metrics using helper method
             self._recreate_metric(
-                "ssl_cert_expiration_timestamp", 
+                "ssl_cert_expiration_timestamp",
                 Gauge,
                 "ssl_cert_expiration_timestamp",
                 "Certificate expiration time (Unix timestamp)",
-                ["common_name", "issuer", "path", "serial"]
+                ["common_name", "issuer", "path", "serial"],
             )
-            
+
             self._recreate_metric(
                 "ssl_cert_san_count",
-                Gauge, 
+                Gauge,
                 "ssl_cert_san_count",
                 "Number of Subject Alternative Names",
-                ["common_name", "path"]
+                ["common_name", "path"],
             )
-            
+
             self._recreate_metric(
                 "ssl_cert_info",
                 Info,
-                "ssl_cert_info", 
+                "ssl_cert_info",
                 "Certificate information with labels",
-                ["path", "common_name", "issuer", "serial", "subject"]
+                ["path", "common_name", "issuer", "serial", "subject"],
             )
-            
+
             self._recreate_metric(
                 "ssl_cert_duplicate_names",
                 Info,
                 "ssl_cert_duplicate_names",
-                "Names of certificates that are duplicates", 
-                ["serial_number"]
+                "Names of certificates that are duplicates",
+                ["serial_number"],
             )
-            
+
             self._recreate_metric(
                 "ssl_cert_issuer_code",
                 Gauge,
                 "ssl_cert_issuer_code",
                 "Numeric issuer classification",
-                ["common_name", "issuer", "path"]
+                ["common_name", "issuer", "path"],
             )
 
             self.logger.debug("All labeled certificate metrics cleared and recreated")
@@ -471,7 +478,7 @@ class MetricsCollector:
             Info,
             "ssl_cert_parse_error_names",
             "Names of certificates that have parsing errors",
-            ["filename", "error_type", "error_message"]
+            ["filename", "error_type", "error_message"],
         )
 
         self.logger.debug("Parse error metrics recreated")

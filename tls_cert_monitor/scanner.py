@@ -389,32 +389,32 @@ class CertificateScanner:
         # Try different passwords with constant-time approach to prevent timing attacks
         last_exception = None
         successful_cert = None
-        
+
         for password in self.config.p12_passwords:
             try:
                 password_bytes = password.encode("utf-8") if password else None
-                
+
                 # Use cryptography library for PKCS#12 parsing
                 _, cert, _ = pkcs12.load_key_and_certificates(p12_data, password_bytes)
                 if cert and successful_cert is None:
                     # Store first successful result but continue processing all passwords
                     # to maintain constant timing
                     successful_cert = cert
-                    
+
             except Exception as e:
                 # Always store the last exception for error reporting
                 last_exception = e
                 # Continue processing all passwords to maintain constant timing
                 continue
-        
+
         # Return successful result if found
         if successful_cert:
             return self._extract_certificate_info(successful_cert)
-            
+
         # All passwords failed
         if last_exception:
             self.logger.debug(f"All password attempts failed for PKCS#12 file: {last_exception}")
-        
+
         raise ValueError("Could not decrypt PKCS#12 file with any provided password")
 
     def _extract_certificate_info(self, cert: x509.Certificate) -> Dict[str, Any]:

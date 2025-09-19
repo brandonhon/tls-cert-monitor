@@ -236,5 +236,3 @@ def log_metrics_collection(
         extra["metric_labels"] = labels
 
     logger.debug(f"Metric collected: {metric_name}={value}", extra=extra)
-
-
