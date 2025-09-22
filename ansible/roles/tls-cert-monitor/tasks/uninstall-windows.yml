@@ -45,6 +45,49 @@
     state: absent
   ignore_errors: yes
 
+- name: Remove Windows Defender exclusions
+  win_shell: |
+    # Check if Windows Defender is running
+    $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue
+    if (-not $defenderService -or $defenderService.Status -ne 'Running') {
+        Write-Host "Windows Defender is not running, skipping exclusion removal"
+        exit 0
+    }
+
+    # Define paths to remove from exclusions
+    $paths = @(
+        "{{ install_dir_windows }}\\tls-cert-monitor.exe",
+        "{{ install_dir_windows }}",
+        "{{ config_dir_windows }}",
+        "{{ log_dir_windows }}"
+    )
+
+    $removedExclusions = @()
+    $existingExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+    foreach ($path in $paths) {
+        if ($existingExclusions -contains $path) {
+            try {
+                Remove-MpPreference -ExclusionPath $path -ErrorAction Stop
+                $removedExclusions += $path
+                Write-Host "Removed Windows Defender exclusion: $path"
+            } catch {
+                Write-Warning "Failed to remove exclusion for: $path - $_"
+            }
+        }
+    }
+
+    if ($removedExclusions.Count -gt 0) {
+        Write-Host "`nSuccessfully removed $($removedExclusions.Count) Windows Defender exclusions"
+    } else {
+        Write-Host "No Windows Defender exclusions found for tls-cert-monitor"
+    }
+  args:
+    executable: powershell
+  become: yes
+  become_method: runas
+  ignore_errors: yes
+
 - name: Backup configuration before removal
   win_shell: |
     $configPath = "{{ config_dir_windows }}"

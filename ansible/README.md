@@ -6,10 +6,12 @@ This Ansible playbook automates the deployment of [tls-cert-monitor](https://git
 
 - **Cross-platform support**: Linux, macOS, and Windows hosts
 - **Automatic binary download**: Pulls latest release from GitHub
-- **OS-specific configuration**: Separate templates for Linux and Windows
-- **Service management**: systemd for Linux, native Windows service for Windows
+- **OS-specific configuration**: Separate templates for Linux, macOS, and Windows
+- **Service management**: systemd for Linux/macOS, native Windows service for Windows
 - **Security hardening**: Dedicated service user, filesystem restrictions
 - **Monitoring ready**: Health checks and metrics endpoints
+- **Linux /var/tmp handling**: Interactive prompt to manage noexec mount option for Nuitka compatibility
+- **Windows Defender integration**: Optional exclusions for enhanced performance and compatibility
 
 ## Requirements
 
@@ -663,6 +665,58 @@ ansible windows_servers -m win_shell -a "Get-WmiObject win32_service | Where-Obj
 |----------|----------|
 | Linux | `/var/log/tls-cert-monitor/` |
 | Windows | `C:\ProgramData\tls-cert-monitor\logs\` |
+
+## Platform-Specific Features
+
+### Linux: /var/tmp noexec Handling
+
+The Nuitka-compiled binary requires `/var/tmp` to be executable for creating temporary files during runtime. The playbook includes automatic handling for systems with the `noexec` mount option:
+
+**Interactive Prompt**: During installation, you'll be asked:
+```
+Does /var/tmp have 'noexec' mount option in /etc/fstab? (yes/no)
+```
+
+If you answer "yes", the playbook will:
+1. Check current `/etc/fstab` for `/var/tmp` entries
+2. Create a timestamped backup of `/etc/fstab`
+3. Remove the `noexec` option from `/var/tmp`
+4. Clean up mount option formatting
+5. Remount `/var/tmp` with the new options
+6. Display the updated mount status
+
+**Manual Check**: To verify your current `/var/tmp` mount options:
+```bash
+mount | grep /var/tmp
+cat /etc/fstab | grep /var/tmp
+```
+
+### Windows: Defender Exclusions
+
+Windows Defender may flag or slow down the tls-cert-monitor binary. The playbook offers automatic exclusion configuration:
+
+**Interactive Prompt**: During installation, you'll be asked:
+```
+Would you like to add a Windows Defender exclusion for tls-cert-monitor.exe?
+This can help prevent false positives and improve performance. (yes/no)
+```
+
+If you answer "yes", the playbook will add exclusions for:
+- The main executable (`tls-cert-monitor.exe`)
+- Installation directory (`C:\Program Files\tls-cert-monitor`)
+- Configuration directory (`C:\ProgramData\tls-cert-monitor`)
+- Log directory (`C:\ProgramData\tls-cert-monitor\logs`)
+
+**Manual Management**: To check current exclusions:
+```powershell
+# View all exclusions
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+
+# View tls-cert-monitor specific exclusions
+Get-MpPreference | Select-Object -ExpandProperty ExclusionPath | Where-Object { $_ -like "*tls-cert-monitor*" }
+```
+
+**Automatic Removal**: When uninstalling, all Windows Defender exclusions are automatically removed.
 
 ## Advanced Configuration
 

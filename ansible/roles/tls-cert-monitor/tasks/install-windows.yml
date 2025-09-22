@@ -90,6 +90,74 @@
     executable: powershell
   notify: restart tls-cert-monitor-windows-native
 
+# Windows Defender Exclusion
+- name: Check if Windows Defender exclusion should be added
+  pause:
+    prompt: >-
+      Would you like to add a Windows Defender exclusion for tls-cert-monitor.exe?
+      This can help prevent false positives and improve performance. (yes/no)
+  register: defender_exclusion_prompt
+
+- name: Add Windows Defender exclusion
+  when: defender_exclusion_prompt.user_input | lower == 'yes'
+  win_shell: |
+    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+
+    # Check if Windows Defender is running
+    $defenderService = Get-Service -Name "WinDefend" -ErrorAction SilentlyContinue
+    if (-not $defenderService -or $defenderService.Status -ne 'Running') {
+        Write-Host "Windows Defender is not running, skipping exclusion configuration"
+        exit 0
+    }
+
+    # Check if exclusion already exists
+    $existingExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+    if ($existingExclusions -contains $exePath) {
+        Write-Host "Exclusion for $exePath already exists"
+        exit 0
+    }
+
+    # Add the exclusion
+    try {
+        Add-MpPreference -ExclusionPath $exePath -ErrorAction Stop
+        Write-Host "Successfully added Windows Defender exclusion for: $exePath"
+
+        # Also add exclusion for the entire install directory
+        $installDir = "{{ install_dir_windows }}"
+        if ($existingExclusions -notcontains $installDir) {
+            Add-MpPreference -ExclusionPath $installDir -ErrorAction SilentlyContinue
+            Write-Host "Also added exclusion for installation directory: $installDir"
+        }
+
+        # Add exclusion for the config directory
+        $configDir = "{{ config_dir_windows }}"
+        if ($existingExclusions -notcontains $configDir) {
+            Add-MpPreference -ExclusionPath $configDir -ErrorAction SilentlyContinue
+            Write-Host "Also added exclusion for config directory: $configDir"
+        }
+
+        # Add exclusion for the log directory
+        $logDir = "{{ log_dir_windows }}"
+        if ($existingExclusions -notcontains $logDir) {
+            Add-MpPreference -ExclusionPath $logDir -ErrorAction SilentlyContinue
+            Write-Host "Also added exclusion for log directory: $logDir"
+        }
+
+        # Display current exclusions
+        Write-Host "`nCurrent Windows Defender exclusions for tls-cert-monitor:"
+        Get-MpPreference | Select-Object -ExpandProperty ExclusionPath |
+            Where-Object { $_ -like "*tls-cert-monitor*" } |
+            ForEach-Object { Write-Host "  - $_" }
+
+    } catch {
+        Write-Warning "Failed to add Windows Defender exclusion: $_"
+        Write-Host "You may need to run this playbook with elevated privileges"
+        exit 1
+    }
+  args:
+    executable: powershell
+  become: yes
+  become_method: runas
 
 - name: Configure Windows Firewall rule
   win_firewall_rule:

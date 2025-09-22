@@ -140,11 +140,13 @@ make ansible-uninstall
 ```
 
 #### Features
-- **Cross-platform**: Supports Linux (systemd) and Windows (native service)
+- **Cross-platform**: Supports Linux (systemd), macOS, and Windows (native service)
 - **Multiple connection methods**: SSH key/password authentication, WinRM for Windows
 - **TLS/SSL support**: Deploy with self-signed or custom certificates
 - **Safe uninstall**: Backs up configuration before removal
 - **Flexible options**: Control what gets removed (config, logs, user)
+- **Linux /var/tmp handling**: Interactive prompt to remove noexec mount option for Nuitka compatibility
+- **Windows Defender integration**: Optional exclusions for binary and directories
 
 #### Advanced Usage
 
