@@ -153,6 +153,7 @@ def install_service(
 
         # Install the service
         win32serviceutil.InstallService(
+            TLSCertMonitorService,
             TLSCertMonitorService._svc_name_,
             TLSCertMonitorService._svc_display_name_,
             startType=(
