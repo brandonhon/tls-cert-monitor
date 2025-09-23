@@ -318,17 +318,30 @@ def main(
     # Handle Windows service mode
     if service:
         try:
+            # Add debug logging for service mode entry
+            print("DEBUG: Entering Windows service mode")
+            print(f"DEBUG: sys.argv = {sys.argv}")
+            print(f"DEBUG: config = {config}")
+
             import win32serviceutil
 
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
+            print("DEBUG: About to call HandleCommandLine")
             # Use HandleCommandLine for proper SCM integration
             win32serviceutil.HandleCommandLine(TLSCertMonitorService)
+            print("DEBUG: HandleCommandLine completed")
             return
         except ImportError as e:
             print("ERROR: Windows service functionality is not available.")
             print(f"Import error: {e}")
             print("This requires Windows and the pywin32 package.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"ERROR: Exception in service mode: {e}")
+            import traceback
+
+            print(f"DEBUG: Service mode traceback: {traceback.format_exc()}")
             sys.exit(1)
 
     try:

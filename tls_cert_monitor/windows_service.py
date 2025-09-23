@@ -38,13 +38,41 @@ if win32serviceutil:
 
         def __init__(self, args: Any) -> None:
             """Initialize the Windows service."""
-            win32serviceutil.ServiceFramework.__init__(self, args)
+            # Setup debug logging to file immediately
+            import os
+            import tempfile
+
+            debug_log = os.path.join(tempfile.gettempdir(), "tls-cert-monitor-service-debug.log")
+            self._debug_log = open(debug_log, "a", encoding="utf-8")
+            self._debug_log.write(
+                f"\n=== SERVICE INIT START {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+            )
+            self._debug_log.write("DEBUG: TLSCertMonitorService.__init__ called\n")
+            self._debug_log.write(f"DEBUG: Service init args: {args}\n")
+            self._debug_log.flush()
+
+            print("DEBUG: TLSCertMonitorService.__init__ called")
+            print(f"DEBUG: Service init args: {args}")
+            print(f"DEBUG: Debug log file: {debug_log}")
+
+            try:
+                win32serviceutil.ServiceFramework.__init__(self, args)
+                print("DEBUG: ServiceFramework.__init__ completed")
+            except Exception as e:
+                print(f"ERROR: ServiceFramework.__init__ failed: {e}")
+                import traceback
+
+                print(f"DEBUG: ServiceFramework init traceback: {traceback.format_exc()}")
+                raise
+
             self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
             self.is_alive = True
             self.monitor: Any = None
             self.monitor_thread: Optional[Thread] = None
             self.loop: Optional[asyncio.AbstractEventLoop] = None
             self.config_path: Optional[str] = None
+
+            print("DEBUG: Service member variables initialized")
 
             # Parse command line arguments for config file
             # Arguments come as: [service_name, --service, --config, path]
@@ -73,6 +101,20 @@ if win32serviceutil:
 
             # Setup basic logging early
             self.logger = logging.getLogger(__name__)
+            self._debug("Service initialized with config_path", self.config_path)
+            print(f"DEBUG: Service initialized with config_path: {self.config_path}")
+
+        def _debug(self, message: str, *args: Any) -> None:
+            """Write debug message to both console and file."""
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            full_message = f"[{timestamp}] {message}"
+            if args:
+                full_message += f": {' '.join(str(arg) for arg in args)}"
+
+            print(f"DEBUG: {full_message}")
+            if hasattr(self, "_debug_log"):
+                self._debug_log.write(f"DEBUG: {full_message}\n")
+                self._debug_log.flush()
 
         def SvcStop(self) -> None:
             """Handle service stop request."""
@@ -91,34 +133,50 @@ if win32serviceutil:
 
         def SvcDoRun(self) -> None:
             """Main service execution method."""
+            start_time = time.time()
+            self._debug("SvcDoRun called - service is starting")
             try:
                 # Setup logging for service
+                self._debug("Setting up logging and configuration")
                 try:
                     config = load_config(self.config_path)
                     setup_logging(config)
                     self.logger = logging.getLogger(__name__)
                     self.logger.info("TLS Certificate Monitor Windows service starting")
+                    self._debug("Logging setup completed successfully")
                 except Exception as e:
                     # Fallback logging if config fails
+                    self._debug("Config loading failed", str(e))
                     logging.basicConfig(level=logging.INFO)
                     self.logger = logging.getLogger(__name__)
                     self.logger.error(f"Failed to load config, using defaults: {e}")
+                    self._debug("Fallback logging setup completed")
 
                 # Create and start the monitor in a separate thread BEFORE reporting running
+                self._debug("Creating monitor thread")
                 self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
+                self._debug("Starting monitor thread")
                 self.monitor_thread.start()
 
                 # Give the monitor thread a moment to start up
+                self._debug("Waiting 2 seconds for monitor thread startup")
                 time.sleep(2)
 
                 # Check if monitor thread is still alive after startup
-                if not self.monitor_thread.is_alive():
-                    self.logger.error("Monitor thread failed to start properly")
-                    raise RuntimeError("Monitor thread failed to start")
+                thread_alive = self.monitor_thread.is_alive()
+                self._debug("Checking monitor thread status: alive =", thread_alive)
+                if not thread_alive:
+                    error_msg = "Monitor thread failed to start properly"
+                    self._debug("ERROR:", error_msg)
+                    self.logger.error(error_msg)
+                    raise RuntimeError(error_msg)
 
                 # Report that we're running only after successful startup
+                elapsed = time.time() - start_time
+                self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
                 self.logger.info("Reporting service as running to SCM")
                 self.ReportServiceStatus(SERVICE_RUNNING)
+                self._debug("SERVICE_RUNNING reported to SCM successfully")
 
                 # Wait for stop signal
                 self.logger.info("Service running, waiting for stop signal...")
