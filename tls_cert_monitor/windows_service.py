@@ -104,17 +104,28 @@ if win32serviceutil:
                     self.logger = logging.getLogger(__name__)
                     self.logger.error(f"Failed to load config, using defaults: {e}")
 
-                # Report that we're running
-                self.ReportServiceStatus(SERVICE_RUNNING)
-
-                # Create and start the monitor in a separate thread
+                # Create and start the monitor in a separate thread BEFORE reporting running
                 self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
                 self.monitor_thread.start()
 
+                # Give the monitor thread a moment to start up
+                time.sleep(2)
+
+                # Check if monitor thread is still alive after startup
+                if not self.monitor_thread.is_alive():
+                    self.logger.error("Monitor thread failed to start properly")
+                    raise RuntimeError("Monitor thread failed to start")
+
+                # Report that we're running only after successful startup
+                self.logger.info("Reporting service as running to SCM")
+                self.ReportServiceStatus(SERVICE_RUNNING)
+
                 # Wait for stop signal
+                self.logger.info("Service running, waiting for stop signal...")
                 win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
 
                 # Wait for monitor thread to finish
+                self.logger.info("Stop signal received, shutting down monitor...")
                 if self.monitor_thread and self.monitor_thread.is_alive():
                     self.monitor_thread.join(timeout=30)
 
@@ -122,29 +133,43 @@ if win32serviceutil:
 
             except Exception as e:
                 self.logger.error(f"Service execution failed: {e}")
+                # Report service stopped on error
+                self.ReportServiceStatus(win32service.SERVICE_STOPPED)
                 raise
 
         def _run_monitor(self) -> None:
             """Run the TLS Certificate Monitor in an async event loop."""
             try:
+                self.logger.info("Starting monitor thread...")
+
                 # Import here to avoid circular imports
                 from tls_cert_monitor.main import TLSCertMonitor  # type: ignore[import-not-found]
 
+                self.logger.info("Creating event loop...")
                 # Create new event loop for this thread
                 self.loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self.loop)
 
+                self.logger.info("Initializing TLS Certificate Monitor...")
                 # Create and initialize the monitor
                 self.monitor = TLSCertMonitor(config_path=self.config_path, dry_run=False)
 
+                self.logger.info("Starting monitor execution...")
                 # Run the monitor
                 self.loop.run_until_complete(self.monitor.run())
 
             except Exception as e:
                 self.logger.error(f"Monitor execution failed: {e}")
+                import traceback
+
+                self.logger.error(f"Monitor traceback: {traceback.format_exc()}")
+                # Signal that we've failed
+                self.is_alive = False
             finally:
+                self.logger.info("Monitor thread finishing...")
                 if self.loop:
                     self.loop.close()
+                self.logger.info("Monitor thread finished")
 
 else:
     # Dummy class for non-Windows systems
