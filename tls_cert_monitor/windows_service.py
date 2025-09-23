@@ -193,10 +193,43 @@ def uninstall_service() -> bool:
             # Service might not be running - this is expected behavior
             pass  # nosec B110
 
-        # Remove the service
-        win32serviceutil.RemoveService(TLSCertMonitorService._svc_name_)
-        print(f"Service '{TLSCertMonitorService._svc_display_name_}' uninstalled successfully")
-        return True
+        # Track if any removal method succeeded
+        removal_succeeded = False
+
+        # Remove the service using pywin32
+        try:
+            win32serviceutil.RemoveService(TLSCertMonitorService._svc_name_)
+            print(f"Service '{TLSCertMonitorService._svc_display_name_}' marked for deletion")
+            removal_succeeded = True
+            time.sleep(1)  # Brief pause
+        except Exception as e:
+            print(f"Warning: pywin32 removal failed: {e}")
+
+        # Force deletion using sc delete as fallback
+        import subprocess  # nosec B404
+
+        try:
+            result = subprocess.run(  # nosec B603, B607
+                ["sc", "delete", TLSCertMonitorService._svc_name_],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                print(f"Service '{TLSCertMonitorService._svc_display_name_}' deleted successfully")
+                removal_succeeded = True
+            elif (
+                "does not exist" in result.stderr.lower()
+                or "specified service does not exist" in result.stderr.lower()
+            ):
+                print(f"Service '{TLSCertMonitorService._svc_display_name_}' was already removed")
+                removal_succeeded = True
+            else:
+                print(f"sc delete output: {result.stderr.strip()}")
+        except Exception as e:
+            print(f"Warning: sc delete failed: {e}")
+
+        return removal_succeeded
 
     except Exception as e:
         print(f"Failed to uninstall service: {e}")
