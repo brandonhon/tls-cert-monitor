@@ -47,8 +47,29 @@ if win32serviceutil:
             self.config_path: Optional[str] = None
 
             # Parse command line arguments for config file
+            # Arguments come as: [service_name, --service, --config, path]
+            # or: [service_name, path] (legacy format)
             if len(args) > 1:
-                self.config_path = args[1]
+                args_list = list(args)
+                # Debug output for service argument parsing
+                print("Service initialization debug:")
+                print(f"  args received: {args}")
+                print(f"  args_list: {args_list}")
+
+                if "--config" in args_list:
+                    try:
+                        config_index = args_list.index("--config")
+                        if config_index + 1 < len(args_list):
+                            self.config_path = args_list[config_index + 1]
+                            print(f"  config_path from --config: {self.config_path}")
+                    except (ValueError, IndexError):
+                        print("  Failed to parse --config argument")
+                elif len(args_list) > 1:
+                    # Legacy format: assume second argument is config path
+                    self.config_path = args_list[1]
+                    print(f"  config_path from legacy format: {self.config_path}")
+            else:
+                print("Service initialization debug: No arguments provided")
 
             # Setup basic logging early
             self.logger = logging.getLogger(__name__)
@@ -147,7 +168,23 @@ def install_service(
 
     try:
         # Detect if running from compiled binary or Python script
-        is_compiled = getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+        # Check multiple indicators for different binary packers
+        is_compiled = (
+            getattr(sys, "frozen", False)  # PyInstaller, cx_Freeze
+            or hasattr(sys, "_MEIPASS")  # PyInstaller
+            or "__compiled__" in globals()  # Nuitka
+            or (
+                sys.argv[0].endswith(".exe") and not sys.argv[0].endswith("python.exe")
+            )  # General executable
+        )
+
+        # Debug output to understand detection
+        print("Service installation debug:")
+        print(f"  sys.frozen: {getattr(sys, 'frozen', 'Not set')}")
+        print(f"  sys._MEIPASS: {hasattr(sys, '_MEIPASS')}")
+        print(f"  __compiled__ in globals: {'__compiled__' in globals()}")
+        print(f"  sys.argv[0]: {sys.argv[0]}")
+        print(f"  is_compiled: {is_compiled}")
 
         if is_compiled:
             # Running from compiled binary (Nuitka, PyInstaller, etc.)

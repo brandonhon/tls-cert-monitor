@@ -322,6 +322,7 @@ def main(
 
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
+            # Use HandleCommandLine for proper SCM integration
             win32serviceutil.HandleCommandLine(TLSCertMonitorService)
             return
         except ImportError as e:
