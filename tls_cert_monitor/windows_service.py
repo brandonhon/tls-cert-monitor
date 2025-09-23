@@ -153,9 +153,9 @@ def install_service(
 
         # Install the service
         win32serviceutil.InstallService(
-            TLSCertMonitorService,
-            TLSCertMonitorService._svc_name_,
-            TLSCertMonitorService._svc_display_name_,
+            pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
+            serviceName=TLSCertMonitorService._svc_name_,
+            displayName=TLSCertMonitorService._svc_display_name_,
             startType=(
                 win32service.SERVICE_AUTO_START
                 if service_auto_start
