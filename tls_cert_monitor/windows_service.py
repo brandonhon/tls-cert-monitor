@@ -146,10 +146,27 @@ def install_service(
         raise RuntimeError("pywin32 is required for Windows service support")
 
     try:
-        # Build service parameters
-        service_args = [TLSCertMonitorService._svc_name_]
-        if service_config_path:
-            service_args.append(service_config_path)
+        # Detect if running from compiled binary or Python script
+        is_compiled = getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+
+        if is_compiled:
+            # Running from compiled binary (Nuitka, PyInstaller, etc.)
+            exe_name = sys.argv[0]
+            exe_args = ["--service"]
+            if service_config_path:
+                exe_args.extend(["--config", service_config_path])
+            exe_args_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in exe_args)
+        else:
+            # Running from Python script - use traditional service approach
+            service_args = [TLSCertMonitorService._svc_name_]
+            if service_config_path:
+                service_args.append(service_config_path)
+            exe_name = sys.executable
+            exe_args_str = (
+                f'"{__file__}" {" ".join(service_args[1:])}'
+                if len(service_args) > 1
+                else f'"{__file__}"'
+            )
 
         # Install the service
         win32serviceutil.InstallService(
@@ -162,8 +179,8 @@ def install_service(
                 else win32service.SERVICE_DEMAND_START
             ),
             description=TLSCertMonitorService._svc_description_,
-            exeName=sys.executable,
-            exeArgs=f'"{__file__}" {" ".join(service_args[1:])}' if len(service_args) > 1 else None,
+            exeName=exe_name,
+            exeArgs=exe_args_str,
         )
 
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' installed successfully")

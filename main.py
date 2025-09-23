@@ -246,6 +246,12 @@ class TLSCertMonitor:
     is_flag=True,
     help="Install service with manual start (use with --service-install)",
 )
+@click.option(
+    "--service",
+    is_flag=True,
+    hidden=True,
+    help="Internal flag - run as Windows service (used by service installation)",
+)
 def main(
     config: Optional[Path],
     version: bool,
@@ -256,6 +262,7 @@ def main(
     service_stop: bool,
     service_status: bool,
     service_manual: bool,
+    service: bool,
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
@@ -307,6 +314,21 @@ def main(
             sys.exit(0)
 
         return  # Exit after handling service commands
+
+    # Handle Windows service mode
+    if service:
+        try:
+            import win32serviceutil
+
+            from tls_cert_monitor.windows_service import TLSCertMonitorService
+
+            win32serviceutil.HandleCommandLine(TLSCertMonitorService)
+            return
+        except ImportError as e:
+            print("ERROR: Windows service functionality is not available.")
+            print(f"Import error: {e}")
+            print("This requires Windows and the pywin32 package.")
+            sys.exit(1)
 
     try:
         monitor = TLSCertMonitor(str(config) if config else None, dry_run=dry_run)
