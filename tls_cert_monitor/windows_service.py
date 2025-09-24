@@ -55,6 +55,23 @@ if win32serviceutil:
             print(f"DEBUG: Service init args: {args}")
             print(f"DEBUG: Debug log file: {debug_log}")
 
+            # Also write to Windows Event Log
+            try:
+                import win32evtlog  # type: ignore[import-untyped]
+                import win32evtlogutil  # type: ignore[import-untyped]
+
+                win32evtlogutil.ReportEvent(
+                    "TLS Certificate Monitor",
+                    1001,
+                    eventCategory=0,
+                    eventType=win32evtlog.EVENTLOG_INFORMATION_TYPE,
+                    strings=[f"Service initialization started with args: {args}"],
+                )
+            except Exception:
+                # Don't fail if event log doesn't work - continue service startup
+                self._debug_log.write("DEBUG: Event log reporting failed, continuing\n")
+                self._debug_log.flush()
+
             try:
                 win32serviceutil.ServiceFramework.__init__(self, args)
                 print("DEBUG: ServiceFramework.__init__ completed")

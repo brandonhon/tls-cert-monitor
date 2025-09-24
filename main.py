@@ -3,12 +3,30 @@
 TLS Certificate Monitor - Main Application Entry Point
 """
 
+# Immediate debug logging before any imports
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+# Log the very first entry point
+try:
+    debug_log_path = Path(tempfile.gettempdir()) / "tls-cert-monitor-entry-debug.log"
+    with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+        debug_log.write(f"\n=== SCRIPT ENTRY {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        debug_log.write(f"sys.argv: {sys.argv}\n")
+        debug_log.write(f"__file__: {__file__ if '__file__' in globals() else 'Not available'}\n")
+        debug_log.write(f"cwd: {os.getcwd()}\n")
+        debug_log.write(f"pid: {os.getpid()}\n")
+        debug_log.flush()
+except Exception:
+    # Don't let debug logging break startup
+    pass
+
 import asyncio
 import logging
 import signal
-import sys
-import time
-from pathlib import Path
 from typing import Optional
 
 import click
