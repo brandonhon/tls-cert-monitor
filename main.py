@@ -315,6 +315,32 @@ def main(
 
         return  # Exit after handling service commands
 
+    # Check if we're running as a Windows service (even without --service flag)
+    if sys.platform == "win32" and not service:
+        try:
+            # Try to detect if we're being run by Windows Service Control Manager
+            # This is a heuristic - check if we're running without a console
+            import sys
+
+            import win32serviceutil
+
+            if not hasattr(sys.stdout, "write") or sys.stdout is None:
+                print("DEBUG: Detected running as Windows service (no console)")
+                service = True
+            else:
+                # Check if parent process is services.exe
+                try:
+                    import psutil
+
+                    parent = psutil.Process().parent()
+                    if parent and parent.name().lower() == "services.exe":
+                        print("DEBUG: Detected running as Windows service (parent is services.exe)")
+                        service = True
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
     # Handle Windows service mode
     if service:
         try:
@@ -322,8 +348,6 @@ def main(
             print("DEBUG: Entering Windows service mode")
             print(f"DEBUG: sys.argv = {sys.argv}")
             print(f"DEBUG: config = {config}")
-
-            import win32serviceutil
 
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 

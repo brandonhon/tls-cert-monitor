@@ -270,14 +270,31 @@ def install_service(
         print(f"  is_compiled: {is_compiled}")
 
         if is_compiled:
-            # Running from compiled binary (Nuitka, PyInstaller, etc.)
+            # Running from compiled binary - use direct executable approach (like manual sc.exe)
             exe_name = sys.argv[0]
-            exe_args = ["--service"]
+            exe_args_str = ""
             if service_config_path:
-                exe_args.extend(["--config", service_config_path])
-            exe_args_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in exe_args)
+                exe_args_str = f'-f "{service_config_path}"'
+
+            print("DEBUG: Installing service with direct executable approach")
+            print(f"DEBUG: exe_name = {exe_name}")
+            print(f"DEBUG: exe_args_str = {exe_args_str}")
+
+            # Use direct executable registration (no pythonClassString)
+            win32serviceutil.InstallService(
+                serviceName=TLSCertMonitorService._svc_name_,
+                displayName=TLSCertMonitorService._svc_display_name_,
+                startType=(
+                    win32service.SERVICE_AUTO_START
+                    if service_auto_start
+                    else win32service.SERVICE_DEMAND_START
+                ),
+                description=TLSCertMonitorService._svc_description_,
+                exeName=exe_name,
+                exeArgs=exe_args_str,
+            )
         else:
-            # Running from Python script - use traditional service approach
+            # Running from Python script - use traditional service class approach
             service_args = [TLSCertMonitorService._svc_name_]
             if service_config_path:
                 service_args.append(service_config_path)
@@ -288,20 +305,24 @@ def install_service(
                 else f'"{__file__}"'
             )
 
-        # Install the service
-        win32serviceutil.InstallService(
-            pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
-            serviceName=TLSCertMonitorService._svc_name_,
-            displayName=TLSCertMonitorService._svc_display_name_,
-            startType=(
-                win32service.SERVICE_AUTO_START
-                if service_auto_start
-                else win32service.SERVICE_DEMAND_START
-            ),
-            description=TLSCertMonitorService._svc_description_,
-            exeName=exe_name,
-            exeArgs=exe_args_str,
-        )
+            print("DEBUG: Installing service with Python class approach")
+            print(f"DEBUG: exe_name = {exe_name}")
+            print(f"DEBUG: exe_args_str = {exe_args_str}")
+
+            # Use Python class registration
+            win32serviceutil.InstallService(
+                pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
+                serviceName=TLSCertMonitorService._svc_name_,
+                displayName=TLSCertMonitorService._svc_display_name_,
+                startType=(
+                    win32service.SERVICE_AUTO_START
+                    if service_auto_start
+                    else win32service.SERVICE_DEMAND_START
+                ),
+                description=TLSCertMonitorService._svc_description_,
+                exeName=exe_name,
+                exeArgs=exe_args_str,
+            )
 
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' installed successfully")
 
