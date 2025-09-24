@@ -74,10 +74,13 @@ if win32serviceutil:
 
             print("DEBUG: Service member variables initialized")
 
-            # Parse command line arguments for config file
+            # Try to get config path from registry first, then from command line arguments
+            self.config_path = self._get_config_from_registry()
+
+            # If no registry config, parse command line arguments for config file
             # Arguments come as: [service_name, --service, --config, path]
             # or: [service_name, path] (legacy format)
-            if len(args) > 1:
+            if not self.config_path and len(args) > 1:
                 args_list = list(args)
                 # Debug output for service argument parsing
                 print("Service initialization debug:")
@@ -96,13 +99,35 @@ if win32serviceutil:
                     # Legacy format: assume second argument is config path
                     self.config_path = args_list[1]
                     print(f"  config_path from legacy format: {self.config_path}")
-            else:
-                print("Service initialization debug: No arguments provided")
+            elif not self.config_path:
+                print("Service initialization debug: No arguments provided and no registry config")
 
             # Setup basic logging early
             self.logger = logging.getLogger(__name__)
             self._debug("Service initialized with config_path", self.config_path)
             print(f"DEBUG: Service initialized with config_path: {self.config_path}")
+
+        def _get_config_from_registry(self) -> Optional[str]:
+            """Get configuration path from Windows registry service parameters."""
+            try:
+                import winreg
+                reg_path = f"SYSTEM\\CurrentControlSet\\Services\\{self._svc_name_}\\Parameters"
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
+                    params, _ = winreg.QueryValueEx(key, "Application")
+                    if params:
+                        print(f"DEBUG: Found registry parameters: {params}")
+                        # Look for config file path in parameters
+                        for i, param in enumerate(params):
+                            if param in ["-f", "--config"] and i + 1 < len(params):
+                                config_path = params[i + 1]
+                                print(f"DEBUG: Found config path in registry: {config_path}")
+                                return config_path
+                        print("DEBUG: No config path found in registry parameters")
+                    else:
+                        print("DEBUG: No registry parameters found")
+            except Exception as e:
+                print(f"DEBUG: Could not read registry parameters: {e}")
+            return None
 
         def _debug(self, message: str, *args: Any) -> None:
             """Write debug message to both console and file."""
@@ -270,18 +295,19 @@ def install_service(
         print(f"  is_compiled: {is_compiled}")
 
         if is_compiled:
-            # Running from compiled binary - use direct service registration
+            # Running from compiled binary - use simple executable with parameters
             exe_name = sys.argv[0]
+
+            # Put config in service parameters, not command line
+            service_params = []
             if service_config_path:
-                bin_path = f'"{exe_name}" -f "{service_config_path}"'
-            else:
-                bin_path = f'"{exe_name}"'
+                service_params = ["-f", service_config_path]
 
-            print("DEBUG: Installing service with direct executable approach")
+            print("DEBUG: Installing service with simple executable approach")
             print(f"DEBUG: exe_name = {exe_name}")
-            print(f"DEBUG: bin_path = {bin_path}")
+            print(f"DEBUG: service_params = {service_params}")
 
-            # Use low-level win32service API for direct binary registration
+            # Use low-level win32service API for clean binary registration
             hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
             try:
                 service_handle = win32service.CreateService(
@@ -296,13 +322,14 @@ def install_service(
                         else win32service.SERVICE_DEMAND_START
                     ),
                     win32service.SERVICE_ERROR_NORMAL,
-                    bin_path,
+                    f'"{exe_name}"',  # Just the executable, no arguments
                     None,
                     0,
                     None,
                     None,
                     None,
                 )
+
                 # Set service description
                 try:
                     win32service.ChangeServiceConfig2(
@@ -312,6 +339,17 @@ def install_service(
                     )
                 except Exception as e:
                     print(f"Warning: Could not set service description: {e}")
+
+                # Set service parameters if we have config
+                if service_params:
+                    try:
+                        import winreg
+                        reg_path = f"SYSTEM\\CurrentControlSet\\Services\\{TLSCertMonitorService._svc_name_}\\Parameters"
+                        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
+                            winreg.SetValueEx(key, "Application", 0, winreg.REG_MULTI_SZ, service_params)
+                        print(f"DEBUG: Set service parameters: {service_params}")
+                    except Exception as e:
+                        print(f"Warning: Could not set service parameters: {e}")
 
                 win32service.CloseServiceHandle(service_handle)
             finally:

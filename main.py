@@ -318,26 +318,46 @@ def main(
     # Check if we're running as a Windows service (even without --service flag)
     if sys.platform == "win32" and not service:
         try:
-            # Try to detect if we're being run by Windows Service Control Manager
-            # This is a heuristic - check if we're running without a console
-            import sys
-
             import win32serviceutil
 
-            if not hasattr(sys.stdout, "write") or sys.stdout is None:
-                print("DEBUG: Detected running as Windows service (no console)")
-                service = True
-            else:
-                # Check if parent process is services.exe
-                try:
-                    import psutil
+            # Try to detect if we're being run by Windows Service Control Manager
+            service_detected = False
 
-                    parent = psutil.Process().parent()
-                    if parent and parent.name().lower() == "services.exe":
-                        print("DEBUG: Detected running as Windows service (parent is services.exe)")
+            # Check if parent process is services.exe
+            try:
+                import psutil
+                parent = psutil.Process().parent()
+                if parent and parent.name().lower() == "services.exe":
+                    print("DEBUG: Detected running as Windows service (parent is services.exe)")
+                    service_detected = True
+            except Exception:
+                print("DEBUG: Could not check parent process, trying registry detection")
+
+            # If we detect we're running as a service OR can't check parent, try to read registry parameters
+            if service_detected or True:  # Always try registry lookup for service parameters
+                try:
+                    import winreg
+                    reg_path = "SYSTEM\\CurrentControlSet\\Services\\TLSCertMonitor\\Parameters"
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
+                        params, _ = winreg.QueryValueEx(key, "Application")
+                        if params:
+                            print(f"DEBUG: Found service parameters in registry: {params}")
+                            # Add the parameters to sys.argv if not already present
+                            for param in params:
+                                if param not in sys.argv:
+                                    sys.argv.append(param)
+                            print(f"DEBUG: Updated sys.argv: {sys.argv}")
+                            service = True
+                        elif service_detected:
+                            # We know we're running as service but no registry params found
+                            print("DEBUG: Running as service but no registry parameters found")
+                            service = True
+                except Exception as e:
+                    print(f"DEBUG: Could not read registry parameters: {e}")
+                    if service_detected:
+                        # We know we're running as service even without registry params
                         service = True
-                except Exception:
-                    pass
+
         except ImportError:
             pass
 
