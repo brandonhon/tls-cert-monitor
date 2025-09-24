@@ -270,29 +270,52 @@ def install_service(
         print(f"  is_compiled: {is_compiled}")
 
         if is_compiled:
-            # Running from compiled binary - use direct executable approach (like manual sc.exe)
+            # Running from compiled binary - use direct service registration
             exe_name = sys.argv[0]
-            exe_args_str = ""
             if service_config_path:
-                exe_args_str = f'-f "{service_config_path}"'
+                bin_path = f'"{exe_name}" -f "{service_config_path}"'
+            else:
+                bin_path = f'"{exe_name}"'
 
             print("DEBUG: Installing service with direct executable approach")
             print(f"DEBUG: exe_name = {exe_name}")
-            print(f"DEBUG: exe_args_str = {exe_args_str}")
+            print(f"DEBUG: bin_path = {bin_path}")
 
-            # Use direct executable registration (no pythonClassString)
-            win32serviceutil.InstallService(
-                serviceName=TLSCertMonitorService._svc_name_,
-                displayName=TLSCertMonitorService._svc_display_name_,
-                startType=(
-                    win32service.SERVICE_AUTO_START
-                    if service_auto_start
-                    else win32service.SERVICE_DEMAND_START
-                ),
-                description=TLSCertMonitorService._svc_description_,
-                exeName=exe_name,
-                exeArgs=exe_args_str,
-            )
+            # Use low-level win32service API for direct binary registration
+            hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
+            try:
+                service_handle = win32service.CreateService(
+                    hs,
+                    TLSCertMonitorService._svc_name_,
+                    TLSCertMonitorService._svc_display_name_,
+                    win32service.SERVICE_ALL_ACCESS,
+                    win32service.SERVICE_WIN32_OWN_PROCESS,
+                    (
+                        win32service.SERVICE_AUTO_START
+                        if service_auto_start
+                        else win32service.SERVICE_DEMAND_START
+                    ),
+                    win32service.SERVICE_ERROR_NORMAL,
+                    bin_path,
+                    None,
+                    0,
+                    None,
+                    None,
+                    None,
+                )
+                # Set service description
+                try:
+                    win32service.ChangeServiceConfig2(
+                        service_handle,
+                        win32service.SERVICE_CONFIG_DESCRIPTION,
+                        TLSCertMonitorService._svc_description_,
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not set service description: {e}")
+
+                win32service.CloseServiceHandle(service_handle)
+            finally:
+                win32service.CloseServiceHandle(hs)
         else:
             # Running from Python script - use traditional service class approach
             service_args = [TLSCertMonitorService._svc_name_]

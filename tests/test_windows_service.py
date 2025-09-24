@@ -41,11 +41,27 @@ class TestWindowsServiceOperations:
         """Test successful service installation."""
         mock_sys.executable = "python.exe"
         mock_win32service.SERVICE_AUTO_START = 2
+        mock_win32service.SC_MANAGER_ALL_ACCESS = 0xF003F
+        mock_win32service.SERVICE_ALL_ACCESS = 0xF01FF
+        mock_win32service.SERVICE_WIN32_OWN_PROCESS = 0x00000010
+        mock_win32service.SERVICE_ERROR_NORMAL = 0x00000001
+        mock_win32service.SERVICE_CONFIG_DESCRIPTION = 1
+
+        # Mock service handle
+        mock_service_handle = MagicMock()
+        mock_scm_handle = MagicMock()
+        mock_win32service.OpenSCManager.return_value = mock_scm_handle
+        mock_win32service.CreateService.return_value = mock_service_handle
 
         result = install_service(service_config_path="/test/config.yaml", service_auto_start=True)
 
         assert result is True
-        mock_win32serviceutil.InstallService.assert_called_once()
+        # For compiled binaries, should use low-level API
+        if hasattr(mock_sys, 'frozen') and mock_sys.frozen:
+            mock_win32service.CreateService.assert_called_once()
+        else:
+            # For Python scripts, should use InstallService
+            mock_win32serviceutil.InstallService.assert_called_once()
 
     def test_install_service_no_pywin32(self):
         """Test service installation when pywin32 is not available."""
