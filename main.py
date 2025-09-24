@@ -326,6 +326,7 @@ def main(
             # Check if parent process is services.exe
             try:
                 import psutil
+
                 parent = psutil.Process().parent()
                 if parent and parent.name().lower() == "services.exe":
                     print("DEBUG: Detected running as Windows service (parent is services.exe)")
@@ -337,9 +338,10 @@ def main(
             if service_detected or True:  # Always try registry lookup for service parameters
                 try:
                     import winreg
+
                     reg_path = "SYSTEM\\CurrentControlSet\\Services\\TLSCertMonitor\\Parameters"
-                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-                        params, _ = winreg.QueryValueEx(key, "Application")
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:  # type: ignore[attr-defined]
+                        params, _ = winreg.QueryValueEx(key, "Application")  # type: ignore[attr-defined]
                         if params:
                             print(f"DEBUG: Found service parameters in registry: {params}")
                             # Add the parameters to sys.argv if not already present

@@ -111,17 +111,18 @@ if win32serviceutil:
             """Get configuration path from Windows registry service parameters."""
             try:
                 import winreg
+
                 reg_path = f"SYSTEM\\CurrentControlSet\\Services\\{self._svc_name_}\\Parameters"
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-                    params, _ = winreg.QueryValueEx(key, "Application")
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:  # type: ignore[attr-defined]
+                    params, _ = winreg.QueryValueEx(key, "Application")  # type: ignore[attr-defined]
                     if params:
                         print(f"DEBUG: Found registry parameters: {params}")
                         # Look for config file path in parameters
-                        for i, param in enumerate(params):
-                            if param in ["-f", "--config"] and i + 1 < len(params):
-                                config_path = params[i + 1]
-                                print(f"DEBUG: Found config path in registry: {config_path}")
-                                return config_path
+                        for idx, param in enumerate(params):
+                            if param in ["-f", "--config"] and idx + 1 < len(params):
+                                found_config_path = params[idx + 1]
+                                print(f"DEBUG: Found config path in registry: {found_config_path}")
+                                return str(found_config_path)
                         print("DEBUG: No config path found in registry parameters")
                     else:
                         print("DEBUG: No registry parameters found")
@@ -344,9 +345,12 @@ def install_service(
                 if service_params:
                     try:
                         import winreg
+
                         reg_path = f"SYSTEM\\CurrentControlSet\\Services\\{TLSCertMonitorService._svc_name_}\\Parameters"
-                        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-                            winreg.SetValueEx(key, "Application", 0, winreg.REG_MULTI_SZ, service_params)
+                        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:  # type: ignore[attr-defined]
+                            winreg.SetValueEx(  # type: ignore[attr-defined]
+                                key, "Application", 0, winreg.REG_MULTI_SZ, service_params  # type: ignore[attr-defined]
+                            )
                         print(f"DEBUG: Set service parameters: {service_params}")
                     except Exception as e:
                         print(f"Warning: Could not set service parameters: {e}")

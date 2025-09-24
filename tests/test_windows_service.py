@@ -57,7 +57,7 @@ class TestWindowsServiceOperations:
 
         assert result is True
         # For compiled binaries, should use low-level API
-        if hasattr(mock_sys, 'frozen') and mock_sys.frozen:
+        if hasattr(mock_sys, "frozen") and mock_sys.frozen:
             mock_win32service.CreateService.assert_called_once()
         else:
             # For Python scripts, should use InstallService
