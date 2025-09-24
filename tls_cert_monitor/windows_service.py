@@ -300,9 +300,10 @@ def install_service(
             exe_name = sys.argv[0]
 
             # Put config in service parameters, not command line
-            service_params = []
+            # Always include --service flag so the app knows it's running as a service
+            service_params = ["--service"]
             if service_config_path:
-                service_params = ["-f", service_config_path]
+                service_params.extend(["-f", service_config_path])
 
             print("DEBUG: Installing service with simple executable approach")
             print(f"DEBUG: exe_name = {exe_name}")

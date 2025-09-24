@@ -7,6 +7,7 @@ import asyncio
 import logging
 import signal
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -266,6 +267,19 @@ def main(
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
+    # Add immediate debug logging to understand startup
+    import tempfile
+
+    debug_log_path = Path(tempfile.gettempdir()) / "tls-cert-monitor-main-debug.log"
+    try:
+        with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+            debug_log.write(f"\n=== MAIN ENTRY {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            debug_log.write(f"sys.argv: {sys.argv}\n")
+            debug_log.write(f"service flag: {service}\n")
+            debug_log.write(f"config: {config}\n")
+    except Exception:
+        pass  # Don't let debug logging break the app
+
     # Handle special flags first (before any potential import issues)
     if version:
         print(f"TLS Certificate Monitor v{__version__}")
@@ -318,6 +332,12 @@ def main(
     # Check if we're running as a Windows service (even without --service flag)
     if sys.platform == "win32" and not service:
         try:
+            with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                debug_log.write("DEBUG: Attempting Windows service detection\n")
+        except Exception:
+            pass
+
+        try:
             import win32serviceutil
 
             # Try to detect if we're being run by Windows Service Control Manager
@@ -330,9 +350,23 @@ def main(
                 parent = psutil.Process().parent()
                 if parent and parent.name().lower() == "services.exe":
                     print("DEBUG: Detected running as Windows service (parent is services.exe)")
+                    try:
+                        with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                            debug_log.write(
+                                "DEBUG: Detected running as Windows service (parent is services.exe)\n"
+                            )
+                    except Exception:
+                        pass
                     service_detected = True
             except Exception:
                 print("DEBUG: Could not check parent process, trying registry detection")
+                try:
+                    with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                        debug_log.write(
+                            "DEBUG: Could not check parent process, trying registry detection\n"
+                        )
+                except Exception:
+                    pass
 
             # If we detect we're running as a service OR can't check parent, try to read registry parameters
             if service_detected or True:  # Always try registry lookup for service parameters
@@ -349,7 +383,12 @@ def main(
                                 if param not in sys.argv:
                                     sys.argv.append(param)
                             print(f"DEBUG: Updated sys.argv: {sys.argv}")
-                            service = True
+                            # Check if --service flag is in the parameters
+                            if "--service" in params:
+                                service = True
+                            else:
+                                # Even without --service flag, if we found registry params we're likely a service
+                                service = True
                         elif service_detected:
                             # We know we're running as service but no registry params found
                             print("DEBUG: Running as service but no registry parameters found")
@@ -371,12 +410,33 @@ def main(
             print(f"DEBUG: sys.argv = {sys.argv}")
             print(f"DEBUG: config = {config}")
 
+            # Also log to file
+            try:
+                with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                    debug_log.write("DEBUG: Entering Windows service mode\n")
+                    debug_log.write(f"DEBUG: sys.argv = {sys.argv}\n")
+                    debug_log.write(f"DEBUG: config = {config}\n")
+            except Exception:
+                pass
+
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
             print("DEBUG: About to call HandleCommandLine")
+            try:
+                with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                    debug_log.write("DEBUG: About to call HandleCommandLine\n")
+            except Exception:
+                pass
+
             # Use HandleCommandLine for proper SCM integration
             win32serviceutil.HandleCommandLine(TLSCertMonitorService)
             print("DEBUG: HandleCommandLine completed")
+
+            try:
+                with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                    debug_log.write("DEBUG: HandleCommandLine completed\n")
+            except Exception:
+                pass
             return
         except ImportError as e:
             print("ERROR: Windows service functionality is not available.")
