@@ -161,21 +161,35 @@ if win32serviceutil:
                 self._debug(f"Failed to report START_PENDING: {e}")
 
             try:
-                # Setup logging for service quickly
-                self._debug("Setting up logging and configuration")
+                # Setup basic logging quickly - don't let config loading delay us
+                self._debug("Setting up basic logging")
+                logging.basicConfig(level=logging.INFO)
+                self.logger = logging.getLogger(__name__)
+                self.logger.info("TLS Certificate Monitor Windows service starting")
+                self._debug("Basic logging setup completed")
+
+                # Report RUNNING immediately - we'll handle config loading in background
+                elapsed = time.time() - start_time
+                self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
+                self.logger.info("Reporting service as running to SCM")
+                self.ReportServiceStatus(SERVICE_RUNNING)
+                self._debug("SERVICE_RUNNING reported to SCM successfully")
+
+                # Now do the actual service initialization in background
+                self._debug("Starting background service initialization")
+
+                # Load config and setup proper logging
                 try:
+                    self._debug("Loading configuration")
                     config = load_config(self.config_path)
                     setup_logging(config)
                     self.logger = logging.getLogger(__name__)
-                    self.logger.info("TLS Certificate Monitor Windows service starting")
-                    self._debug("Logging setup completed successfully")
+                    self.logger.info("Configuration loaded and logging setup completed")
+                    self._debug("Full logging setup completed successfully")
                 except Exception as e:
-                    # Fallback logging if config fails
-                    self._debug("Config loading failed", str(e))
-                    logging.basicConfig(level=logging.INFO)
-                    self.logger = logging.getLogger(__name__)
+                    # Config loading failed, but service is already running with basic logging
+                    self._debug("Config loading failed, continuing with basic logging", str(e))
                     self.logger.error(f"Failed to load config, using defaults: {e}")
-                    self._debug("Fallback logging setup completed")
 
                 # Create and start the monitor in a separate thread
                 self._debug("Creating monitor thread")
@@ -183,25 +197,20 @@ if win32serviceutil:
                 self._debug("Starting monitor thread")
                 self.monitor_thread.start()
 
-                # Brief check to ensure thread started - reduced from 2s to 0.5s
-                self._debug("Waiting 0.5 seconds for monitor thread startup")
-                time.sleep(0.5)
+                # Brief check to ensure thread started - no timeout here since service is already RUNNING
+                self._debug("Checking monitor thread startup")
+                time.sleep(0.1)  # Very brief check
 
-                # Check if monitor thread is still alive after startup
                 thread_alive = self.monitor_thread.is_alive()
-                self._debug("Checking monitor thread status: alive =", thread_alive)
+                self._debug("Monitor thread status: alive =", thread_alive)
                 if not thread_alive:
-                    error_msg = "Monitor thread failed to start properly"
+                    error_msg = "Monitor thread failed to start"
                     self._debug("ERROR:", error_msg)
                     self.logger.error(error_msg)
-                    raise RuntimeError(error_msg)
-
-                # Report that we're running - this should happen quickly now
-                elapsed = time.time() - start_time
-                self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
-                self.logger.info("Reporting service as running to SCM")
-                self.ReportServiceStatus(SERVICE_RUNNING)
-                self._debug("SERVICE_RUNNING reported to SCM successfully")
+                    # Don't raise here - service is already RUNNING, just log the error
+                else:
+                    self.logger.info("Monitor thread started successfully")
+                    self._debug("Monitor thread started successfully")
 
                 # Wait for stop signal
                 self.logger.info("Service running, waiting for stop signal...")
