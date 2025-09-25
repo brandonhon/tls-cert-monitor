@@ -152,14 +152,12 @@ if win32serviceutil:
             """Main service execution method."""
             start_time = time.time()
 
-            # Setup debug file logging FIRST
-            try:
-                self._debug_log = open(r"C:\temp\tls-cert-monitor-service-debug.log", "w")
-                self._debug_log.write("=== TLS Certificate Monitor Service Debug Log ===\n")
+            # Debug logging is already setup in __init__, write SvcDoRun start marker
+            if hasattr(self, "_debug_log") and self._debug_log:
+                self._debug_log.write(
+                    f"\n=== SvcDoRun START {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                )
                 self._debug_log.flush()
-            except Exception as e:
-                print(f"DEBUG: Failed to open debug log: {e}")
-                self._debug_log = None
 
             self._debug("SvcDoRun called - service is starting")
             self._debug(f"SERVICE_RUNNING constant value: {SERVICE_RUNNING}")
@@ -173,6 +171,7 @@ if win32serviceutil:
             except Exception as e:
                 self._debug(f"EXCEPTION in ReportServiceStatus(START_PENDING): {e}")
                 import traceback
+
                 self._debug(f"START_PENDING traceback: {traceback.format_exc()}")
 
             try:
@@ -196,6 +195,7 @@ if win32serviceutil:
                 except Exception as e:
                     self._debug(f"EXCEPTION in ReportServiceStatus(SERVICE_RUNNING): {e}")
                     import traceback
+
                     self._debug(f"SERVICE_RUNNING traceback: {traceback.format_exc()}")
 
                     # Try with the win32service constant directly
