@@ -348,6 +348,7 @@ def main(
         return  # Exit after handling service commands
 
     # Check if we're running as a Windows service (even without --service flag)
+    win32serviceutil = None  # Initialize to avoid UnboundLocalError
     if sys.platform == "win32" and not service:
         try:
             with open(debug_log_path, "a", encoding="utf-8") as debug_log:
@@ -356,7 +357,7 @@ def main(
             pass
 
         try:
-            import win32serviceutil  # noqa: F401  # Used for service availability check
+            import win32serviceutil  # Used for service availability check
 
             # Try to detect if we're being run by Windows Service Control Manager
             service_detected = False
@@ -437,8 +438,9 @@ def main(
             except Exception:
                 pass
 
-            # win32serviceutil already imported in service detection above
-
+            # Import win32serviceutil if not already available from service detection
+            if win32serviceutil is None:
+                import win32serviceutil
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
             print("DEBUG: About to call HandleCommandLine")
