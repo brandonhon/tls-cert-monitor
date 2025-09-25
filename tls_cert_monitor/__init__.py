@@ -5,7 +5,7 @@ A cross-platform application for monitoring TLS/SSL certificates,
 providing metrics and health status information.
 """
 
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 __author__ = "TLS Certificate Monitor Team"
 __description__ = "Cross-platform TLS certificate monitoring application"
 
