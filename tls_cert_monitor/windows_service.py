@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 from threading import Thread
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
 
 try:
     import win32event  # type: ignore[import-untyped]
@@ -24,8 +24,35 @@ except ImportError:
     win32event = win32service = win32serviceutil = None
     SERVICE_RUNNING = SERVICE_STOP_PENDING = None
 
+# IMMEDIATE debug output at module load time
+import os
+
 from tls_cert_monitor.config import load_config
 from tls_cert_monitor.logger import setup_logging
+
+try:
+    module_debug_msg = f"windows_service.py MODULE LOADED at {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    module_debug_msg += f"Process ID: {os.getpid()}\n"
+    module_debug_msg += f"Command line args: {sys.argv}\n"
+
+    # Try to write to a simple debug file
+    for module_debug_path in [
+        r"C:\temp\module-load-debug.log",
+        r"C:\Windows\Temp\module-load-debug.log",
+    ]:
+        try:
+            os.makedirs(os.path.dirname(module_debug_path), exist_ok=True)
+            with open(module_debug_path, "a", encoding="utf-8") as module_debug_file:
+                module_debug_file.write(
+                    f"\n=== MODULE LOAD {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                )
+                module_debug_file.write(module_debug_msg)
+                module_debug_file.flush()
+            break
+        except Exception:  # nosec B112
+            continue
+except Exception:  # nosec B110
+    pass  # Don't let debug code break the module load
 
 if win32serviceutil:
 
@@ -38,21 +65,50 @@ if win32serviceutil:
 
         def __init__(self, args: Any) -> None:
             """Initialize the Windows service."""
-            # Setup debug logging to file immediately
-            import os
+            # IMMEDIATE debug output to multiple locations
             import tempfile
 
-            debug_log = os.path.join(tempfile.gettempdir(), "tls-cert-monitor-service-debug.log")
-            self._debug_log = open(debug_log, "a", encoding="utf-8")
-            self._debug_log.write(
-                f"\n=== SERVICE INIT START {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
-            )
-            self._debug_log.write("DEBUG: TLSCertMonitorService.__init__ called\n")
-            self._debug_log.write(f"DEBUG: Service init args: {args}\n")
-            self._debug_log.flush()
+            # Create multiple debug files in different locations
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            debug_msg = f"SERVICE __init__ CALLED at {timestamp} with args: {args}\n"
+
+            # Try multiple locations for debug files
+            debug_locations = [
+                os.path.join(tempfile.gettempdir(), "tls-cert-monitor-service-debug.log"),
+                r"C:\temp\tls-cert-monitor-service-debug.log",
+                r"C:\Windows\Temp\tls-cert-monitor-service-debug.log",
+                os.path.join(os.getcwd(), "tls-cert-monitor-service-debug.log"),
+            ]
+
+            for debug_location in debug_locations:
+                try:
+                    os.makedirs(os.path.dirname(debug_location), exist_ok=True)
+                    with open(debug_location, "a", encoding="utf-8") as debug_file:
+                        debug_file.write(f"\n=== SERVICE INIT START {timestamp} ===\n")
+                        debug_file.write(debug_msg)
+                        debug_file.flush()
+                    print(f"DEBUG: Created debug file at {debug_location}")
+                    break
+                except Exception as e:
+                    print(f"DEBUG: Failed to create debug file at {debug_location}: {e}")
+                    continue
+
+            # Setup the main debug log
+            debug_log = debug_locations[0]  # Default to temp directory
+            self._debug_log: Optional[TextIO] = None
+            try:
+                self._debug_log = open(debug_log, "a", encoding="utf-8")
+                self._debug_log.write(debug_msg)
+                self._debug_log.flush()
+            except Exception as e:
+                print(f"DEBUG: Failed to setup main debug log: {e}")
+                self._debug_log = None
 
             print("DEBUG: TLSCertMonitorService.__init__ called")
             print(f"DEBUG: Service init args: {args}")
+            print(f"DEBUG: Process ID: {os.getpid()}")
+            print(f"DEBUG: Parent Process ID: {os.getppid() if hasattr(os, 'getppid') else 'N/A'}")
+            print(f"DEBUG: Current working directory: {os.getcwd()}")
             print(f"DEBUG: Debug log file: {debug_log}")
 
             # Also write to Windows Event Log
@@ -69,8 +125,9 @@ if win32serviceutil:
                 )
             except Exception:
                 # Don't fail if event log doesn't work - continue service startup
-                self._debug_log.write("DEBUG: Event log reporting failed, continuing\n")
-                self._debug_log.flush()
+                if self._debug_log:
+                    self._debug_log.write("DEBUG: Event log reporting failed, continuing\n")
+                    self._debug_log.flush()
 
             try:
                 win32serviceutil.ServiceFramework.__init__(self, args)
@@ -129,7 +186,7 @@ if win32serviceutil:
                 full_message += f": {' '.join(str(arg) for arg in args)}"
 
             print(f"DEBUG: {full_message}")
-            if hasattr(self, "_debug_log"):
+            if hasattr(self, "_debug_log") and self._debug_log:
                 self._debug_log.write(f"DEBUG: {full_message}\n")
                 self._debug_log.flush()
 
