@@ -457,17 +457,54 @@ def main(
                 # Use HandleCommandLine for service management
                 win32serviceutil.HandleCommandLine(TLSCertMonitorService)
             else:
-                print("DEBUG: Running as Windows service, starting service directly")
+                # Check if we're running as a registered service or just testing
                 try:
-                    with open(debug_log_path, "a", encoding="utf-8") as debug_log:
-                        debug_log.write("DEBUG: Running as Windows service directly\n")
-                        debug_log.write(f"DEBUG: Creating service with args: {sys.argv}\n")
-                except Exception:
-                    pass
+                    import psutil
 
-                # Run as Windows service - create service instance and start it
-                service = TLSCertMonitorService(sys.argv)
-                service.SvcDoRun()
+                    parent = psutil.Process().parent()
+                    is_scm_started = parent and parent.name().lower() == "services.exe"
+                except Exception:
+                    is_scm_started = False
+
+                if is_scm_started:
+                    print("DEBUG: Running as registered Windows service (started by SCM)")
+                    try:
+                        with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                            debug_log.write("DEBUG: Running as registered Windows service (SCM)\n")
+                    except Exception:
+                        pass
+
+                    # Run as Windows service - create service instance and start it
+                    service = TLSCertMonitorService(sys.argv)
+                    service.SvcDoRun()
+                else:
+                    print("DEBUG: Running in service test mode (not via SCM)")
+                    try:
+                        with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                            debug_log.write("DEBUG: Running in service test mode\n")
+                            debug_log.write(f"DEBUG: Simulating service with args: {sys.argv}\n")
+                    except Exception:
+                        pass
+
+                    # Run the application directly without service framework
+                    print("DEBUG: Starting TLS Certificate Monitor in service test mode")
+
+                    # Parse config from args
+                    config_path = None
+                    if "-f" in sys.argv:
+                        try:
+                            config_index = sys.argv.index("-f")
+                            if config_index + 1 < len(sys.argv):
+                                config_path = sys.argv[config_index + 1]
+                                print(f"DEBUG: Using config: {config_path}")
+                        except (ValueError, IndexError):
+                            pass
+
+                    # Create and run the monitor (avoid circular import)
+                    monitor = TLSCertMonitor(config_path, dry_run=False)
+                    import asyncio
+
+                    asyncio.run(monitor.run())
             print("DEBUG: Service execution completed")
 
             try:
