@@ -152,8 +152,16 @@ if win32serviceutil:
             """Main service execution method."""
             start_time = time.time()
             self._debug("SvcDoRun called - service is starting")
+
+            # IMMEDIATELY report START_PENDING to SCM to prevent timeout
             try:
-                # Setup logging for service
+                self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+                self._debug("Reported SERVICE_START_PENDING to SCM")
+            except Exception as e:
+                self._debug(f"Failed to report START_PENDING: {e}")
+
+            try:
+                # Setup logging for service quickly
                 self._debug("Setting up logging and configuration")
                 try:
                     config = load_config(self.config_path)
@@ -169,15 +177,15 @@ if win32serviceutil:
                     self.logger.error(f"Failed to load config, using defaults: {e}")
                     self._debug("Fallback logging setup completed")
 
-                # Create and start the monitor in a separate thread BEFORE reporting running
+                # Create and start the monitor in a separate thread
                 self._debug("Creating monitor thread")
                 self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
                 self._debug("Starting monitor thread")
                 self.monitor_thread.start()
 
-                # Give the monitor thread a moment to start up
-                self._debug("Waiting 2 seconds for monitor thread startup")
-                time.sleep(2)
+                # Brief check to ensure thread started - reduced from 2s to 0.5s
+                self._debug("Waiting 0.5 seconds for monitor thread startup")
+                time.sleep(0.5)
 
                 # Check if monitor thread is still alive after startup
                 thread_alive = self.monitor_thread.is_alive()
@@ -188,7 +196,7 @@ if win32serviceutil:
                     self.logger.error(error_msg)
                     raise RuntimeError(error_msg)
 
-                # Report that we're running only after successful startup
+                # Report that we're running - this should happen quickly now
                 elapsed = time.time() - start_time
                 self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
                 self.logger.info("Reporting service as running to SCM")
