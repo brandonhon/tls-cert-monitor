@@ -302,8 +302,15 @@ def install_service(
             print(f"DEBUG: image_path = {image_path}")
 
             # Use low-level win32service API for clean binary registration
+            print("DEBUG: Opening Service Control Manager")
             hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
             try:
+                print("DEBUG: Creating service with parameters:")
+                print(f"  Service name: {TLSCertMonitorService._svc_name_}")
+                print(f"  Display name: {TLSCertMonitorService._svc_display_name_}")
+                print(f"  Image path: {image_path}")
+                print(f"  Auto start: {service_auto_start}")
+
                 service_handle = win32service.CreateService(
                     hs,
                     TLSCertMonitorService._svc_name_,
@@ -323,6 +330,7 @@ def install_service(
                     None,
                     None,
                 )
+                print("DEBUG: Service created successfully, handle:", service_handle)
 
                 # Set service description
                 try:
@@ -331,12 +339,21 @@ def install_service(
                         win32service.SERVICE_CONFIG_DESCRIPTION,
                         TLSCertMonitorService._svc_description_,
                     )
+                    print("DEBUG: Service description set successfully")
                 except Exception as e:
                     print(f"Warning: Could not set service description: {e}")
 
                 win32service.CloseServiceHandle(service_handle)
+                print("DEBUG: Service handle closed")
+            except Exception as e:
+                print(f"ERROR: Failed to create service: {e}")
+                import traceback
+
+                print(f"DEBUG: Service creation traceback: {traceback.format_exc()}")
+                raise
             finally:
                 win32service.CloseServiceHandle(hs)
+                print("DEBUG: SCM handle closed")
         else:
             # Running from Python script - use traditional service class approach
             service_args = [TLSCertMonitorService._svc_name_]

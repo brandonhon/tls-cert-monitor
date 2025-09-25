@@ -356,7 +356,7 @@ def main(
             pass
 
         try:
-            import win32serviceutil
+            import win32serviceutil  # noqa: F401  # Used for service availability check
 
             # Try to detect if we're being run by Windows Service Control Manager
             service_detected = False
@@ -436,6 +436,8 @@ def main(
                     debug_log.write(f"DEBUG: config = {config}\n")
             except Exception:
                 pass
+
+            # win32serviceutil already imported in service detection above
 
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
