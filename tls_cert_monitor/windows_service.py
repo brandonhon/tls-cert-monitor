@@ -151,14 +151,29 @@ if win32serviceutil:
         def SvcDoRun(self) -> None:
             """Main service execution method."""
             start_time = time.time()
+
+            # Setup debug file logging FIRST
+            try:
+                self._debug_log = open(r"C:\temp\tls-cert-monitor-service-debug.log", "w")
+                self._debug_log.write("=== TLS Certificate Monitor Service Debug Log ===\n")
+                self._debug_log.flush()
+            except Exception as e:
+                print(f"DEBUG: Failed to open debug log: {e}")
+                self._debug_log = None
+
             self._debug("SvcDoRun called - service is starting")
+            self._debug(f"SERVICE_RUNNING constant value: {SERVICE_RUNNING}")
+            self._debug(f"win32service.SERVICE_RUNNING value: {win32service.SERVICE_RUNNING}")
 
             # IMMEDIATELY report START_PENDING to SCM to prevent timeout
             try:
-                self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
-                self._debug("Reported SERVICE_START_PENDING to SCM")
+                self._debug("About to call ReportServiceStatus(SERVICE_START_PENDING)")
+                result = self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+                self._debug(f"ReportServiceStatus(START_PENDING) returned: {result}")
             except Exception as e:
-                self._debug(f"Failed to report START_PENDING: {e}")
+                self._debug(f"EXCEPTION in ReportServiceStatus(START_PENDING): {e}")
+                import traceback
+                self._debug(f"START_PENDING traceback: {traceback.format_exc()}")
 
             try:
                 # Setup basic logging quickly - don't let config loading delay us
@@ -171,9 +186,26 @@ if win32serviceutil:
                 # Report RUNNING immediately - we'll handle config loading in background
                 elapsed = time.time() - start_time
                 self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
-                self.logger.info("Reporting service as running to SCM")
-                self.ReportServiceStatus(SERVICE_RUNNING)
-                self._debug("SERVICE_RUNNING reported to SCM successfully")
+                self._debug(f"Using SERVICE_RUNNING constant: {SERVICE_RUNNING}")
+                self._debug(f"Using win32service.SERVICE_RUNNING: {win32service.SERVICE_RUNNING}")
+
+                try:
+                    result = self.ReportServiceStatus(SERVICE_RUNNING)
+                    self._debug(f"ReportServiceStatus(SERVICE_RUNNING) returned: {result}")
+                    self.logger.info("Successfully reported service as running to SCM")
+                except Exception as e:
+                    self._debug(f"EXCEPTION in ReportServiceStatus(SERVICE_RUNNING): {e}")
+                    import traceback
+                    self._debug(f"SERVICE_RUNNING traceback: {traceback.format_exc()}")
+
+                    # Try with the win32service constant directly
+                    try:
+                        self._debug("Retrying with win32service.SERVICE_RUNNING directly")
+                        result2 = self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+                        self._debug(f"Direct win32service.SERVICE_RUNNING call returned: {result2}")
+                    except Exception as e2:
+                        self._debug(f"Direct SERVICE_RUNNING call also failed: {e2}")
+                        raise
 
                 # Now do the actual service initialization in background
                 self._debug("Starting background service initialization")
