@@ -443,20 +443,36 @@ def main(
                 import win32serviceutil
             from tls_cert_monitor.windows_service import TLSCertMonitorService
 
-            print("DEBUG: About to call HandleCommandLine")
+            # Check if we have service management arguments or if we should run as service
+            service_mgmt_args = ["install", "remove", "update", "start", "stop", "restart", "debug"]
+            has_service_mgmt = any(arg in sys.argv for arg in service_mgmt_args)
+
+            if has_service_mgmt:
+                print("DEBUG: Found service management arguments, using HandleCommandLine")
+                try:
+                    with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                        debug_log.write("DEBUG: Using HandleCommandLine for service management\n")
+                except Exception:
+                    pass
+                # Use HandleCommandLine for service management
+                win32serviceutil.HandleCommandLine(TLSCertMonitorService)
+            else:
+                print("DEBUG: Running as Windows service, starting service directly")
+                try:
+                    with open(debug_log_path, "a", encoding="utf-8") as debug_log:
+                        debug_log.write("DEBUG: Running as Windows service directly\n")
+                        debug_log.write(f"DEBUG: Creating service with args: {sys.argv}\n")
+                except Exception:
+                    pass
+
+                # Run as Windows service - create service instance and start it
+                service = TLSCertMonitorService(sys.argv)
+                service.SvcDoRun()
+            print("DEBUG: Service execution completed")
+
             try:
                 with open(debug_log_path, "a", encoding="utf-8") as debug_log:
-                    debug_log.write("DEBUG: About to call HandleCommandLine\n")
-            except Exception:
-                pass
-
-            # Use HandleCommandLine for proper SCM integration
-            win32serviceutil.HandleCommandLine(TLSCertMonitorService)
-            print("DEBUG: HandleCommandLine completed")
-
-            try:
-                with open(debug_log_path, "a", encoding="utf-8") as debug_log:
-                    debug_log.write("DEBUG: HandleCommandLine completed\n")
+                    debug_log.write("DEBUG: Service execution completed\n")
             except Exception:
                 pass
             return
