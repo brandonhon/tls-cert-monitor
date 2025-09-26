@@ -18,11 +18,11 @@ try:
     import win32event  # type: ignore[import-untyped]
     import win32service  # type: ignore[import-untyped]
     import win32serviceutil  # type: ignore[import-untyped]
-    from win32service import SERVICE_RUNNING, SERVICE_STOP_PENDING
+    from win32service import SERVICE_RUNNING
 except ImportError:
     # Not on Windows or pywin32 not available
     win32event = win32service = win32serviceutil = None
-    SERVICE_RUNNING = SERVICE_STOP_PENDING = None
+    SERVICE_RUNNING = None
 
 # IMMEDIATE debug output at module load time
 import os
@@ -191,23 +191,30 @@ if win32serviceutil:
                 self._debug_log.flush()
 
         def SvcStop(self) -> None:
-            """Handle service stop request."""
-            self.logger.info("Windows service stop requested")
-            self.ReportServiceStatus(SERVICE_STOP_PENDING)
+            """Stop the service gracefully."""
+            self._debug("SvcStop called - initiating shutdown")
+            try:
+                self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            except Exception as e:
+                self._debug(f"EXCEPTION during ReportServiceStatus(STOP_PENDING): {e}")
+
+            # Signal the stop event so SvcDoRun unblocks
             win32event.SetEvent(self.hWaitStop)
+            self._debug("Stop event set, waiting for SvcDoRun to finish")
             self.is_alive = False
 
-            # Stop the monitor if running
-            if self.monitor and self.loop:
+            # Optional: join monitor thread here as extra safeguard
+            if hasattr(self, "monitor_thread") and self.monitor_thread is not None:
                 try:
-                    # Schedule shutdown in the event loop
-                    asyncio.run_coroutine_threadsafe(self.monitor.shutdown(), self.loop)
-                except Exception as e:
-                    self.logger.error(f"Error during service shutdown: {e}")
+                    self.monitor_thread.join(timeout=30)
+                    self._debug("Monitor thread joined successfully in SvcStop")
+                except Exception as join_e:
+                    self._debug(f"Exception while joining monitor thread in SvcStop: {join_e}")
+
+            self._debug("SvcStop completed")
 
         def SvcDoRun(self) -> None:
-            """Main service execution method."""
-            start_time = time.time()
+            """Main service execution method for TLS Certificate Monitor."""
 
             # Debug logging is already setup in __init__, write SvcDoRun start marker
             if hasattr(self, "_debug_log") and self._debug_log:
@@ -217,79 +224,76 @@ if win32serviceutil:
                 self._debug_log.flush()
 
             self._debug("SvcDoRun called - service is starting")
-            self._debug(f"SERVICE_RUNNING constant value: {SERVICE_RUNNING}")
-            self._debug(f"win32service.SERVICE_RUNNING value: {win32service.SERVICE_RUNNING}")
 
-            # IMMEDIATELY report START_PENDING to SCM to prevent timeout
+            # Report START_PENDING
             try:
-                self._debug("About to call ReportServiceStatus(SERVICE_START_PENDING)")
-                result = self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
-                self._debug(f"ReportServiceStatus(START_PENDING) returned: {result}")
+                self._debug("Reporting SERVICE_START_PENDING to SCM")
+                self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
             except Exception as e:
-                self._debug(f"EXCEPTION in ReportServiceStatus(START_PENDING): {e}")
-                import traceback
-
-                self._debug(f"START_PENDING traceback: {traceback.format_exc()}")
+                self._debug(f"EXCEPTION during ReportServiceStatus(START_PENDING): {e}")
 
             try:
-                # MINIMAL setup only - no heavy work before SERVICE_RUNNING!
+                # Minimal logging so we can see startup messages
                 self._debug("Setting up minimal logging")
                 logging.basicConfig(level=logging.INFO)
                 self.logger = logging.getLogger(__name__)
                 self.logger.info("TLS Certificate Monitor Windows service starting")
-                self._debug("Minimal logging setup completed")
 
-                # Report RUNNING IMMEDIATELY - before any heavy work
-                elapsed = time.time() - start_time
-                self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
-                self._debug(f"Using SERVICE_RUNNING constant: {SERVICE_RUNNING}")
-                self._debug(f"Using win32service.SERVICE_RUNNING: {win32service.SERVICE_RUNNING}")
-
+                # Report RUNNING to SCM
                 try:
-                    result = self.ReportServiceStatus(SERVICE_RUNNING)
-                    self._debug(f"ReportServiceStatus(SERVICE_RUNNING) returned: {result}")
-                    self.logger.info("Successfully reported service as running to SCM")
+                    self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+                    self.logger.info("Successfully reported service as RUNNING to SCM")
                 except Exception as e:
-                    self._debug(f"EXCEPTION in ReportServiceStatus(SERVICE_RUNNING): {e}")
-                    import traceback
-
-                    self._debug(f"SERVICE_RUNNING traceback: {traceback.format_exc()}")
-
-                    # Try with the win32service constant directly
+                    self._debug(f"EXCEPTION during ReportServiceStatus(RUNNING): {e}")
                     try:
-                        self._debug("Retrying with win32service.SERVICE_RUNNING directly")
-                        result2 = self.ReportServiceStatus(win32service.SERVICE_RUNNING)
-                        self._debug(f"Direct win32service.SERVICE_RUNNING call returned: {result2}")
-                    except Exception as e2:
-                        self._debug(f"Direct SERVICE_RUNNING call also failed: {e2}")
-                        raise
+                        # Fallback in case SERVICE_RUNNING constant imported differently
+                        self.ReportServiceStatus(SERVICE_RUNNING)
+                    except Exception as inner_e:
+                        self._debug(f"Fallback SERVICE_RUNNING failed: {inner_e}")
 
-                # Create and start the monitor thread - ALL heavy work happens there
-                self._debug("Creating monitor thread with full initialization")
+                # Start monitor thread
+                self._debug("Starting monitor thread")
                 self.monitor_thread = threading.Thread(
                     target=self._run_monitor_with_stop_wait, daemon=False
                 )
-                self._debug("Starting monitor thread")
                 self.monitor_thread.start()
+                self.logger.info("Monitor thread started, service fully operational")
 
-                # Minimal check only - service is already RUNNING
-                self._debug("Monitor thread started, service fully operational")
-                self.logger.info("Service initialization complete - monitor running in background")
-                self._debug("SvcDoRun returning - service is now fully operational")
-                # Service will continue running via the background monitor thread
+                # === Important fix: wait here for stop event instead of returning ===
+                self._debug("SvcDoRun entering wait loop (waiting for stop event)...")
+                win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
+
+                # When stop is requested, execution continues here
+                self._debug("SvcDoRun detected stop event, proceeding to shutdown")
+
+                # Optionally join monitor thread for graceful shutdown
+                if self.monitor_thread is not None:
+                    try:
+                        self.logger.info("Waiting for monitor thread to exit...")
+                        self.monitor_thread.join(timeout=30)
+                    except Exception as join_e:
+                        self._debug(f"Exception while joining monitor thread: {join_e}")
+
+                self.logger.info("SvcDoRun completed shutdown sequence")
 
             except Exception as e:
-                self.logger.error(f"Service execution failed: {e}")
-                # Report service stopped on error
-                self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                # Fatal startup or runtime error
+                err_msg = f"Service execution failed: {e}"
+                self._debug(err_msg)
+                if self.logger:
+                    self.logger.error(err_msg)
+                try:
+                    self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                except Exception:  # nosec B110
+                    pass  # Intentionally ignore errors during error handling
                 raise
 
         def _run_monitor_with_stop_wait(self) -> None:
-            """Run the TLS Certificate Monitor and handle service stop events."""
+            """Run the TLS Certificate Monitor in background thread."""
             try:
-                self.logger.info("Starting monitor thread with stop event handling...")
+                self.logger.info("Starting monitor thread...")
 
-                # FIRST: Do the heavy initialization work that was moved from SvcDoRun
+                # Do the heavy initialization work in this background thread
                 self.logger.info("Loading configuration and setting up logging...")
                 try:
                     self._debug("Loading configuration in background thread")
@@ -320,58 +324,11 @@ if win32serviceutil:
                 # Create and initialize the monitor
                 self.monitor = TLSCertMonitor(config_path=self.config_path, dry_run=False)
 
-                self.logger.info("Starting monitor execution in background...")
+                self.logger.info("Starting monitor execution...")
+                # Run the monitor - this will block until the monitor shuts down
+                self.loop.run_until_complete(self.monitor.run())
 
-                # Start the monitor in a background task
-                monitor_task = self.loop.create_task(self.monitor.run())
-
-                self.logger.info("Service running, waiting for stop signal...")
-
-                # Wait for stop signal in a loop that doesn't block indefinitely
-                while self.is_alive:
-                    # Check for stop event with timeout
-                    result = win32event.WaitForSingleObject(
-                        self.hWaitStop, 1000
-                    )  # 1 second timeout
-
-                    if result == win32event.WAIT_OBJECT_0:
-                        # Stop event was signaled
-                        self.logger.info("Stop signal received, shutting down monitor...")
-                        break
-                    elif result == win32event.WAIT_TIMEOUT:
-                        # Timeout - check if monitor task is still running
-                        if monitor_task.done():
-                            if monitor_task.exception():
-                                self.logger.error(
-                                    f"Monitor task failed: {monitor_task.exception()}"
-                                )
-                            else:
-                                self.logger.info("Monitor task completed normally")
-                            break
-                        # Continue waiting
-                        continue
-                    else:
-                        self.logger.warning(f"Unexpected wait result: {result}")
-                        break
-
-                # Cancel the monitor task if it's still running
-                if not monitor_task.done():
-                    self.logger.info("Cancelling monitor task...")
-                    monitor_task.cancel()
-                    try:
-                        self.loop.run_until_complete(monitor_task)
-                    except asyncio.CancelledError:
-                        self.logger.info("Monitor task cancelled successfully")
-
-                # Shutdown the monitor gracefully
-                if self.monitor:
-                    self.logger.info("Shutting down monitor...")
-                    try:
-                        self.loop.run_until_complete(self.monitor.shutdown())
-                    except Exception as e:
-                        self.logger.error(f"Error during monitor shutdown: {e}")
-
-                self.logger.info("TLS Certificate Monitor Windows service stopped")
+                self.logger.info("Monitor execution completed")
 
             except Exception as e:
                 self.logger.error(f"Monitor execution failed: {e}")
@@ -383,7 +340,15 @@ if win32serviceutil:
             finally:
                 self.logger.info("Monitor thread finishing...")
                 if self.loop:
-                    self.loop.close()
+                    try:
+                        # Shutdown the monitor gracefully if it's still running
+                        if self.monitor:
+                            self.logger.info("Shutting down monitor...")
+                            self.loop.run_until_complete(self.monitor.shutdown())
+                    except Exception as e:
+                        self.logger.error(f"Error during monitor shutdown: {e}")
+                    finally:
+                        self.loop.close()
                 self.logger.info("Monitor thread finished")
 
         def _run_monitor(self) -> None:
