@@ -62,6 +62,9 @@ if win32serviceutil:
                 # Report service as running immediately
                 self.ReportServiceStatus(win32service.SERVICE_RUNNING)
 
+                # Wait 5 seconds after reporting running status
+                time.sleep(5)
+
                 # Start monitor in background thread
                 self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=False)
                 self.monitor_thread.start()
