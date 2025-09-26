@@ -232,14 +232,14 @@ if win32serviceutil:
                 self._debug(f"START_PENDING traceback: {traceback.format_exc()}")
 
             try:
-                # Setup basic logging quickly - don't let config loading delay us
-                self._debug("Setting up basic logging")
+                # MINIMAL setup only - no heavy work before SERVICE_RUNNING!
+                self._debug("Setting up minimal logging")
                 logging.basicConfig(level=logging.INFO)
                 self.logger = logging.getLogger(__name__)
                 self.logger.info("TLS Certificate Monitor Windows service starting")
-                self._debug("Basic logging setup completed")
+                self._debug("Minimal logging setup completed")
 
-                # Report RUNNING immediately - we'll handle config loading in background
+                # Report RUNNING IMMEDIATELY - before any heavy work
                 elapsed = time.time() - start_time
                 self._debug(f"About to report SERVICE_RUNNING to SCM (elapsed: {elapsed:.2f}s)")
                 self._debug(f"Using SERVICE_RUNNING constant: {SERVICE_RUNNING}")
@@ -264,49 +264,17 @@ if win32serviceutil:
                         self._debug(f"Direct SERVICE_RUNNING call also failed: {e2}")
                         raise
 
-                # Now do the actual service initialization in background
-                self._debug("Starting background service initialization")
-
-                # Load config and setup proper logging
-                try:
-                    self._debug("Loading configuration")
-                    config = load_config(self.config_path)
-                    setup_logging(config)
-                    self.logger = logging.getLogger(__name__)
-                    self.logger.info("Configuration loaded and logging setup completed")
-                    self._debug("Full logging setup completed successfully")
-                except Exception as e:
-                    # Config loading failed, but service is already running with basic logging
-                    self._debug("Config loading failed, continuing with basic logging", str(e))
-                    self.logger.error(f"Failed to load config, using defaults: {e}")
-
-                # Create and start the monitor in a separate thread
-                self._debug("Creating monitor thread with stop event handling")
+                # Create and start the monitor thread - ALL heavy work happens there
+                self._debug("Creating monitor thread with full initialization")
                 self.monitor_thread = threading.Thread(
                     target=self._run_monitor_with_stop_wait, daemon=False
                 )
                 self._debug("Starting monitor thread")
                 self.monitor_thread.start()
 
-                # Brief check to ensure thread started - no timeout here since service is already RUNNING
-                self._debug("Checking monitor thread startup")
-                time.sleep(0.1)  # Very brief check
-
-                thread_alive = self.monitor_thread.is_alive()
-                self._debug("Monitor thread status: alive =", thread_alive)
-                if not thread_alive:
-                    error_msg = "Monitor thread failed to start"
-                    self._debug("ERROR:", error_msg)
-                    self.logger.error(error_msg)
-                    # Don't raise here - service is already RUNNING, just log the error
-                else:
-                    self.logger.info("Monitor thread started successfully")
-                    self._debug("Monitor thread started successfully")
-
-                # CRITICAL FIX: Don't block the SCM control handler thread!
-                # The monitor thread will handle the stop event waiting.
-                # SvcDoRun should return immediately to keep SCM communication active.
-                self.logger.info("Service initialization complete - SCM thread returning")
+                # Minimal check only - service is already RUNNING
+                self._debug("Monitor thread started, service fully operational")
+                self.logger.info("Service initialization complete - monitor running in background")
                 self._debug("SvcDoRun returning - service is now fully operational")
                 # Service will continue running via the background monitor thread
 
@@ -320,6 +288,25 @@ if win32serviceutil:
             """Run the TLS Certificate Monitor and handle service stop events."""
             try:
                 self.logger.info("Starting monitor thread with stop event handling...")
+
+                # FIRST: Do the heavy initialization work that was moved from SvcDoRun
+                self.logger.info("Loading configuration and setting up logging...")
+                try:
+                    self._debug("Loading configuration in background thread")
+                    config = load_config(self.config_path)
+                    setup_logging(config)
+                    # Update logger after full logging setup
+                    self.logger = logging.getLogger(__name__)
+                    self.logger.info(
+                        "Configuration loaded and logging setup completed in background"
+                    )
+                    self._debug("Full logging setup completed successfully in background")
+                except Exception as e:
+                    # Config loading failed, continue with basic logging
+                    self._debug(
+                        "Config loading failed in background, continuing with basic logging", str(e)
+                    )
+                    self.logger.error(f"Failed to load config in background, using defaults: {e}")
 
                 # Import here to avoid circular imports
                 from tls_cert_monitor.main import TLSCertMonitor  # type: ignore[import-not-found]
