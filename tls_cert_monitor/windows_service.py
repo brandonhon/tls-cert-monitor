@@ -281,8 +281,10 @@ if win32serviceutil:
                     self.logger.error(f"Failed to load config, using defaults: {e}")
 
                 # Create and start the monitor in a separate thread
-                self._debug("Creating monitor thread")
-                self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
+                self._debug("Creating monitor thread with stop event handling")
+                self.monitor_thread = threading.Thread(
+                    target=self._run_monitor_with_stop_wait, daemon=False
+                )
                 self._debug("Starting monitor thread")
                 self.monitor_thread.start()
 
@@ -301,16 +303,12 @@ if win32serviceutil:
                     self.logger.info("Monitor thread started successfully")
                     self._debug("Monitor thread started successfully")
 
-                # Wait for stop signal
-                self.logger.info("Service running, waiting for stop signal...")
-                win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
-
-                # Wait for monitor thread to finish
-                self.logger.info("Stop signal received, shutting down monitor...")
-                if self.monitor_thread and self.monitor_thread.is_alive():
-                    self.monitor_thread.join(timeout=30)
-
-                self.logger.info("TLS Certificate Monitor Windows service stopped")
+                # CRITICAL FIX: Don't block the SCM control handler thread!
+                # The monitor thread will handle the stop event waiting.
+                # SvcDoRun should return immediately to keep SCM communication active.
+                self.logger.info("Service initialization complete - SCM thread returning")
+                self._debug("SvcDoRun returning - service is now fully operational")
+                # Service will continue running via the background monitor thread
 
             except Exception as e:
                 self.logger.error(f"Service execution failed: {e}")
@@ -318,10 +316,10 @@ if win32serviceutil:
                 self.ReportServiceStatus(win32service.SERVICE_STOPPED)
                 raise
 
-        def _run_monitor(self) -> None:
-            """Run the TLS Certificate Monitor in an async event loop."""
+        def _run_monitor_with_stop_wait(self) -> None:
+            """Run the TLS Certificate Monitor and handle service stop events."""
             try:
-                self.logger.info("Starting monitor thread...")
+                self.logger.info("Starting monitor thread with stop event handling...")
 
                 # Import here to avoid circular imports
                 from tls_cert_monitor.main import TLSCertMonitor  # type: ignore[import-not-found]
@@ -335,9 +333,58 @@ if win32serviceutil:
                 # Create and initialize the monitor
                 self.monitor = TLSCertMonitor(config_path=self.config_path, dry_run=False)
 
-                self.logger.info("Starting monitor execution...")
-                # Run the monitor
-                self.loop.run_until_complete(self.monitor.run())
+                self.logger.info("Starting monitor execution in background...")
+
+                # Start the monitor in a background task
+                monitor_task = self.loop.create_task(self.monitor.run())
+
+                self.logger.info("Service running, waiting for stop signal...")
+
+                # Wait for stop signal in a loop that doesn't block indefinitely
+                while self.is_alive:
+                    # Check for stop event with timeout
+                    result = win32event.WaitForSingleObject(
+                        self.hWaitStop, 1000
+                    )  # 1 second timeout
+
+                    if result == win32event.WAIT_OBJECT_0:
+                        # Stop event was signaled
+                        self.logger.info("Stop signal received, shutting down monitor...")
+                        break
+                    elif result == win32event.WAIT_TIMEOUT:
+                        # Timeout - check if monitor task is still running
+                        if monitor_task.done():
+                            if monitor_task.exception():
+                                self.logger.error(
+                                    f"Monitor task failed: {monitor_task.exception()}"
+                                )
+                            else:
+                                self.logger.info("Monitor task completed normally")
+                            break
+                        # Continue waiting
+                        continue
+                    else:
+                        self.logger.warning(f"Unexpected wait result: {result}")
+                        break
+
+                # Cancel the monitor task if it's still running
+                if not monitor_task.done():
+                    self.logger.info("Cancelling monitor task...")
+                    monitor_task.cancel()
+                    try:
+                        self.loop.run_until_complete(monitor_task)
+                    except asyncio.CancelledError:
+                        self.logger.info("Monitor task cancelled successfully")
+
+                # Shutdown the monitor gracefully
+                if self.monitor:
+                    self.logger.info("Shutting down monitor...")
+                    try:
+                        self.loop.run_until_complete(self.monitor.shutdown())
+                    except Exception as e:
+                        self.logger.error(f"Error during monitor shutdown: {e}")
+
+                self.logger.info("TLS Certificate Monitor Windows service stopped")
 
             except Exception as e:
                 self.logger.error(f"Monitor execution failed: {e}")
@@ -351,6 +398,11 @@ if win32serviceutil:
                 if self.loop:
                     self.loop.close()
                 self.logger.info("Monitor thread finished")
+
+        def _run_monitor(self) -> None:
+            """Legacy monitor runner - kept for compatibility."""
+            # Redirect to the new implementation
+            self._run_monitor_with_stop_wait()
 
 else:
     # Dummy class for non-Windows systems
