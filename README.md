@@ -569,11 +569,11 @@ sudo journalctl -u tls-cert-monitor -f
 
 ### Windows Service
 
-Install as a Windows service using native Windows service support.
+Install as a Windows service using the simplified native Windows service implementation.
 
 #### Windows Service Installation
 
-The application now includes built-in Windows service support without requiring third-party tools:
+The application includes minimal Windows service support designed to avoid timeout issues:
 
 **Prerequisites:**
 - Windows with Administrator privileges
@@ -591,11 +591,14 @@ scripts\install-windows-service-native.bat
 
 **Manual Installation:**
 ```cmd
-# Install service with automatic start
-tls-cert-monitor.exe --service-install --config="C:\ProgramData\TLSCertMonitor\config.yaml"
+# Install service with automatic start and config file
+tls-cert-monitor.exe --service-install --config "C:\ProgramData\TLSCertMonitor\config.yaml"
 
 # Install service with manual start
-tls-cert-monitor.exe --service-install --service-manual --config="C:\ProgramData\TLSCertMonitor\config.yaml"
+tls-cert-monitor.exe --service-install --service-manual --config "C:\ProgramData\TLSCertMonitor\config.yaml"
+
+# Install without specific config (uses default config.yaml)
+tls-cert-monitor.exe --service-install
 ```
 
 **Service Management:**
@@ -616,6 +619,12 @@ Start-Service -Name TLSCertMonitor
 Stop-Service -Name TLSCertMonitor
 Get-Service -Name TLSCertMonitor
 ```
+
+**Key Improvements:**
+- Minimal service implementation to prevent 1053 timeout errors
+- Immediate service status reporting to Windows Service Control Manager
+- Simplified background thread management
+- Support for both `--config` and `-f` configuration parameters
 
 
 ### macOS Service (LaunchDaemon)
