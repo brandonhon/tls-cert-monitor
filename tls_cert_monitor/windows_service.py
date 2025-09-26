@@ -142,9 +142,9 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
             # Use direct service registration for compiled binary
             exe_name = sys.argv[0]
             if config_path:
-                image_path = f'"{exe_name}" --service --config "{config_path}"'
+                image_path = f'"{exe_name}" --config "{config_path}"'
             else:
-                image_path = f'"{exe_name}" --service'
+                image_path = f'"{exe_name}"'
 
             # Register service using low-level API
             hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)

@@ -315,8 +315,19 @@ def main(
 
         return  # Exit after handling service commands
 
+    # Detect if running as Windows service (parent process is services.exe)
+    is_windows_service = False
+    if sys.platform == "win32" and not service:
+        try:
+            import psutil
+            parent = psutil.Process().parent()
+            if parent and parent.name().lower() == "services.exe":
+                is_windows_service = True
+        except Exception:
+            pass
+
     # Handle Windows service mode
-    if service:
+    if service or is_windows_service:
         try:
             import win32serviceutil
 
