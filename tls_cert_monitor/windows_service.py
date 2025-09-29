@@ -1,8 +1,7 @@
 """
-Minimal Windows Service implementation for TLS Certificate Monitor.
+Windows Service implementation for TLS Certificate Monitor.
 
-This module provides simplified Windows Service support using pywin32,
-designed to avoid timeout issues and provide reliable service operation.
+This module provides reliable Windows Service support using pywin32.
 """
 
 import logging
@@ -16,101 +15,101 @@ try:
     import win32service  # type: ignore[import-untyped]
     import win32serviceutil  # type: ignore[import-untyped]
 except ImportError:
-    # Not on Windows or pywin32 not available
     win32event = win32service = win32serviceutil = None
 
 
 if win32serviceutil:
 
     class TLSCertMonitorService(win32serviceutil.ServiceFramework):
-        """Minimal Windows Service wrapper for TLS Certificate Monitor."""
-
         _svc_name_ = "TLSCertMonitor"
         _svc_display_name_ = "TLS Certificate Monitor"
         _svc_description_ = "Monitor TLS/SSL certificates for expiration and security issues"
 
         def __init__(self, args: Any) -> None:
-            """Initialize the Windows service."""
-            win32serviceutil.ServiceFramework.__init__(self, args)
+            super().__init__(args)
             self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+            self.stop_requested = threading.Event()
             self.monitor_thread: Optional[threading.Thread] = None
             self.config_path: Optional[str] = None
+
+            # Logger setup
+            logging.basicConfig(
+                filename="TLSCertMonitor.log",
+                level=logging.INFO,
+                format="%(asctime)s [%(levelname)s] %(message)s",
+            )
             self.logger = logging.getLogger(__name__)
 
-            # Parse config path from arguments
+            # Parse --config or -f argument
             if len(args) > 1:
                 args_list = list(args)
-                if "--config" in args_list or "-f" in args_list:
-                    for flag in ["--config", "-f"]:
-                        if flag in args_list:
-                            try:
-                                config_index = args_list.index(flag)
-                                if config_index + 1 < len(args_list):
-                                    self.config_path = args_list[config_index + 1]
-                                    break
-                            except (ValueError, IndexError):
-                                pass
+                for flag in ("--config", "-f"):
+                    if flag in args_list:
+                        idx = args_list.index(flag)
+                        if idx + 1 < len(args_list):
+                            self.config_path = args_list[idx + 1]
+                            break
 
         def SvcStop(self) -> None:
-            """Stop the service gracefully."""
+            """Handle service stop request."""
+            self.logger.info("Service stop requested")
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            self.stop_requested.set()
             win32event.SetEvent(self.hWaitStop)
 
-        def SvcDoRun(self) -> None:
-            """Main service execution method."""
-            try:
-                # Report service as running immediately
-                self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+            # Wait for thread to finish gracefully
+            if self.monitor_thread and self.monitor_thread.is_alive():
+                self.monitor_thread.join(timeout=30)
+            self.logger.info("Service stopped")
 
-                # Wait 5 seconds after reporting running status
-                time.sleep(5)
+        def SvcDoRun(self) -> None:
+            """Main service loop."""
+            try:
+                # Report running immediately to prevent 1053
+                self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+                self.logger.info("Service started")
 
                 # Start monitor in background thread
-                self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=False)
+                self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
                 self.monitor_thread.start()
 
                 # Wait for stop signal
                 win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
 
-                # Wait for monitor thread to finish
-                if self.monitor_thread and self.monitor_thread.is_alive():
-                    self.monitor_thread.join(timeout=30)
-
             except Exception as e:
-                self.logger.error(f"Service execution failed: {e}")
+                self.logger.exception(f"Service execution failed: {e}")
                 self.ReportServiceStatus(win32service.SERVICE_STOPPED)
                 raise
 
         def _run_monitor(self) -> None:
-            """Run the TLS Certificate Monitor in background thread."""
+            """Background monitor thread."""
             try:
-                # Import here to avoid circular imports
                 import asyncio
                 import importlib
 
-                # Dynamically import to avoid type checker issues
+                self.logger.info("Initializing TLS Certificate Monitor")
                 main_module = importlib.import_module("tls_cert_monitor.main")
                 TLSCertMonitor = main_module.TLSCertMonitor
 
-                # Create new event loop for this thread
+                # Create asyncio event loop for this thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                # Create and run the monitor
+                # Create and run monitor
                 monitor = TLSCertMonitor(config_path=self.config_path, dry_run=False)
                 loop.run_until_complete(monitor.run())
 
             except Exception as e:
-                self.logger.error(f"Monitor execution failed: {e}")
+                self.logger.exception(f"Monitor thread failed: {e}")
+
             finally:
                 if "loop" in locals():
                     loop.close()
+                self.logger.info("Monitor thread exiting")
 
 else:
-    # Dummy class for non-Windows systems
+    # Dummy service for non-Windows
     class TLSCertMonitorService:  # type: ignore[no-redef]
-        """Dummy service class for non-Windows systems."""
-
         _svc_name_ = "TLSCertMonitor"
         _svc_display_name_ = "TLS Certificate Monitor"
         _svc_description_ = "Monitor TLS/SSL certificates for expiration and security issues"
@@ -119,34 +118,45 @@ else:
             pass
 
 
+# =========================
+# Utility functions
+# =========================
+
+
 def install_service(config_path: Optional[str] = None, auto_start: bool = True) -> bool:
-    """Install the TLS Certificate Monitor as a Windows service."""
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
 
     try:
-        # Build service arguments
         service_args = [TLSCertMonitorService._svc_name_]
         if config_path:
             service_args.extend(["--config", config_path])
 
         # Determine if running from compiled binary
-        is_compiled = (
-            getattr(sys, "frozen", False)
-            or hasattr(sys, "_MEIPASS")
-            or "__compiled__" in globals()
-            or (sys.argv[0].endswith(".exe") and not sys.argv[0].endswith("python.exe"))
+        is_compiled = getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+        exe_name = sys.executable if not is_compiled else sys.argv[0]
+
+        exe_args = (
+            f'"{__file__}" {" ".join(service_args[1:])}'
+            if not is_compiled
+            else f'"{exe_name}" --config "{config_path}"' if config_path else f'"{exe_name}"'
         )
 
-        if is_compiled:
-            # Use direct service registration for compiled binary
-            exe_name = sys.argv[0]
-            if config_path:
-                image_path = f'"{exe_name}" --config "{config_path}"'
-            else:
-                image_path = f'"{exe_name}"'
-
-            # Register service using low-level API
+        if not is_compiled:
+            win32serviceutil.InstallService(
+                pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
+                serviceName=TLSCertMonitorService._svc_name_,
+                displayName=TLSCertMonitorService._svc_display_name_,
+                description=TLSCertMonitorService._svc_description_,
+                startType=(
+                    win32service.SERVICE_AUTO_START
+                    if auto_start
+                    else win32service.SERVICE_DEMAND_START
+                ),
+                exeName=sys.executable,
+                exeArgs=exe_args,
+            )
+        else:
             hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
             try:
                 service_handle = win32service.CreateService(
@@ -161,50 +171,18 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
                         else win32service.SERVICE_DEMAND_START
                     ),
                     win32service.SERVICE_ERROR_NORMAL,
-                    image_path,
+                    exe_args,
                     None,
                     0,
                     None,
                     None,
                     None,
                 )
-
-                # Set service description
-                try:
-                    win32service.ChangeServiceConfig2(
-                        service_handle,
-                        win32service.SERVICE_CONFIG_DESCRIPTION,
-                        TLSCertMonitorService._svc_description_,
-                    )
-                except Exception:
-                    pass  # Description is optional  # nosec B110
-
                 win32service.CloseServiceHandle(service_handle)
             finally:
                 win32service.CloseServiceHandle(hs)
-        else:
-            # Use Python class registration for script
-            win32serviceutil.InstallService(
-                pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
-                serviceName=TLSCertMonitorService._svc_name_,
-                displayName=TLSCertMonitorService._svc_display_name_,
-                startType=(
-                    win32service.SERVICE_AUTO_START
-                    if auto_start
-                    else win32service.SERVICE_DEMAND_START
-                ),
-                description=TLSCertMonitorService._svc_description_,
-                exeName=sys.executable,
-                exeArgs=(
-                    f'"{__file__}" {" ".join(service_args[1:])}'
-                    if len(service_args) > 1
-                    else f'"{__file__}"'
-                ),
-            )
 
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' installed successfully")
-        if auto_start:
-            print("Service is configured to start automatically")
         return True
 
     except Exception as e:
@@ -213,33 +191,25 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
 
 
 def uninstall_service() -> bool:
-    """Uninstall the TLS Certificate Monitor Windows service."""
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
-
     try:
-        # Stop service if running
         try:
             win32serviceutil.StopService(TLSCertMonitorService._svc_name_)
             time.sleep(2)
         except Exception:
-            pass  # Service might not be running  # nosec B110
-
-        # Remove service
+            pass  # Service might not be running, continue with uninstall  # nosec B110
         win32serviceutil.RemoveService(TLSCertMonitorService._svc_name_)
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' uninstalled successfully")
         return True
-
     except Exception as e:
         print(f"Failed to uninstall service: {e}")
         return False
 
 
 def start_service() -> bool:
-    """Start the TLS Certificate Monitor Windows service."""
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
-
     try:
         win32serviceutil.StartService(TLSCertMonitorService._svc_name_)
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' started successfully")
@@ -250,10 +220,8 @@ def start_service() -> bool:
 
 
 def stop_service() -> bool:
-    """Stop the TLS Certificate Monitor Windows service."""
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
-
     try:
         win32serviceutil.StopService(TLSCertMonitorService._svc_name_)
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' stopped successfully")
@@ -264,15 +232,11 @@ def stop_service() -> bool:
 
 
 def get_service_status() -> str:
-    """Get the current status of the TLS Certificate Monitor Windows service."""
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
-
     try:
-        service_status = win32serviceutil.QueryServiceStatus(TLSCertMonitorService._svc_name_)
-        state = service_status[1]
-
-        status_map = {
+        status = win32serviceutil.QueryServiceStatus(TLSCertMonitorService._svc_name_)[1]
+        return {
             win32service.SERVICE_STOPPED: "STOPPED",
             win32service.SERVICE_START_PENDING: "START_PENDING",
             win32service.SERVICE_STOP_PENDING: "STOP_PENDING",
@@ -280,10 +244,7 @@ def get_service_status() -> str:
             win32service.SERVICE_CONTINUE_PENDING: "CONTINUE_PENDING",
             win32service.SERVICE_PAUSE_PENDING: "PAUSE_PENDING",
             win32service.SERVICE_PAUSED: "PAUSED",
-        }
-
-        return status_map.get(state, f"UNKNOWN({state})")
-
+        }.get(status, f"UNKNOWN({status})")
     except Exception as e:
         return f"ERROR: {e}"
 

@@ -177,9 +177,8 @@ jobs:
           Write-Host "⚠️ Could not add Windows Defender exclusion (may require admin): $($_.Exception.Message)"
         }
 
-        # Base Nuitka flags for antivirus compatibility
+        # Base Nuitka flags for antivirus compatibility and Windows service support
         $FLAGS = @(
-          "--onefile",
           "--standalone",
           "--enable-plugin=pkg-resources",
           "--assume-yes-for-downloads",
@@ -189,7 +188,7 @@ jobs:
           "--include-module=cryptography",
           "--include-module=prometheus_client",
           "--output-dir=dist",
-          "--output-filename=${{ env.PROJECT_NAME }}.exe",
+          "--output-filename=${{ env.PROJECT_NAME }}",
           "--windows-company-name=TLS Cert Monitor",
           "--windows-product-name=${{ env.PROJECT_NAME }}",
           "--windows-file-description=TLS Certificate Monitor Tool",
@@ -217,36 +216,51 @@ jobs:
         python -m nuitka $FLAGS main.py
 
         Write-Host "📄 Verifying Windows binary..."
-        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
+        $binaryDir = "dist\main.dist"
+        $binaryPath = "$binaryDir\${{ env.PROJECT_NAME }}.exe"
+
         if (Test-Path $binaryPath) {
           $fileInfo = Get-Item $binaryPath
           Write-Host "✅ Binary created: $($fileInfo.Name)"
           Write-Host "📊 Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
 
-          # Add additional Windows Defender exclusion for the binary
+          # Display directory contents
+          Write-Host "📁 Standalone directory contents:"
+          Get-ChildItem $binaryDir | Format-Table Name, Length, LastWriteTime
+
+          # Add Windows Defender exclusion for the entire directory
           try {
-            Add-MpPreference -ExclusionPath $fileInfo.FullName -ErrorAction SilentlyContinue
-            Write-Host "✅ Added Windows Defender exclusion for binary"
+            Add-MpPreference -ExclusionPath (Resolve-Path $binaryDir).Path -ErrorAction SilentlyContinue
+            Write-Host "✅ Added Windows Defender exclusion for binary directory"
           } catch {
             Write-Host "⚠️ Could not add binary exclusion: $($_.Exception.Message)"
           }
 
-          # Set binary attributes to help with antivirus detection
-          try {
-            $fileInfo.Attributes = $fileInfo.Attributes -bor [System.IO.FileAttributes]::NotContentIndexed
-            Write-Host "✅ Set binary attributes"
-          } catch {
-            Write-Host "⚠️ Could not set binary attributes: $($_.Exception.Message)"
+          # Rename directory for better user experience
+          $targetDir = "dist\${{ env.PROJECT_NAME }}.dist"
+          Write-Host "📁 Renaming directory from $binaryDir to $targetDir"
+
+          # Remove target if it exists
+          if (Test-Path $targetDir) {
+            Write-Host "Removing existing target directory..."
+            Remove-Item $targetDir -Recurse -Force
           }
+
+          # Copy and remove source (more reliable than Rename-Item)
+          Copy-Item $binaryDir $targetDir -Recurse -Force
+          Remove-Item $binaryDir -Recurse -Force
+          Write-Host "✅ Successfully moved directory to $targetDir for user convenience"
         } else {
-          Write-Host "❌ Binary not found!"
+          Write-Host "❌ Binary not found at $binaryPath!"
+          Write-Host "📁 Contents of dist directory:"
+          Get-ChildItem dist -Recurse | Format-Table FullName, Length
           exit 1
         }
 
     - name: Test Windows binary help flag
       run: |
         Write-Host "🧪 Testing Windows binary help flag..."
-        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
+        $binaryPath = "dist\${{ env.PROJECT_NAME }}.dist\${{ env.PROJECT_NAME }}.exe"
 
         Write-Host "Testing --help flag:"
         & $binaryPath --help
@@ -279,18 +293,19 @@ jobs:
         Write-Host "ACTIONS_ID_TOKEN_REQUEST_URL is set: $($env:ACTIONS_ID_TOKEN_REQUEST_URL -ne $null)"
 
         # Try signing with better error handling
+        $binaryPath = "dist/${{ env.PROJECT_NAME }}.dist/${{ env.PROJECT_NAME }}.exe"
         try {
-          cosign sign-blob --yes "dist/${{ env.PROJECT_NAME }}.exe" --output-signature "dist/${{ env.PROJECT_NAME }}.exe.sig" --output-certificate "dist/${{ env.PROJECT_NAME }}.exe.crt"
+          cosign sign-blob --yes $binaryPath --output-signature "$binaryPath.sig" --output-certificate "$binaryPath.crt"
           Write-Host "✅ Windows binary signed successfully"
-          Get-ChildItem -Path dist
+          Get-ChildItem -Path "dist/${{ env.PROJECT_NAME }}.dist"
         } catch {
           Write-Host "⚠️ Failed to sign Windows binary with cosign - continuing without signature"
           Write-Host "Note: This might be due to OIDC token issues. Binary is still valid."
           Write-Host "Error: $($_.Exception.Message)"
           # Create empty signature files so the workflow doesn't break
-          New-Item -Path "dist/${{ env.PROJECT_NAME }}.exe.sig" -ItemType File -Force
-          New-Item -Path "dist/${{ env.PROJECT_NAME }}.exe.crt" -ItemType File -Force
-          Get-ChildItem -Path dist
+          New-Item -Path "$binaryPath.sig" -ItemType File -Force
+          New-Item -Path "$binaryPath.crt" -ItemType File -Force
+          Get-ChildItem -Path "dist/${{ env.PROJECT_NAME }}.dist"
         }
 
     - name: Upload Windows binary
@@ -298,9 +313,7 @@ jobs:
       with:
         name: windows-amd64-binary
         path: |
-          dist/${{ env.PROJECT_NAME }}.exe
-          dist/${{ env.PROJECT_NAME }}.exe.sig
-          dist/${{ env.PROJECT_NAME }}.exe.crt
+          dist/${{ env.PROJECT_NAME }}.dist/
         retention-days: 30
 
   build-macos-amd64:
@@ -579,10 +592,10 @@ jobs:
           echo "✅ Created linux-amd64.tar.gz (with signature)"
         fi
 
-        # Windows binary
-        if [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
-          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.exe ${{ env.PROJECT_NAME }}.exe.sig ${{ env.PROJECT_NAME }}.exe.crt
-          echo "✅ Created windows-amd64.tar.gz (with signature)"
+        # Windows binary (standalone directory)
+        if [ -d windows-amd64-binary/${{ env.PROJECT_NAME }}.dist ]; then
+          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.dist
+          echo "✅ Created windows-amd64.tar.gz (standalone directory with dependencies)"
         fi
 
         # macOS AMD64 binary

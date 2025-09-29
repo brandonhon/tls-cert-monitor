@@ -47,11 +47,24 @@ Download the latest release for your platform:
 - **macOS (Apple Silicon)**: `darwin-arm64.tar.gz`
 
 ```bash
-# Download and extract (replace with your platform)
+# Download and extract (Linux/macOS)
 curl -L https://github.com/brandonhon/tls-cert-monitor/releases/latest/download/linux-amd64.tar.gz | tar -xz
 chmod +x tls-cert-monitor
 ./tls-cert-monitor --help
 ```
+
+**Windows Installation:**
+```powershell
+# Download and extract Windows standalone directory
+# Extract windows-amd64.tar.gz to get the tls-cert-monitor.dist directory
+# The Windows binary is distributed as a standalone directory containing all dependencies
+
+# Navigate to extracted directory
+cd tls-cert-monitor.dist
+.\tls-cert-monitor.exe --help
+```
+
+**Note**: The Windows binary is packaged as a standalone directory (`tls-cert-monitor.dist`) containing the main executable and all required dependencies. This provides better compatibility and avoids antivirus false positives compared to single-file executables.
 
 ### 🐍 From Source
 
@@ -591,23 +604,26 @@ scripts\install-windows-service-native.bat
 
 **Manual Installation:**
 ```cmd
+# Navigate to the extracted standalone directory
+cd tls-cert-monitor.dist
+
 # Install service with automatic start and config file
-tls-cert-monitor.exe --service-install --config "C:\ProgramData\TLSCertMonitor\config.yaml"
+.\tls-cert-monitor.exe --service-install --config "C:\ProgramData\TLSCertMonitor\config.yaml"
 
 # Install service with manual start
-tls-cert-monitor.exe --service-install --service-manual --config "C:\ProgramData\TLSCertMonitor\config.yaml"
+.\tls-cert-monitor.exe --service-install --service-manual --config "C:\ProgramData\TLSCertMonitor\config.yaml"
 
 # Install without specific config (uses default config.yaml)
-tls-cert-monitor.exe --service-install
+.\tls-cert-monitor.exe --service-install
 ```
 
 **Service Management:**
 ```cmd
-# Application commands
-tls-cert-monitor.exe --service-start
-tls-cert-monitor.exe --service-stop
-tls-cert-monitor.exe --service-status
-tls-cert-monitor.exe --service-uninstall
+# Application commands (from tls-cert-monitor.dist directory)
+.\tls-cert-monitor.exe --service-start
+.\tls-cert-monitor.exe --service-stop
+.\tls-cert-monitor.exe --service-status
+.\tls-cert-monitor.exe --service-uninstall
 
 # Standard Windows service commands
 sc start TLSCertMonitor
