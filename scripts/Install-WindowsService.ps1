@@ -122,11 +122,11 @@ function Remove-ExistingService {
         if ($service) {
             if ($Force) {
                 Write-Host "  Stopping existing service..." -ForegroundColor Yellow
-                & $exePath --service-stop
+                Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
                 Start-Sleep -Seconds 3
 
                 Write-Host "  Uninstalling existing service..." -ForegroundColor Yellow
-                & $exePath --service-uninstall
+                sc.exe delete $ServiceName
                 Start-Sleep -Seconds 2
             } else {
                 Write-Error "Service already exists. Use -Force to reinstall."
@@ -143,29 +143,37 @@ function Install-Service {
 
     $exePath = Join-Path $InstallDir "tls-cert-monitor.exe"
     $configPath = Join-Path $ConfigDir "config.yaml"
+    $serviceDisplayName = $ServiceDisplay
+    $serviceDescription = "Monitor TLS/SSL certificates for expiration and security issues"
 
-    $args = @("--service-install")
+    # Check if service exists and stop/remove it
+    $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($existingService) {
+        Write-Host "  Stopping existing service..." -ForegroundColor Gray
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
 
-    if (Test-Path $configPath) {
-        $args += "--config=`"$configPath`""
+        Write-Host "  Removing existing service..." -ForegroundColor Gray
+        sc.exe delete $ServiceName
+        Start-Sleep -Seconds 2
     }
 
-    if ($Manual) {
-        $args += "--service-manual"
-    }
+    # Create the service using sc.exe with proper binary path
+    Write-Host "  Creating Windows service..." -ForegroundColor Gray
+    $binaryPathName = "`"$exePath`" --config `"$configPath`""
 
-    Write-Host "  Command: $exePath $($args -join ' ')" -ForegroundColor Gray
+    $startType = if ($Manual) { "demand" } else { "auto" }
+    $result = sc.exe create $ServiceName binPath= $binaryPathName DisplayName= $serviceDisplayName start= $startType
 
-    $result = & $exePath @args
-    $exitCode = $LASTEXITCODE
-
-    if ($exitCode -eq 0) {
-        Write-Host "  Service installed successfully!" -ForegroundColor Green
-    } else {
-        Write-Error "Failed to install service (exit code: $exitCode)"
-        Write-Host "Make sure pywin32 is properly installed." -ForegroundColor Red
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to create Windows service. Exit code: $LASTEXITCODE. Output: $result"
         exit 1
     }
+
+    # Set service description
+    sc.exe description $ServiceName $serviceDescription
+
+    Write-Host "  Service installed successfully!" -ForegroundColor Green
 }
 
 function Show-ServiceInfo {
@@ -183,11 +191,15 @@ function Show-ServiceInfo {
     Write-Host "  Log Directory:     $LogDir"
     Write-Host ""
     Write-Host "Service Management Commands:" -ForegroundColor Cyan
-    Write-Host "  Install:    $exePath --service-install [--config=path]"
-    Write-Host "  Start:      $exePath --service-start"
-    Write-Host "  Stop:       $exePath --service-stop"
-    Write-Host "  Status:     $exePath --service-status"
-    Write-Host "  Uninstall:  $exePath --service-uninstall"
+    Write-Host "  Start:      sc.exe start $ServiceName"
+    Write-Host "  Stop:       sc.exe stop $ServiceName"
+    Write-Host "  Query:      sc.exe query $ServiceName"
+    Write-Host "  Delete:     sc.exe delete $ServiceName"
+    Write-Host ""
+    Write-Host "PowerShell Service Commands:" -ForegroundColor Cyan
+    Write-Host "  Start:      Start-Service -Name $ServiceName"
+    Write-Host "  Stop:       Stop-Service -Name $ServiceName"
+    Write-Host "  Status:     Get-Service -Name $ServiceName"
     Write-Host ""
     Write-Host "Alternative Windows commands:" -ForegroundColor Cyan
     Write-Host "  Start:      Start-Service -Name '$ServiceName'"
@@ -204,13 +216,12 @@ function Start-ServicePrompt {
     if ($response -eq "" -or $response -eq "Y" -or $response -eq "y") {
         Write-Host "Starting service..." -ForegroundColor Yellow
 
-        $exePath = Join-Path $InstallDir "tls-cert-monitor.exe"
-        & $exePath --service-start
+        Start-Service -Name $ServiceName -ErrorAction Stop
 
         Start-Sleep -Seconds 3
 
         Write-Host "Service status:" -ForegroundColor Yellow
-        & $exePath --service-status
+        Get-Service -Name $ServiceName
     }
 }
 

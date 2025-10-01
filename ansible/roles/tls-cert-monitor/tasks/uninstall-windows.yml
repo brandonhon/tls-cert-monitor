@@ -12,21 +12,21 @@
   register: service_exists
   changed_when: false
 
-- name: Stop and uninstall Windows service
+- name: Stop and uninstall Windows service (PowerShell method)
   win_shell: |
-    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+    $serviceName = "{{ service_name }}"
 
     Write-Host "Stopping Windows service..."
-    & $exePath --service-stop
+    Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 
-    Write-Host "Uninstalling Windows service..."
-    & $exePath --service-uninstall
+    Write-Host "Removing Windows service..."
+    $result = sc.exe delete $serviceName
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Windows service uninstalled successfully"
+        Write-Host "Windows service removed successfully using PowerShell"
     } else {
-        Write-Warning "Service uninstall returned code: $LASTEXITCODE"
+        Write-Warning "Service removal returned code: $LASTEXITCODE. Output: $result"
     }
   args:
     executable: powershell

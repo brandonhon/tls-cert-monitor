@@ -62,27 +62,30 @@ echo Checking for existing service...
 sc query "%SERVICE_NAME%" >nul 2>&1
 if %errorLevel% equ 0 (
     echo Stopping existing service...
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-stop
+    sc.exe stop "%SERVICE_NAME%"
     timeout /t 5 /nobreak >nul
 
     echo Uninstalling existing service...
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-uninstall
+    sc.exe delete "%SERVICE_NAME%"
     timeout /t 2 /nobreak >nul
 )
 
 REM Install service using native Windows service support
 echo Installing native Windows service...
 if exist "%CONFIG_DIR%\config.yaml" (
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-install --config="%CONFIG_DIR%\config.yaml"
+    sc.exe create "%SERVICE_NAME%" binPath= "\"%INSTALL_DIR%\tls-cert-monitor.exe\" --config \"%CONFIG_DIR%\config.yaml\"" DisplayName= "%SERVICE_DISPLAY%" start= auto
 ) else (
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-install
+    sc.exe create "%SERVICE_NAME%" binPath= "\"%INSTALL_DIR%\tls-cert-monitor.exe\"" DisplayName= "%SERVICE_DISPLAY%" start= auto
 )
 
 if %errorLevel% neq 0 (
-    echo ERROR: Failed to install service. Check if pywin32 is properly installed.
+    echo ERROR: Failed to install service.
     pause
     exit /b 1
 )
+
+REM Set service description
+sc.exe description "%SERVICE_NAME%" "%SERVICE_DESC%"
 
 echo.
 echo Service installed successfully!
@@ -94,12 +97,15 @@ echo   Install Directory: %INSTALL_DIR%
 echo   Config Directory: %CONFIG_DIR%
 echo   Log Directory: %LOG_DIR%
 echo.
-echo Service Management Commands:
-echo   Install:   tls-cert-monitor.exe --service-install [--config=path]
-echo   Start:     tls-cert-monitor.exe --service-start
-echo   Stop:      tls-cert-monitor.exe --service-stop
-echo   Status:    tls-cert-monitor.exe --service-status
-echo   Uninstall: tls-cert-monitor.exe --service-uninstall
+echo Service Management Commands (sc.exe):
+echo   Start:     sc.exe start "%SERVICE_NAME%"
+echo   Stop:      sc.exe stop "%SERVICE_NAME%"
+echo   Query:     sc.exe query "%SERVICE_NAME%"
+echo   Delete:    sc.exe delete "%SERVICE_NAME%"
+echo.
+echo Service Management Commands (net.exe):
+echo   Start:     net start "%SERVICE_NAME%"
+echo   Stop:      net stop "%SERVICE_NAME%"
 echo.
 echo Alternative Windows commands:
 echo   Start:     sc start "%SERVICE_NAME%"
@@ -113,9 +119,9 @@ REM Ask if user wants to start the service now
 set /p START_NOW="Start the service now? (y/n): "
 if /i "%START_NOW%"=="y" (
     echo Starting service...
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-start
+    sc.exe start "%SERVICE_NAME%"
     timeout /t 3 /nobreak >nul
-    "%INSTALL_DIR%\tls-cert-monitor.exe" --service-status
+    sc.exe query "%SERVICE_NAME%"
 )
 
 echo.

@@ -603,7 +603,7 @@ Get-Service tls-cert-monitor
 # View logs
 Get-Content "C:\ProgramData\tls-cert-monitor\logs\service.log"
 
-# View logs (native method)
+# View logs (PowerShell method)
 Get-EventLog -LogName Application -Source "TLS Certificate Monitor" -Newest 20
 
 # Restart service
@@ -727,15 +727,15 @@ The application uses native Windows service functionality:
 ```yaml
 # group_vars/windows_servers.yml
 
-# Windows service method (native only)
+# Windows service method (PowerShell-based)
 windows_service_method: "native"
 ```
 
-The native method offers:
-- No third-party dependencies
+The PowerShell-based method offers:
+- Pure PowerShell service creation using sc.exe
 - Direct integration with Windows Service Control Manager
-- Built-in support for service install/uninstall/start/stop operations
-- Better compatibility with security policies
+- No dependency on pywin32 or binary-based service commands
+- Better compatibility with security policies and onefile binaries
 
 ### TLS/SSL Certificate Configuration
 

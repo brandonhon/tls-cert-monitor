@@ -29,29 +29,29 @@
 # Native Windows service handlers (v1.2.0+)
 - name: restart tls-cert-monitor-windows-native
   win_shell: |
-    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
+    $serviceName = "{{ service_name }}"
 
     # Get current service status
-    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
     if ($service) {
         Write-Host "Stopping service..."
-        & $exePath --service-stop
+        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
 
         Write-Host "Starting service..."
-        & $exePath --service-start
+        Start-Service -Name $serviceName -ErrorAction Stop
         Start-Sleep -Seconds 2
 
         # Verify service is running
-        $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
         if ($service.Status -ne 'Running') {
             throw "Service failed to restart. Status: $($service.Status)"
         }
 
         Write-Host "Service restarted successfully"
     } else {
-        Write-Warning "Service '{{ service_name }}' not found"
+        Write-Warning "Service '$serviceName' not found"
     }
   args:
     executable: powershell

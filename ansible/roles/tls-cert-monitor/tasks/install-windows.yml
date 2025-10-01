@@ -51,49 +51,57 @@
     dest: "{{ config_dir_windows }}\\config.yaml"
     backup: yes
 
-# Native Windows Service Installation (v1.2.0+)
-- name: Install Windows service (native method)
+# PowerShell Windows Service Installation
+- name: Install Windows service (PowerShell method)
   win_shell: |
     $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
     $configPath = "{{ config_dir_windows }}\\config.yaml"
+    $serviceName = "{{ service_name }}"
+    $serviceDisplayName = "{{ service_name }}"
+    $serviceDescription = "Monitor TLS/SSL certificates for expiration and security issues"
 
-    # Check if service exists
-    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
-
-    if ($service) {
+    # Check if service exists and stop/remove it
+    $existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($existingService) {
         Write-Host "Stopping existing service..."
-        Stop-Service -Name "{{ service_name }}" -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
 
-        Write-Host "Uninstalling existing service..."
-        & $exePath --service-uninstall
+        Write-Host "Removing existing service..."
+        sc.exe delete $serviceName
         Start-Sleep -Seconds 2
     }
 
-    # Install the service with auto-start
-    Write-Host "Installing native Windows service..."
-    & $exePath --service-install --config $configPath
+    # Create the service using sc.exe with proper binary path
+    Write-Host "Creating Windows service..."
+    $binaryPathName = "`"$exePath`" --config `"$configPath`""
 
+    $result = sc.exe create $serviceName binPath= $binaryPathName DisplayName= $serviceDisplayName start= auto
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install Windows service. Exit code: $LASTEXITCODE"
+        throw "Failed to create Windows service. Exit code: $LASTEXITCODE. Output: $result"
     }
+
+    # Set service description
+    sc.exe description $serviceName $serviceDescription
 
     # Start the service
     Write-Host "Starting Windows service..."
-    & $exePath --service-start
-
+    $result = sc.exe start $serviceName
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to start Windows service. Exit code: $LASTEXITCODE"
+        throw "Failed to start Windows service. Exit code: $LASTEXITCODE. Output: $result"
     }
 
     # Verify service is running
-    Start-Sleep -Seconds 3
-    $service = Get-Service -Name "{{ service_name }}" -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $service) {
+        throw "Service was not created successfully"
+    }
     if ($service.Status -ne 'Running') {
         throw "Service is not running. Status: $($service.Status)"
     }
 
-    Write-Host "Windows service installed and started successfully"
+    Write-Host "Windows service created and started successfully using PowerShell"
   args:
     executable: powershell
   notify: restart tls-cert-monitor-windows-native

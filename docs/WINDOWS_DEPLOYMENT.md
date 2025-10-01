@@ -84,17 +84,18 @@ In enterprise environments:
 ### Installation Commands
 
 ```powershell
-# Install service with automatic start
-tls-cert-monitor.exe --service-install --config=config.yaml
-
-# Install service with manual start
-tls-cert-monitor.exe --service-install --service-manual --config=config.yaml
+# Install service with automatic start using PowerShell
+$binaryPath = "C:\path\to\tls-cert-monitor.exe --config C:\path\to\config.yaml"
+sc.exe create TLSCertMonitor binPath= $binaryPath DisplayName= "TLS Certificate Monitor" start= auto
 
 # Start the service
-tls-cert-monitor.exe --service-start
+sc.exe start TLSCertMonitor
 
 # Check service status
-tls-cert-monitor.exe --service-status
+sc.exe query TLSCertMonitor
+
+# Or use PowerShell cmdlets
+Get-Service TLSCertMonitor
 ```
 
 ### Troubleshooting Service Installation
@@ -156,11 +157,11 @@ Ensure the service account has:
 
 ## Updating
 
-1. Stop the service: `tls-cert-monitor.exe --service-stop`
+1. Stop the service: `sc.exe stop TLSCertMonitor`
 2. Download new version
 3. Verify signature
 4. Replace executable
-5. Start the service: `tls-cert-monitor.exe --service-start`
+5. Start the service: `sc.exe start TLSCertMonitor`
 
 ## Getting Help
 
