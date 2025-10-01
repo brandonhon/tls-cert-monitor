@@ -181,7 +181,6 @@ jobs:
         $FLAGS = @(
           "--standalone",
           "--enable-plugin=pkg-resources",
-          "--enable-plugin=pywin32",
           "--assume-yes-for-downloads",
           "--follow-imports",
           "--include-package=tls_cert_monitor",
