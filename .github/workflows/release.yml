@@ -593,9 +593,23 @@ jobs:
         fi
 
         # Windows binary (standalone directory)
+        echo "🔍 Debugging Windows binary structure:"
+        ls -la windows-amd64-binary/ || echo "No windows-amd64-binary directory"
+        find windows-amd64-binary -name "*.exe" -o -name "*.dist" 2>/dev/null || echo "No exe or dist files found"
+
         if [ -d windows-amd64-binary/${{ env.PROJECT_NAME }}.dist ]; then
           tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.dist
           echo "✅ Created windows-amd64.tar.gz (standalone directory with dependencies)"
+        elif [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
+          # Files are directly in the artifact, recreate the directory structure
+          mkdir -p temp-windows/${{ env.PROJECT_NAME }}.dist
+          cp -r windows-amd64-binary/* temp-windows/${{ env.PROJECT_NAME }}.dist/
+          tar -czf release-assets/windows-amd64.tar.gz -C temp-windows ${{ env.PROJECT_NAME }}.dist
+          rm -rf temp-windows
+          echo "✅ Created windows-amd64.tar.gz (recreated standalone directory structure)"
+        else
+          echo "❌ Windows binary not found in expected format"
+          ls -la windows-amd64-binary/ || echo "Directory not accessible"
         fi
 
         # macOS AMD64 binary
