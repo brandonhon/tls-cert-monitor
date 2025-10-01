@@ -1,19 +1,22 @@
 """
 Windows Service implementation for TLS Certificate Monitor.
 
-This module provides reliable Windows Service support using pywin32.
+Patched version for Nuitka standalone build.
+Fixes 1053 startup error by correcting image_path, absolute logging path,
+and adding better error handling.
 """
 
 import logging
+import os
 import sys
 import threading
 import time
 from typing import Any, Optional
 
 try:
-    import win32event  # type: ignore[import-untyped]
-    import win32service  # type: ignore[import-untyped]
-    import win32serviceutil  # type: ignore[import-untyped]
+    import win32event  # type: ignore
+    import win32service  # type: ignore
+    import win32serviceutil  # type: ignore
 except ImportError:
     win32event = win32service = win32serviceutil = None
 
@@ -32,9 +35,11 @@ if win32serviceutil:
             self.monitor_thread: Optional[threading.Thread] = None
             self.config_path: Optional[str] = None
 
-            # Logger setup
+            # Absolute log path (always write somewhere valid for a service)
+            log_dir = r"C:\ProgramData\TLSCertMonitor"
+            os.makedirs(log_dir, exist_ok=True)
             logging.basicConfig(
-                filename="TLSCertMonitor.log",
+                filename=os.path.join(log_dir, "TLSCertMonitor.log"),
                 level=logging.INFO,
                 format="%(asctime)s [%(levelname)s] %(message)s",
             )
@@ -68,6 +73,7 @@ if win32serviceutil:
                 # Report running immediately to prevent 1053
                 self.ReportServiceStatus(win32service.SERVICE_RUNNING)
                 self.logger.info("Service started")
+                time.sleep(1)  # buffer for SCM
 
                 # Start monitor in background thread
                 self.monitor_thread = threading.Thread(target=self._run_monitor, daemon=True)
@@ -136,13 +142,13 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
         is_compiled = getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
         exe_name = sys.executable if not is_compiled else sys.argv[0]
 
-        exe_args = (
-            f'"{__file__}" {" ".join(service_args[1:])}'
-            if not is_compiled
-            else f'"{exe_name}" --config "{config_path}"' if config_path else f'"{exe_name}"'
-        )
-
         if not is_compiled:
+            # Standard Python mode
+            exe_args = (
+                f'"{__file__}" {" ".join(service_args[1:])}'
+                if len(service_args) > 1
+                else f'"{__file__}"'
+            )
             win32serviceutil.InstallService(
                 pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
                 serviceName=TLSCertMonitorService._svc_name_,
@@ -157,6 +163,11 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
                 exeArgs=exe_args,
             )
         else:
+            # Nuitka compiled binary mode
+            image_path = f'"{exe_name}"'
+            if config_path:
+                image_path += f' --config "{config_path}"'
+
             hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
             try:
                 service_handle = win32service.CreateService(
@@ -171,7 +182,7 @@ def install_service(config_path: Optional[str] = None, auto_start: bool = True) 
                         else win32service.SERVICE_DEMAND_START
                     ),
                     win32service.SERVICE_ERROR_NORMAL,
-                    exe_args,
+                    image_path,  # <-- fixed
                     None,
                     0,
                     None,
@@ -250,7 +261,6 @@ def get_service_status() -> str:
 
 
 def is_windows_service_available() -> bool:
-    """Check if Windows service functionality is available."""
     return win32serviceutil is not None
 
 
