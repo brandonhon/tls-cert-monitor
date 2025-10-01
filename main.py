@@ -320,6 +320,7 @@ def main(
     if sys.platform == "win32" and not service:
         try:
             import psutil
+
             parent = psutil.Process().parent()
             if parent and parent.name().lower() == "services.exe":
                 is_windows_service = True
