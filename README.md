@@ -607,23 +607,21 @@ scripts\install-windows-service-native.bat
 # Extract the onefile binary from the archive
 tar -xzf windows-amd64.tar.gz
 
-# Install service with automatic start and config file
-.\tls-cert-monitor.exe --service-install --config "C:\ProgramData\TLSCertMonitor\config.yaml"
+# Use PowerShell scripts for service installation
+# Install service with automatic start
+.\scripts\Install-WindowsService.ps1
 
-# Install service with manual start
-.\tls-cert-monitor.exe --service-install --service-manual --config "C:\ProgramData\TLSCertMonitor\config.yaml"
-
-# Install without specific config (uses default config.yaml)
-.\tls-cert-monitor.exe --service-install
+# Or use the batch script
+.\scripts\install-windows-service-native.bat
 ```
 
 **Service Management:**
 ```cmd
-# Application commands (from directory containing the onefile binary)
-.\tls-cert-monitor.exe --service-start
-.\tls-cert-monitor.exe --service-stop
-.\tls-cert-monitor.exe --service-status
-.\tls-cert-monitor.exe --service-uninstall
+# Use Windows built-in service commands
+sc start TLSCertMonitor
+sc stop TLSCertMonitor
+sc query TLSCertMonitor
+sc delete TLSCertMonitor
 
 # Standard Windows service commands
 sc start TLSCertMonitor

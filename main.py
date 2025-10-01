@@ -236,33 +236,10 @@ class TLSCertMonitor:
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
 @click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
-@click.option("--service-install", is_flag=True, help="Install as Windows service (Windows only)")
-@click.option("--service-uninstall", is_flag=True, help="Uninstall Windows service (Windows only)")
-@click.option("--service-start", is_flag=True, help="Start Windows service (Windows only)")
-@click.option("--service-stop", is_flag=True, help="Stop Windows service (Windows only)")
-@click.option("--service-status", is_flag=True, help="Show Windows service status (Windows only)")
-@click.option(
-    "--service-manual",
-    is_flag=True,
-    help="Install service with manual start (use with --service-install)",
-)
-@click.option(
-    "--service",
-    is_flag=True,
-    hidden=True,
-    help="Internal flag - run as Windows service (used by service installation)",
-)
 def main(
     config: Optional[Path],
     version: bool,
     dry_run: bool,
-    service_install: bool,
-    service_uninstall: bool,
-    service_start: bool,
-    service_stop: bool,
-    service_status: bool,
-    service_manual: bool,
-    service: bool,
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
@@ -270,81 +247,6 @@ def main(
     if version:
         print(f"TLS Certificate Monitor v{__version__}")
         return
-
-    # Handle Windows service commands
-    if service_install or service_uninstall or service_start or service_stop or service_status:
-        try:
-            from tls_cert_monitor.windows_service import (
-                get_service_status,
-                install_service,
-                is_windows_service_available,
-                start_service,
-                stop_service,
-                uninstall_service,
-            )
-        except ImportError as e:
-            print("ERROR: Windows service functionality is not available.")
-            print(f"Import error: {e}")
-            print("This requires Windows and the pywin32 package.")
-            sys.exit(1)
-
-        if not is_windows_service_available():
-            print("ERROR: Windows service functionality is not available.")
-            print("This requires Windows and the pywin32 package.")
-            sys.exit(1)
-
-        config_path = str(config) if config else None
-
-        if service_install:
-            auto_start = not service_manual
-            success = install_service(config_path, auto_start)
-            sys.exit(0 if success else 1)
-        elif service_uninstall:
-            success = uninstall_service()
-            sys.exit(0 if success else 1)
-        elif service_start:
-            success = start_service()
-            sys.exit(0 if success else 1)
-        elif service_stop:
-            success = stop_service()
-            sys.exit(0 if success else 1)
-        elif service_status:
-            status = get_service_status()
-            print(f"Service status: {status}")
-            sys.exit(0)
-
-        return  # Exit after handling service commands
-
-    # Detect if running as Windows service (parent process is services.exe)
-    is_windows_service = False
-    if sys.platform == "win32" and not service:
-        try:
-            import psutil
-
-            parent = psutil.Process().parent()
-            if parent and parent.name().lower() == "services.exe":
-                is_windows_service = True
-        except Exception:
-            pass
-
-    # Handle Windows service mode
-    if service or is_windows_service:
-        try:
-            import win32serviceutil
-
-            from tls_cert_monitor.windows_service import TLSCertMonitorService
-
-            # Use the service framework
-            win32serviceutil.HandleCommandLine(TLSCertMonitorService)
-            return
-        except ImportError as e:
-            print("ERROR: Windows service functionality is not available.")
-            print(f"Import error: {e}")
-            print("This requires Windows and the pywin32 package.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"ERROR: Exception in service mode: {e}")
-            sys.exit(1)
 
     try:
         monitor = TLSCertMonitor(str(config) if config else None, dry_run=dry_run)
