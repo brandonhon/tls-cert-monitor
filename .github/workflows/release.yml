@@ -243,7 +243,7 @@ jobs:
     - name: Test Windows binary help flag
       run: |
         Write-Host "🧪 Testing Windows binary help flag..."
-        $binaryPath = "dist\${{ env.PROJECT_NAME }}.dist\${{ env.PROJECT_NAME }}.exe"
+        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
 
         Write-Host "Testing --help flag:"
         & $binaryPath --help
@@ -276,11 +276,11 @@ jobs:
         Write-Host "ACTIONS_ID_TOKEN_REQUEST_URL is set: $($env:ACTIONS_ID_TOKEN_REQUEST_URL -ne $null)"
 
         # Try signing with better error handling
-        $binaryPath = "dist/${{ env.PROJECT_NAME }}.dist/${{ env.PROJECT_NAME }}.exe"
+        $binaryPath = "dist/${{ env.PROJECT_NAME }}.exe"
         try {
           cosign sign-blob --yes $binaryPath --output-signature "$binaryPath.sig" --output-certificate "$binaryPath.crt"
           Write-Host "✅ Windows binary signed successfully"
-          Get-ChildItem -Path "dist/${{ env.PROJECT_NAME }}.dist"
+          Get-ChildItem -Path "dist"
         } catch {
           Write-Host "⚠️ Failed to sign Windows binary with cosign - continuing without signature"
           Write-Host "Note: This might be due to OIDC token issues. Binary is still valid."
@@ -288,7 +288,7 @@ jobs:
           # Create empty signature files so the workflow doesn't break
           New-Item -Path "$binaryPath.sig" -ItemType File -Force
           New-Item -Path "$binaryPath.crt" -ItemType File -Force
-          Get-ChildItem -Path "dist/${{ env.PROJECT_NAME }}.dist"
+          Get-ChildItem -Path "dist"
         }
 
     - name: Upload Windows binary
@@ -296,7 +296,9 @@ jobs:
       with:
         name: windows-amd64-binary
         path: |
-          dist/${{ env.PROJECT_NAME }}.dist/
+          dist/${{ env.PROJECT_NAME }}.exe
+          dist/${{ env.PROJECT_NAME }}.exe.sig
+          dist/${{ env.PROJECT_NAME }}.exe.crt
         retention-days: 30
 
   build-macos-amd64:
@@ -575,23 +577,15 @@ jobs:
           echo "✅ Created linux-amd64.tar.gz (with signature)"
         fi
 
-        # Windows binary (standalone directory)
+        # Windows binary (onefile)
         echo "🔍 Debugging Windows binary structure:"
         ls -la windows-amd64-binary/ || echo "No windows-amd64-binary directory"
-        find windows-amd64-binary -name "*.exe" -o -name "*.dist" 2>/dev/null || echo "No exe or dist files found"
 
-        if [ -d windows-amd64-binary/${{ env.PROJECT_NAME }}.dist ]; then
-          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.dist
-          echo "✅ Created windows-amd64.tar.gz (standalone directory with dependencies)"
-        elif [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
-          # Files are directly in the artifact, recreate the directory structure
-          mkdir -p temp-windows/${{ env.PROJECT_NAME }}.dist
-          cp -r windows-amd64-binary/* temp-windows/${{ env.PROJECT_NAME }}.dist/
-          tar -czf release-assets/windows-amd64.tar.gz -C temp-windows ${{ env.PROJECT_NAME }}.dist
-          rm -rf temp-windows
-          echo "✅ Created windows-amd64.tar.gz (recreated standalone directory structure)"
+        if [ -f windows-amd64-binary/${{ env.PROJECT_NAME }}.exe ]; then
+          tar -czf release-assets/windows-amd64.tar.gz -C windows-amd64-binary ${{ env.PROJECT_NAME }}.exe ${{ env.PROJECT_NAME }}.exe.sig ${{ env.PROJECT_NAME }}.exe.crt
+          echo "✅ Created windows-amd64.tar.gz (onefile binary with signature)"
         else
-          echo "❌ Windows binary not found in expected format"
+          echo "❌ Windows binary not found at windows-amd64-binary/${{ env.PROJECT_NAME }}.exe"
           ls -la windows-amd64-binary/ || echo "Directory not accessible"
         fi
 
