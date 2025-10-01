@@ -15,8 +15,8 @@ VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_PIP := $(VENV_DIR)/bin/pip
 NUITKA := $(VENV_PYTHON) -m nuitka
 
-# Nuitka build flags (--standalone only, not --onefile for better compatibility)
-NUITKA_FLAGS := --standalone --enable-plugin=pkg-resources --assume-yes-for-downloads
+# Nuitka build flags (--onefile for single executable deployment)
+NUITKA_FLAGS := --onefile --enable-plugin=pkg-resources --assume-yes-for-downloads
 
 # Include package for your source code
 INCLUDE_SRC := --include-package=tls_cert_monitor

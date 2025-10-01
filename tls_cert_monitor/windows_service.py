@@ -188,14 +188,8 @@ if win32serviceutil:
                 self.logger.exception(f"Monitor execution failed: {e}")
 
 else:
-    # Dummy service for non-Windows platforms
-    class TLSCertMonitorService:  # type: ignore[no-redef]
-        _svc_name_ = "TLSCertMonitor"
-        _svc_display_name_ = "TLS Certificate Monitor"
-        _svc_description_ = "Monitor TLS/SSL certificates for expiration and security issues"
-
-        def __init__(self, args: Any) -> None:
-            pass
+    # Windows service functionality not available on this platform
+    TLSCertMonitorService = None  # type: ignore[misc,assignment]
 
 
 # =========================
@@ -206,75 +200,44 @@ else:
 def install_service(config_path: Optional[str] = None, auto_start: bool = True) -> bool:
     """Install the TLS Certificate Monitor as a Windows service.
 
-    Handles both Python script mode and Nuitka compiled binary mode.
+    Designed for Nuitka onefile compiled binary mode.
     """
     if not win32serviceutil:
         raise RuntimeError("pywin32 is required for Windows service support")
 
     try:
-        # Build service arguments
-        service_args = [TLSCertMonitorService._svc_name_]
+        # Use the current executable path (onefile binary)
+        exe_name = sys.argv[0]
+        image_path = f'"{exe_name}"'
+
         if config_path:
-            service_args.extend(["--config", config_path])
+            image_path += f' --config "{config_path}"'
 
-        # Detect execution mode - critical for proper service installation
-        is_compiled = getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
-
-        if not is_compiled:
-            # Standard Python script mode
-            exe_args = (
-                f'"{__file__}" {" ".join(service_args[1:])}'
-                if len(service_args) > 1
-                else f'"{__file__}"'
-            )
-
-            win32serviceutil.InstallService(
-                pythonClassString=f"{TLSCertMonitorService.__module__}.{TLSCertMonitorService.__name__}",
-                serviceName=TLSCertMonitorService._svc_name_,
-                displayName=TLSCertMonitorService._svc_display_name_,
-                description=TLSCertMonitorService._svc_description_,
-                startType=(
+        # Use Windows Service Control Manager directly for onefile binary
+        hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
+        try:
+            service_handle = win32service.CreateService(
+                hs,
+                TLSCertMonitorService._svc_name_,
+                TLSCertMonitorService._svc_display_name_,
+                win32service.SERVICE_ALL_ACCESS,
+                win32service.SERVICE_WIN32_OWN_PROCESS,
+                (
                     win32service.SERVICE_AUTO_START
                     if auto_start
                     else win32service.SERVICE_DEMAND_START
                 ),
-                exeName=sys.executable,
-                exeArgs=exe_args,
+                win32service.SERVICE_ERROR_NORMAL,
+                image_path,
+                None,  # No load order group
+                0,  # No tag ID
+                None,  # No dependencies
+                None,  # Use LocalSystem account
+                None,  # No password
             )
-        else:
-            # Nuitka compiled binary mode - use direct SCM API
-            # This ensures correct image path for compiled executables
-            exe_name = sys.argv[0]  # Full path to compiled executable
-            image_path = f'"{exe_name}"'
-
-            if config_path:
-                image_path += f' --config "{config_path}"'
-
-            # Use Windows Service Control Manager directly
-            hs = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
-            try:
-                service_handle = win32service.CreateService(
-                    hs,
-                    TLSCertMonitorService._svc_name_,
-                    TLSCertMonitorService._svc_display_name_,
-                    win32service.SERVICE_ALL_ACCESS,
-                    win32service.SERVICE_WIN32_OWN_PROCESS,
-                    (
-                        win32service.SERVICE_AUTO_START
-                        if auto_start
-                        else win32service.SERVICE_DEMAND_START
-                    ),
-                    win32service.SERVICE_ERROR_NORMAL,
-                    image_path,  # Correct binary path
-                    None,  # No load order group
-                    0,  # No tag ID
-                    None,  # No dependencies
-                    None,  # Use LocalSystem account
-                    None,  # No password
-                )
-                win32service.CloseServiceHandle(service_handle)
-            finally:
-                win32service.CloseServiceHandle(hs)
+            win32service.CloseServiceHandle(service_handle)
+        finally:
+            win32service.CloseServiceHandle(hs)
 
         print(f"Service '{TLSCertMonitorService._svc_display_name_}' installed successfully")
         if auto_start:

@@ -179,7 +179,7 @@ jobs:
 
         # Base Nuitka flags for antivirus compatibility and Windows service support
         $FLAGS = @(
-          "--standalone",
+          "--onefile",
           "--enable-plugin=pkg-resources",
           "--assume-yes-for-downloads",
           "--follow-imports",
@@ -219,40 +219,20 @@ jobs:
         python -m nuitka $FLAGS main.py
 
         Write-Host "📄 Verifying Windows binary..."
-        $binaryDir = "dist\main.dist"
-        $binaryPath = "$binaryDir\${{ env.PROJECT_NAME }}.exe"
+        $binaryPath = "dist\${{ env.PROJECT_NAME }}.exe"
 
         if (Test-Path $binaryPath) {
           $fileInfo = Get-Item $binaryPath
           Write-Host "✅ Binary created: $($fileInfo.Name)"
           Write-Host "📊 Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
 
-          # Display directory contents
-          Write-Host "📁 Standalone directory contents:"
-          Get-ChildItem $binaryDir | Format-Table Name, Length, LastWriteTime
-
-          # Add Windows Defender exclusion for the entire directory
+          # Add Windows Defender exclusion for the binary
           try {
-            Add-MpPreference -ExclusionPath (Resolve-Path $binaryDir).Path -ErrorAction SilentlyContinue
-            Write-Host "✅ Added Windows Defender exclusion for binary directory"
+            Add-MpPreference -ExclusionPath (Resolve-Path $binaryPath).Path -ErrorAction SilentlyContinue
+            Write-Host "✅ Added Windows Defender exclusion for binary"
           } catch {
             Write-Host "⚠️ Could not add binary exclusion: $($_.Exception.Message)"
           }
-
-          # Rename directory for better user experience
-          $targetDir = "dist\${{ env.PROJECT_NAME }}.dist"
-          Write-Host "📁 Renaming directory from $binaryDir to $targetDir"
-
-          # Remove target if it exists
-          if (Test-Path $targetDir) {
-            Write-Host "Removing existing target directory..."
-            Remove-Item $targetDir -Recurse -Force
-          }
-
-          # Copy and remove source (more reliable than Rename-Item)
-          Copy-Item $binaryDir $targetDir -Recurse -Force
-          Remove-Item $binaryDir -Recurse -Force
-          Write-Host "✅ Successfully moved directory to $targetDir for user convenience"
         } else {
           Write-Host "❌ Binary not found at $binaryPath!"
           Write-Host "📁 Contents of dist directory:"

@@ -582,11 +582,11 @@ sudo journalctl -u tls-cert-monitor -f
 
 ### Windows Service
 
-Install as a Windows service using the simplified native Windows service implementation.
+Install as a Windows service using the onefile binary with native Windows service implementation.
 
 #### Windows Service Installation
 
-The application includes minimal Windows service support designed to avoid timeout issues:
+The application includes minimal Windows service support designed to avoid timeout issues. The Windows binary is now distributed as a single executable file (onefile mode) for simplified deployment:
 
 **Prerequisites:**
 - Windows with Administrator privileges
@@ -604,8 +604,8 @@ scripts\install-windows-service-native.bat
 
 **Manual Installation:**
 ```cmd
-# Navigate to the extracted standalone directory
-cd tls-cert-monitor.dist
+# Extract the onefile binary from the archive
+tar -xzf windows-amd64.tar.gz
 
 # Install service with automatic start and config file
 .\tls-cert-monitor.exe --service-install --config "C:\ProgramData\TLSCertMonitor\config.yaml"
@@ -619,7 +619,7 @@ cd tls-cert-monitor.dist
 
 **Service Management:**
 ```cmd
-# Application commands (from tls-cert-monitor.dist directory)
+# Application commands (from directory containing the onefile binary)
 .\tls-cert-monitor.exe --service-start
 .\tls-cert-monitor.exe --service-stop
 .\tls-cert-monitor.exe --service-status

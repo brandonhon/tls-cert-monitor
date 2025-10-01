@@ -19,18 +19,26 @@
   tags:
     - download
 
-- name: Extract Windows binary
+- name: Extract Windows binary (onefile)
   win_shell: |
     $tarPath = "{{ install_dir_windows }}\\tls-cert-monitor-{{ release_version }}.tar.gz"
     $extractPath = "{{ install_dir_windows }}"
+    $finalExePath = "$extractPath\\tls-cert-monitor.exe"
 
-    # Extract tar.gz
+    # Extract tar.gz - onefile binary is directly in the archive
     tar -xzf $tarPath -C $extractPath
 
-    # Verify executable exists
-    if (-not (Test-Path "$extractPath\\tls-cert-monitor.exe")) {
-        throw "Failed to extract tls-cert-monitor.exe"
+    # Verify executable exists (onefile mode creates single .exe)
+    if (-not (Test-Path $finalExePath)) {
+        # List contents to debug
+        Write-Host "Contents of extraction directory:"
+        Get-ChildItem $extractPath -Recurse | Select-Object FullName, Length
+        throw "Failed to extract tls-cert-monitor.exe from onefile archive"
     }
+
+    Write-Host "Successfully extracted onefile binary: $finalExePath"
+    $fileInfo = Get-Item $finalExePath
+    Write-Host "Binary size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
 
     # Remove archive
     Remove-Item $tarPath -Force

@@ -154,7 +154,7 @@ The application uses YAML configuration with these key sections:
 - **Docker images**: Multi-architecture container images published to GitHub Container Registry
 - **Automated releases**: GitHub Actions workflow creates releases on every push to main branch
 - **Binary packaging**: Platform-specific tar.gz archives (e.g., `linux-amd64.tar.gz`)
-- **Nuitka compilation**: Python-to-binary compilation for standalone executables
+- **Nuitka compilation**: Python-to-binary compilation for onefile executables
 - **Cross-compilation**: Docker buildx for ARM64 Linux builds, native compilation for other platforms
 
 ### Distribution Channels
