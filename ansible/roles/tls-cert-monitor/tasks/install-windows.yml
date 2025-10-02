@@ -84,8 +84,9 @@
     # Set service description
     sc.exe description $serviceName $serviceDescription
 
-    # Start the service
+    # Start the service (with enhanced startup coordination)
     Write-Host "Starting Windows service..."
+    Write-Host "Note: Application includes enhanced service startup coordination to prevent 1053 errors"
     $result = sc.exe start $serviceName
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to start Windows service. Exit code: $LASTEXITCODE. Output: $result"

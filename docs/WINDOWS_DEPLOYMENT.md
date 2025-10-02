@@ -81,6 +81,16 @@ In enterprise environments:
 1. Run Command Prompt or PowerShell as Administrator
 2. Ensure exclusions are configured (see above)
 
+### Enhanced Service Support
+
+The application now includes **native Windows service detection and handling**. When running as a service, it automatically:
+
+- ✅ Detects Windows service environment
+- ✅ Configures proper startup timing to prevent 1053 errors
+- ✅ Sets up Windows Event Log integration
+- ✅ Handles service shutdown signals gracefully
+- ✅ Manages async event loops in service context
+
 ### Installation Commands
 
 ```powershell
@@ -88,7 +98,7 @@ In enterprise environments:
 $binaryPath = "C:\path\to\tls-cert-monitor.exe --config C:\path\to\config.yaml"
 sc.exe create TLSCertMonitor binPath= $binaryPath DisplayName= "TLS Certificate Monitor" start= auto
 
-# Start the service
+# Start the service (now with enhanced startup coordination)
 sc.exe start TLSCertMonitor
 
 # Check service status
@@ -97,6 +107,15 @@ sc.exe query TLSCertMonitor
 # Or use PowerShell cmdlets
 Get-Service TLSCertMonitor
 ```
+
+### Service Behavior
+
+When the application detects it's running as a Windows service:
+
+1. **Startup Coordination**: Uses threading and event coordination to signal successful startup to SCM within 30 seconds
+2. **Signal Handling**: Properly responds to service stop/shutdown requests
+3. **Event Logging**: Automatically logs to Windows Event Log (Application log, source: TLSCertMonitor)
+4. **Environment Setup**: Configures working directory, temp paths, and logging for service context
 
 ### Troubleshooting Service Installation
 
