@@ -33,6 +33,7 @@ class TLSCertMonitorService(win32serviceutil.ServiceFramework):
     _svc_name_ = "TLSCertMonitor"
     _svc_display_name_ = "TLS Certificate Monitor"
     _svc_description_ = "Monitor TLS/SSL certificates for expiration and security issues"
+    _svc_python_location_: Optional[str] = None  # Will be set dynamically
 
     def __init__(self, args: Any) -> None:
         win32serviceutil.ServiceFramework.__init__(self, args)
@@ -183,6 +184,9 @@ def install_service(config_path: Optional[str] = None) -> None:
     if not win32serviceutil:
         raise ImportError("pywin32 is required for Windows service support")
 
+    # Set the service executable path to the current executable
+    TLSCertMonitorService._svc_python_location_ = sys.executable
+
     # Install with config path in the command line
     service_args = [TLSCertMonitorService._svc_name_]
     if config_path:
@@ -200,6 +204,9 @@ def run_service() -> None:
     """Run the Windows service."""
     if not win32serviceutil:
         raise ImportError("pywin32 is required for Windows service support")
+
+    # Set the service executable path to the current executable
+    TLSCertMonitorService._svc_python_location_ = sys.executable
 
     win32serviceutil.HandleCommandLine(TLSCertMonitorService)
 
