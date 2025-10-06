@@ -5,10 +5,12 @@ TLS Certificate Monitor - Main Application Entry Point
 
 import asyncio
 import logging
+import os
 import signal
 import sys
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 import uvicorn
@@ -22,6 +24,251 @@ from tls_cert_monitor.hot_reload import HotReloadManager
 from tls_cert_monitor.logger import setup_logging
 from tls_cert_monitor.metrics import MetricsCollector
 from tls_cert_monitor.scanner import CertificateScanner
+
+
+def _detect_windows_service() -> bool:
+    """
+    Enhanced detection for Windows service environment.
+
+    Returns True if the application is likely running as a Windows service.
+    """
+    if sys.platform != "win32":
+        return False
+
+    # Multiple detection methods for reliability
+    service_indicators = [  # type: ignore[unreachable]
+        # No console attached (typical for services)
+        not sys.stdin.isatty(),
+        # No interactive session
+        not hasattr(sys, "ps1"),
+        # Parent process is services.exe (Windows Service Host)
+        _is_parent_services_exe(),
+        # Running in session 0 (services session)
+        _is_session_zero(),
+        # No user profile environment
+        not bool(os.environ.get("USERPROFILE", "")),
+    ]
+
+    # Consider it a service if multiple indicators are present
+    return sum(service_indicators) >= 2
+
+
+def _is_parent_services_exe() -> bool:
+    """Check if parent process is services.exe (Windows Service Host)."""
+    try:
+        import psutil
+
+        current_process = psutil.Process()
+        parent_process = current_process.parent()
+        return bool(parent_process and parent_process.name().lower() == "services.exe")
+    except (ImportError, psutil.Error):
+        return False
+
+
+def _is_session_zero() -> bool:
+    """Check if running in session 0 (Windows services session)."""
+    try:
+        import os
+
+        session_id = os.environ.get("SESSIONNAME", "")
+        return session_id.lower() in ["", "services"]
+    except Exception:
+        return False
+
+
+def _configure_service_environment() -> None:
+    """Configure environment for Windows service operation."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    # Set up proper working directory for service
+    if hasattr(sys, "_MEIPASS"):
+        # Running as compiled binary
+        working_dir = Path(sys.executable).parent
+    else:
+        # Running as script
+        working_dir = Path(__file__).parent
+
+    os.chdir(working_dir)
+
+    # Ensure temp directory is available
+    temp_dir = Path(tempfile.gettempdir()) / "tls-cert-monitor-service"
+    temp_dir.mkdir(exist_ok=True)
+    os.environ["TMP"] = str(temp_dir)
+    os.environ["TEMP"] = str(temp_dir)
+
+    # Set service-friendly logging defaults
+    os.environ.setdefault("TLS_LOG_LEVEL", "INFO")
+
+    # Configure Windows Event Log source
+    _setup_windows_event_log()
+
+
+def _setup_windows_event_log() -> None:
+    """Set up Windows Event Log source for service logging."""
+    try:
+        import winreg  # type: ignore[import-untyped]
+
+        # Create event log source registry entry
+        key_path = r"SYSTEM\CurrentControlSet\Services\EventLog\Application\TLSCertMonitor"
+
+        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:  # type: ignore[attr-defined]
+            # Set message file (points to system message DLL)
+            winreg.SetValueEx(  # type: ignore[attr-defined]
+                key, "EventMessageFile", 0, winreg.REG_SZ, r"%SystemRoot%\System32\kernel32.dll"  # type: ignore[attr-defined]
+            )
+            winreg.SetValueEx(key, "TypesSupported", 0, winreg.REG_DWORD, 7)  # type: ignore[attr-defined]
+
+    except (ImportError, OSError, PermissionError):
+        # Event log setup failed, but service can still run
+        pass
+
+
+def _service_startup_sequence(monitor: "TLSCertMonitor") -> None:
+    """
+    Enhanced startup sequence for Windows service operation.
+
+    This provides better coordination with the Service Control Manager
+    and handles the async event loop in a service-friendly way.
+    """
+    import time
+
+    # Service startup coordination
+    startup_success = threading.Event()
+    shutdown_requested = threading.Event()
+
+    def service_main() -> None:
+        """Main service execution in separate thread."""
+        try:
+            # Small delay to allow SCM to register service as starting
+            time.sleep(1)
+
+            # Create new event loop for service thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            # Set up signal handlers for service shutdown
+            _setup_service_signal_handlers(shutdown_requested, loop)
+
+            try:
+                # Initialize and run the monitor
+                loop.run_until_complete(monitor.initialize())
+                startup_success.set()  # Signal successful startup
+
+                # Run with shutdown monitoring
+                loop.run_until_complete(_run_with_shutdown_monitoring(monitor, shutdown_requested))
+
+            finally:
+                # Clean shutdown
+                loop.run_until_complete(monitor.shutdown())
+                loop.close()
+
+        except Exception as e:
+            # Log to Windows Event Log
+            _log_service_error(f"Service execution failed: {e}")
+            raise
+
+    # Start service in background thread
+    service_thread = threading.Thread(target=service_main, daemon=False)
+    service_thread.start()
+
+    # Wait for startup or timeout
+    if startup_success.wait(timeout=30):
+        # Service started successfully, wait for it to complete
+        service_thread.join()
+    else:
+        # Startup timeout - this prevents the 1053 error
+        shutdown_requested.set()
+        service_thread.join(timeout=10)
+        raise TimeoutError("Service failed to start within 30 seconds")
+
+
+def _setup_service_signal_handlers(
+    shutdown_event: threading.Event, loop: asyncio.AbstractEventLoop
+) -> None:
+    """Set up signal handlers for graceful service shutdown."""
+
+    def signal_handler(signum: int, frame: Any) -> None:
+        shutdown_event.set()
+        # Schedule shutdown on the event loop
+        if loop and not loop.is_closed():
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(_shutdown_handler()))
+
+    # Windows service shutdown signals
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Windows-specific signals
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, signal_handler)
+
+
+async def _shutdown_handler() -> None:
+    """Handle graceful shutdown."""
+    # Get all running tasks and cancel them
+    tasks = [task for task in asyncio.all_tasks() if not task.done()]
+    for task in tasks:
+        task.cancel()
+
+    # Wait for tasks to complete cancellation
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _run_with_shutdown_monitoring(
+    monitor: "TLSCertMonitor", shutdown_event: threading.Event
+) -> None:
+    """Run the monitor with periodic shutdown checks."""
+
+    async def shutdown_monitor() -> None:
+        """Monitor for shutdown requests."""
+        while not shutdown_event.is_set():
+            await asyncio.sleep(1)
+
+    # Create monitoring task
+    shutdown_task = asyncio.create_task(shutdown_monitor())
+
+    # Create main application task
+    app_task = asyncio.create_task(monitor.run())
+
+    try:
+        # Wait for either shutdown request or app completion
+        _, pending = await asyncio.wait(
+            [app_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # Cancel pending tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    except Exception as e:
+        _log_service_error(f"Error in service monitoring: {e}")
+        raise
+
+
+def _log_service_error(message: str) -> None:
+    """Log error to Windows Event Log if available."""
+    try:
+        import win32evtlog  # type: ignore[import-untyped]
+        import win32evtlogutil  # type: ignore[import-untyped]
+
+        win32evtlogutil.ReportEvent(  # type: ignore[attr-defined]
+            "TLSCertMonitor",
+            1001,  # Event ID
+            eventType=win32evtlog.EVENTLOG_ERROR_TYPE,  # type: ignore[attr-defined]
+            strings=[message],
+        )
+    except ImportError:
+        # Fallback to stderr
+        print(f"ERROR: {message}", file=sys.stderr)
+    except Exception:
+        # Last resort - just print
+        print(f"ERROR: {message}", file=sys.stderr)
 
 
 class TLSCertMonitor:
@@ -42,7 +289,7 @@ class TLSCertMonitor:
 
     def _ensure_temp_directory(self) -> None:
         """Ensure Nuitka temp directory exists for compiled binaries."""
-        import os  # noqa: F401
+        import os
         import platform
         import tempfile
 
