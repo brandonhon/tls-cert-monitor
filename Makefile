@@ -18,6 +18,9 @@ NUITKA := $(VENV_PYTHON) -m nuitka
 # Nuitka build flags (--onefile for single executable deployment)
 NUITKA_FLAGS := --onefile --enable-plugin=pkg-resources --assume-yes-for-downloads
 
+# Windows-specific Nuitka flags for pywin32 support
+NUITKA_WIN_FLAGS := --include-module=win32serviceutil --include-module=win32service --include-module=win32event --include-module=servicemanager
+
 # Include package for your source code
 INCLUDE_SRC := --include-package=tls_cert_monitor
 
@@ -77,7 +80,7 @@ format: ## Format code with black and isort
 .PHONY: lint
 lint: ## Run linters (flake8, pylint)
 	@printf "$(BLUE)🔍 Running linters...$(NC)\n"
-	@$(VENV_PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache
+	@$(VENV_PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache,YOYO
 	@$(VENV_PYTHON) -m pylint tls_cert_monitor/ --disable=C,R,I,W1203,W0718,W0212 --msg-template='{path}:{line}: {msg_id}: {msg}'
 	@printf "$(GREEN)✅ Linting completed$(NC)\n"
 
@@ -104,7 +107,7 @@ format-system: ## Format code with black and isort (system-wide)
 .PHONY: lint-system
 lint-system: ## Run linters (system-wide)
 	@printf "$(BLUE)🔍 Running linters (system-wide)...$(NC)\n"
-	@$(PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache
+	@$(PYTHON) -m flake8 . --ignore=E501,W503 --exclude=.venv,build,dist,*.egg-info,.git,__pycache__,.pytest_cache,.mypy_cache,YOYO
 	@$(PYTHON) -m pylint tls_cert_monitor/ --disable=C,R,I,W1203,W0718,W0212 --msg-template='{path}:{line}: {msg_id}: {msg}'
 	@printf "$(GREEN)✅ Linting completed$(NC)\n"
 
@@ -271,7 +274,7 @@ build-windows: ## Build Windows binary (Docker fallback if not on Windows)
 	@if [ "$$(uname | grep -i cygwin\|mingw\|msys)" ] || [ "$$(uname)" = "MINGW64_NT-10.0" ]; then \
 		printf "$(BLUE)🪟 Building Windows binary locally...$(NC)\n"; \
 		mkdir -p dist; \
-		$(NUITKA) $(NUITKA_FLAGS) $(INCLUDE_SRC) \
+		$(NUITKA) $(NUITKA_FLAGS) $(NUITKA_WIN_FLAGS) $(INCLUDE_SRC) \
 			--jobs=4 \
 			--clang \
 			--lto=no \

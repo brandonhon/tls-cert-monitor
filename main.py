@@ -236,10 +236,20 @@ class TLSCertMonitor:
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
 @click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
+@click.option("--service-install", is_flag=True, help="Install as Windows service")
+@click.option("--service-uninstall", is_flag=True, help="Uninstall Windows service")
+@click.option("--service-start", is_flag=True, help="Start Windows service")
+@click.option("--service-stop", is_flag=True, help="Stop Windows service")
+@click.option("--service-debug", is_flag=True, help="Run Windows service in debug mode")
 def main(
     config: Optional[Path],
     version: bool,
     dry_run: bool,
+    service_install: bool,
+    service_uninstall: bool,
+    service_start: bool,
+    service_stop: bool,
+    service_debug: bool,
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
 
@@ -249,17 +259,68 @@ def main(
         return
 
     try:
+        # Handle Windows service management commands
+        if sys.platform == "win32" and any(
+            [service_install, service_uninstall, service_start, service_stop, service_debug]
+        ):
+            try:
+                import win32serviceutil
+
+                from tls_cert_monitor.windows_service import TLSCertMonitorService
+
+                if service_install:
+                    win32serviceutil.InstallService(
+                        TLSCertMonitorService._svc_python_location_,
+                        TLSCertMonitorService._svc_name_,
+                        TLSCertMonitorService._svc_display_name_,
+                        description=TLSCertMonitorService._svc_description_,
+                    )
+                    print(
+                        f"Service '{TLSCertMonitorService._svc_display_name_}' installed successfully"
+                    )
+                    return
+
+                elif service_uninstall:
+                    win32serviceutil.RemoveService(TLSCertMonitorService._svc_name_)
+                    print(
+                        f"Service '{TLSCertMonitorService._svc_display_name_}' uninstalled successfully"
+                    )
+                    return
+
+                elif service_start:
+                    win32serviceutil.StartService(TLSCertMonitorService._svc_name_)
+                    print(
+                        f"Service '{TLSCertMonitorService._svc_display_name_}' started successfully"
+                    )
+                    return
+
+                elif service_stop:
+                    win32serviceutil.StopService(TLSCertMonitorService._svc_name_)
+                    print(
+                        f"Service '{TLSCertMonitorService._svc_display_name_}' stopped successfully"
+                    )
+                    return
+
+                elif service_debug:
+                    # Run service in debug mode (console)
+                    win32serviceutil.DebugService(TLSCertMonitorService)
+                    return
+
+            except ImportError:
+                print("Error: pywin32 is required for Windows service support", file=sys.stderr)
+                sys.exit(1)
+            except Exception as e:
+                print(f"Service operation failed: {e}", file=sys.stderr)
+                sys.exit(1)
+
         # Check if running as Windows service using proper detection
         if sys.platform == "win32":
             try:
-                from tls_cert_monitor.windows_service_handler import (
-                    is_running_as_service,
-                    run_as_service,
-                )
+                from tls_cert_monitor.windows_service import is_running_as_service, run_service
 
                 if is_running_as_service():
-                    # We're running as a Windows service - use proper SCM communication
-                    run_as_service()
+                    # We're running as a Windows service - use pywin32 ServiceFramework
+                    run_service()
                     return
             except ImportError:
                 # Windows service handler not available, fall back to console mode
