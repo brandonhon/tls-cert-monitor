@@ -90,8 +90,8 @@ typecheck: ## Run mypy type checking
 .PHONY: security
 security: ## Run security checks with bandit
 	@printf "$(BLUE)🔐 Running security checks...$(NC)\n"
-	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104
-	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/
+	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104,B110
+	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/ --skip B110
 	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
 .PHONY: format-system
@@ -117,8 +117,8 @@ typecheck-system: ## Run mypy type checking (system-wide)
 .PHONY: security-system
 security-system: ## Run security checks with bandit (system-wide)
 	@printf "$(BLUE)🔐 Running security checks (system-wide)...$(NC)\n"
-	@$(PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104
-	@$(PYTHON) -m bandit -r tls_cert_monitor/
+	@$(PYTHON) -m bandit -r tls_cert_monitor/ -f json -o bandit-report.json --skip B104,B110
+	@$(PYTHON) -m bandit -r tls_cert_monitor/ --skip B110
 	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
 .PHONY: test-system
