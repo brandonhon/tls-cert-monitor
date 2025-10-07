@@ -102,7 +102,7 @@ Use the feature request template and include:
 - **Config**: YAML-based configuration with hot reload
 
 ### Build System
-- **Nuitka**: Python-to-binary compilation
+- **Nuitka-winsvc**: Python-to-binary compilation with native Windows service support
 - **Docker**: Containerized cross-platform builds
 - **GitHub Actions**: Automated CI/CD pipeline
 

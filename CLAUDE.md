@@ -92,16 +92,21 @@ The application supports both console and service modes with the following optio
 - `--version/-v`: Show version information
 - `--dry-run`: Enable dry-run mode (scan only, don't start server)
 
-**Windows Service Installation:**
-Windows service installation is handled via PowerShell scripts and Ansible automation, not through command-line flags.
+**Windows Service (via Nuitka-winsvc compilation):**
+- `.\tls-cert-monitor.exe install`: Install as Windows service
+- `.\tls-cert-monitor.exe uninstall`: Uninstall Windows service
+- Service uses standard config path: `C:\ProgramData\tls-cert-monitor\config.yaml`
 
 Examples:
 ```bash
 # Run in console mode
 python main.py --config=config.yaml
 
-# For Windows service installation, use PowerShell scripts:
-.\scripts\Install-WindowsService.ps1
+# Windows service installation (run as Administrator)
+.\tls-cert-monitor.exe install
+
+# Windows service uninstallation (run as Administrator)
+.\tls-cert-monitor.exe uninstall
 ```
 
 ### Key Patterns
@@ -125,6 +130,7 @@ python main.py --config=config.yaml
 - **watchdog**: File system monitoring for hot reload
 - **pydantic**: Configuration validation
 - **psutil**: System resource monitoring
+- **Nuitka-winsvc**: Native Windows service compilation (Windows only)
 
 ### Configuration Structure
 The application uses YAML configuration with these key sections:
