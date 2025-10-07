@@ -89,17 +89,18 @@ The Windows binary is compiled with **Nuitka-winsvc** and includes native Window
 - ✅ **Built-in service support**: Native Windows service functionality
 - ✅ **Dual functionality**: Same executable works as service and console application
 - ✅ **Simple installation**: No external scripts required
-- ✅ **Config path support**: Pass configuration file during service installation
+- ✅ **Standard config path**: Uses `C:\ProgramData\tls-cert-monitor\config.yaml`
 - ✅ **Administrator privileges**: Required only for installation/uninstallation
 
 ### Installation Commands (Simple)
 
 ```powershell
-# Basic service installation
-.\tls-cert-monitor.exe install
+# Create config directory and place your config file
+mkdir "C:\ProgramData\tls-cert-monitor"
+copy config.yaml "C:\ProgramData\tls-cert-monitor\config.yaml"
 
-# Install service with custom config path
-.\tls-cert-monitor.exe install --config "C:\path\to\config.yaml"
+# Install service
+.\tls-cert-monitor.exe install
 
 # Uninstall service
 .\tls-cert-monitor.exe uninstall
@@ -142,7 +143,7 @@ The Nuitka-winsvc compiled service automatically:
 2. **Startup Coordination**: Handles proper startup timing to prevent 1053 errors
 3. **Signal Handling**: Properly responds to service stop/shutdown requests
 4. **Event Logging**: Integrated Windows Event Log support
-5. **Configuration**: Uses config path passed during installation or default locations
+5. **Configuration**: Uses standard path `C:\ProgramData\tls-cert-monitor\config.yaml`
 
 ### Troubleshooting Service Installation
 
@@ -209,7 +210,7 @@ Ensure the service account has:
 2. Download new version
 3. Verify signature
 4. Replace executable
-5. Install service: `.\tls-cert-monitor.exe install --config "C:\path\to\config.yaml"`
+5. Install service: `.\tls-cert-monitor.exe install`
 6. Start service: `sc.exe start TLSCertMonitor`
 
 ### Alternative (Manual Service Management)

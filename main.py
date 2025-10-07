@@ -243,9 +243,10 @@ def main(
 ) -> None:
     """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues.
 
+    \b
     Windows Service Management (run as Administrator):
-      .\tls-cert-monitor.exe install [--config path]  Install as Windows service
-      .\tls-cert-monitor.exe uninstall               Uninstall Windows service
+      .\\tls-cert-monitor.exe install    Install as Windows service
+      .\\tls-cert-monitor.exe uninstall  Uninstall Windows service
 
     Note: Service management commands are handled by Nuitka-winsvc and
     will override the normal application behavior."""

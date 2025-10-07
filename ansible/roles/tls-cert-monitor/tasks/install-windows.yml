@@ -66,10 +66,9 @@
         Start-Sleep -Seconds 3
     }
 
-    # Install service using Nuitka-winsvc with config path
+    # Install service using Nuitka-winsvc (config is already in standard location)
     Write-Host "Installing Windows service using Nuitka-winsvc with native service support..."
-    $installArgs = @("install", "--config", "`"$configPath`"")
-    & $exePath @installArgs
+    & $exePath install
 
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install Windows service using Nuitka-winsvc. Exit code: $LASTEXITCODE"
