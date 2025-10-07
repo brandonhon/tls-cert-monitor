@@ -14,12 +14,13 @@ VENV_DIR := .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
 VENV_PIP := $(VENV_DIR)/bin/pip
 NUITKA := $(VENV_PYTHON) -m nuitka
+NUITKA_WINSVC := $(VENV_PYTHON) -m nuitka
 
 # Nuitka build flags (--onefile for single executable deployment)
 NUITKA_FLAGS := --onefile --enable-plugin=pkg-resources --assume-yes-for-downloads
 
-# Windows-specific Nuitka flags for pywin32 support
-NUITKA_WIN_FLAGS := --include-module=win32serviceutil --include-module=win32service --include-module=win32event --include-module=servicemanager
+# Windows-specific Nuitka-winsvc flags for native Windows service support
+NUITKA_WIN_FLAGS := --windows-service --windows-service-name=TLSCertMonitor --windows-service-display-name="TLS Certificate Monitor" --windows-service-description="Monitor TLS/SSL certificates for expiration and security issues"
 
 # Include package for your source code
 INCLUDE_SRC := --include-package=tls_cert_monitor
@@ -272,9 +273,9 @@ build-linux: ## Build Linux binary (Docker fallback if not on Linux)
 .PHONY: build-windows
 build-windows: ## Build Windows binary (Docker fallback if not on Windows)
 	@if [ "$$(uname | grep -i cygwin\|mingw\|msys)" ] || [ "$$(uname)" = "MINGW64_NT-10.0" ]; then \
-		printf "$(BLUE)🪟 Building Windows binary locally...$(NC)\n"; \
+		printf "$(BLUE)🪟 Building Windows service binary with Nuitka-winsvc...$(NC)\n"; \
 		mkdir -p dist; \
-		$(NUITKA) $(NUITKA_FLAGS) $(NUITKA_WIN_FLAGS) $(INCLUDE_SRC) \
+		$(NUITKA_WINSVC) $(NUITKA_FLAGS) $(NUITKA_WIN_FLAGS) $(INCLUDE_SRC) \
 			--jobs=4 \
 			--clang \
 			--lto=no \
@@ -283,7 +284,7 @@ build-windows: ## Build Windows binary (Docker fallback if not on Windows)
 			main.py \
 			--output-dir=dist \
 			--output-filename=$(PROJECT_NAME)-windows.exe; \
-		printf "$(GREEN)✅ Windows binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"; \
+		printf "$(GREEN)✅ Windows service binary: dist/$(PROJECT_NAME)-windows.exe$(NC)\n"; \
 	else \
 		printf "$(YELLOW)⚠️  Not on Windows - attempting Docker build...$(NC)\n"; \
 		if command -v docker >/dev/null 2>&1 && [ -f build/Dockerfile.windows ]; then \

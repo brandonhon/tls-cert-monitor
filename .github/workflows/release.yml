@@ -165,7 +165,7 @@ jobs:
 
     - name: Build Windows binary
       run: |
-        Write-Host "🪟 Building Windows binary with Nuitka..."
+        Write-Host "🪟 Building Windows service binary with Nuitka-winsvc..."
         New-Item -ItemType Directory -Path dist -Force
 
         # Add Windows Defender exclusion for build directory
@@ -177,7 +177,7 @@ jobs:
           Write-Host "⚠️ Could not add Windows Defender exclusion (may require admin): $($_.Exception.Message)"
         }
 
-        # Base Nuitka flags for antivirus compatibility and Windows service support
+        # Nuitka-winsvc flags for native Windows service support
         $FLAGS = @(
           "--onefile",
           "--enable-plugin=pkg-resources",
@@ -187,10 +187,10 @@ jobs:
           "--include-module=uvicorn",
           "--include-module=cryptography",
           "--include-module=prometheus_client",
-          "--include-module=win32serviceutil",
-          "--include-module=win32service",
-          "--include-module=win32event",
-          "--include-module=servicemanager",
+          "--windows-service",
+          "--windows-service-name=TLSCertMonitor",
+          "--windows-service-display-name=TLS Certificate Monitor",
+          "--windows-service-description=Monitor TLS/SSL certificates for expiration and security issues",
           "--output-dir=dist",
           "--output-filename=${{ env.PROJECT_NAME }}",
           "--windows-company-name=TLS Cert Monitor",
@@ -669,7 +669,23 @@ jobs:
         echo "cosign verify ghcr.io/${{ github.repository_owner }}/${{ env.PROJECT_NAME }}:${TAG_NAME} --certificate-identity-regexp 'https://github.com/${{ github.repository }}' --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'" >> release_notes.md
         echo "\`\`\`" >> release_notes.md
         echo "" >> release_notes.md
-        echo "## 🪟 Windows Antivirus Notes" >> release_notes.md
+        echo "## 🪟 Windows Service Support" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "The Windows binary is compiled with Nuitka-winsvc and includes native Windows service support:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Service Management (run as Administrator):**" >> release_notes.md
+        echo "\`\`\`powershell" >> release_notes.md
+        echo "# Install service" >> release_notes.md
+        echo ".\\tls-cert-monitor.exe install" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Uninstall service" >> release_notes.md
+        echo ".\\tls-cert-monitor.exe uninstall" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Run in console mode" >> release_notes.md
+        echo ".\\tls-cert-monitor.exe --config config.yaml" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Antivirus Notes:**" >> release_notes.md
         echo "" >> release_notes.md
         echo "If Windows Defender or antivirus software flags the executable:" >> release_notes.md
         echo "" >> release_notes.md
@@ -681,7 +697,7 @@ jobs:
         echo "   \`\`\`" >> release_notes.md
         echo "4. **Enterprise environments**: Contact your IT administrator to whitelist the application" >> release_notes.md
         echo "" >> release_notes.md
-        echo "The binary is compiled with Nuitka and includes cryptographic libraries, which may trigger false positives." >> release_notes.md
+        echo "The binary is compiled with Nuitka-winsvc and includes cryptographic libraries, which may trigger false positives." >> release_notes.md
         echo "" >> release_notes.md
         echo "## 🐳 Container Images" >> release_notes.md
         echo "" >> release_notes.md
