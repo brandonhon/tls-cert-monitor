@@ -597,9 +597,6 @@ The Windows binary is compiled with **Nuitka-winsvc** and includes native Window
 # Extract the binary from the archive
 tar -xzf windows-amd64.tar.gz
 
-# Navigate to extracted directory
-cd tls-cert-monitor.dist
-
 # Create config directory and place your config file
 mkdir "C:\ProgramData\tls-cert-monitor"
 copy config.yaml "C:\ProgramData\tls-cert-monitor\config.yaml"
@@ -610,10 +607,10 @@ copy config.yaml "C:\ProgramData\tls-cert-monitor\config.yaml"
 
 **Service Management:**
 ```powershell
-# Install service (run as Administrator)
+# Install service
 .\tls-cert-monitor.exe install
 
-# Uninstall service (run as Administrator)
+# Uninstall service
 .\tls-cert-monitor.exe uninstall
 
 # Start/stop service using Windows built-in commands
@@ -630,8 +627,6 @@ Get-Service -Name TLSCertMonitor
 **Console Mode:**
 ```powershell
 # Run in console mode (not as service)
-# Note: Navigate to tls-cert-monitor.dist directory first
-cd tls-cert-monitor.dist
 .\tls-cert-monitor.exe --config config.yaml
 .\tls-cert-monitor.exe --dry-run
 ```
