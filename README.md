@@ -582,63 +582,60 @@ sudo journalctl -u tls-cert-monitor -f
 
 ### Windows Service
 
-Install as a Windows service using the onefile binary with native Windows service implementation.
+Install as a Windows service using the native Windows service support built into the binary via Nuitka-winsvc.
 
 #### Windows Service Installation
 
-The application includes minimal Windows service support designed to avoid timeout issues. The Windows binary is now distributed as a single executable file (onefile mode) for simplified deployment:
+The Windows binary is compiled with **Nuitka-winsvc** and includes native Windows service support. No additional dependencies or scripts are required:
 
 **Prerequisites:**
 - Windows with Administrator privileges
-- pywin32 package (automatically included in pre-compiled binaries)
+- Configuration file (optional)
 
-**Installation:**
-```cmd
-# Run as Administrator
-# Using PowerShell (recommended)
-.\scripts\Install-WindowsService.ps1
-
-# Or using batch script
-scripts\install-windows-service-native.bat
-```
-
-**Manual Installation:**
-```cmd
-# Extract the onefile binary from the archive
+**Installation (Simple):**
+```powershell
+# Extract the binary from the archive
 tar -xzf windows-amd64.tar.gz
 
-# Use PowerShell scripts for service installation
-# Install service with automatic start
-.\scripts\Install-WindowsService.ps1
+# Install service (run as Administrator)
+.\tls-cert-monitor.exe install
 
-# Or use the batch script
-.\scripts\install-windows-service-native.bat
+# Install service with custom config path (run as Administrator)
+.\tls-cert-monitor.exe install --config "C:\path\to\config.yaml"
 ```
 
 **Service Management:**
-```cmd
-# Use Windows built-in service commands
+```powershell
+# Install service
+.\tls-cert-monitor.exe install
+
+# Uninstall service
+.\tls-cert-monitor.exe uninstall
+
+# Start/stop service using Windows built-in commands
 sc start TLSCertMonitor
 sc stop TLSCertMonitor
 sc query TLSCertMonitor
-sc delete TLSCertMonitor
 
-# Standard Windows service commands
-sc start TLSCertMonitor
-sc stop TLSCertMonitor
-sc query TLSCertMonitor
-
-# PowerShell commands
+# PowerShell service management
 Start-Service -Name TLSCertMonitor
 Stop-Service -Name TLSCertMonitor
 Get-Service -Name TLSCertMonitor
 ```
 
-**Key Improvements:**
-- Minimal service implementation to prevent 1053 timeout errors
-- Immediate service status reporting to Windows Service Control Manager
-- Simplified background thread management
-- Support for both `--config` and `-f` configuration parameters
+**Console Mode:**
+```powershell
+# Run in console mode (not as service)
+.\tls-cert-monitor.exe --config config.yaml
+.\tls-cert-monitor.exe --dry-run
+```
+
+**Key Features:**
+- **Native service support**: Built-in Windows service functionality via Nuitka-winsvc
+- **Dual functionality**: Same executable works as both service and console application
+- **Simple installation**: No external scripts or dependencies required
+- **Administrator privileges**: Required only for service installation/uninstallation
+- **Config path support**: Pass custom configuration during service installation
 
 
 ### macOS Service (LaunchDaemon)

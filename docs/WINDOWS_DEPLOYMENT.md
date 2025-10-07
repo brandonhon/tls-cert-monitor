@@ -81,41 +81,68 @@ In enterprise environments:
 1. Run Command Prompt or PowerShell as Administrator
 2. Ensure exclusions are configured (see above)
 
-### Enhanced Service Support
+### Native Windows Service Support (Nuitka-winsvc)
 
-The application now includes **native Windows service detection and handling**. When running as a service, it automatically:
+The Windows binary is compiled with **Nuitka-winsvc** and includes native Windows service support built directly into the executable. No external scripts or dependencies are required.
 
-- ✅ Detects Windows service environment
-- ✅ Configures proper startup timing to prevent 1053 errors
-- ✅ Sets up Windows Event Log integration
-- ✅ Handles service shutdown signals gracefully
-- ✅ Manages async event loops in service context
+**Key Features:**
+- ✅ **Built-in service support**: Native Windows service functionality
+- ✅ **Dual functionality**: Same executable works as service and console application
+- ✅ **Simple installation**: No external scripts required
+- ✅ **Config path support**: Pass configuration file during service installation
+- ✅ **Administrator privileges**: Required only for installation/uninstallation
 
-### Installation Commands
+### Installation Commands (Simple)
 
 ```powershell
-# Install service with automatic start using PowerShell
-$binaryPath = "C:\path\to\tls-cert-monitor.exe --config C:\path\to\config.yaml"
-sc.exe create TLSCertMonitor binPath= $binaryPath DisplayName= "TLS Certificate Monitor" start= auto
+# Basic service installation
+.\tls-cert-monitor.exe install
 
-# Start the service (now with enhanced startup coordination)
-sc.exe start TLSCertMonitor
+# Install service with custom config path
+.\tls-cert-monitor.exe install --config "C:\path\to\config.yaml"
 
-# Check service status
-sc.exe query TLSCertMonitor
+# Uninstall service
+.\tls-cert-monitor.exe uninstall
+```
 
-# Or use PowerShell cmdlets
-Get-Service TLSCertMonitor
+### Service Management
+
+```powershell
+# Install service
+.\tls-cert-monitor.exe install
+
+# Uninstall service
+.\tls-cert-monitor.exe uninstall
+
+# Start/stop service using Windows built-in commands
+sc start TLSCertMonitor
+sc stop TLSCertMonitor
+sc query TLSCertMonitor
+
+# PowerShell service management
+Start-Service -Name TLSCertMonitor
+Stop-Service -Name TLSCertMonitor
+Get-Service -Name TLSCertMonitor
+```
+
+### Console Mode
+
+```powershell
+# Run in console mode (not as service)
+.\tls-cert-monitor.exe --config config.yaml
+.\tls-cert-monitor.exe --dry-run
+.\tls-cert-monitor.exe --help
 ```
 
 ### Service Behavior
 
-When the application detects it's running as a Windows service:
+The Nuitka-winsvc compiled service automatically:
 
-1. **Startup Coordination**: Uses threading and event coordination to signal successful startup to SCM within 30 seconds
-2. **Signal Handling**: Properly responds to service stop/shutdown requests
-3. **Event Logging**: Automatically logs to Windows Event Log (Application log, source: TLSCertMonitor)
-4. **Environment Setup**: Configures working directory, temp paths, and logging for service context
+1. **Service Detection**: Automatically detects when running as a Windows service
+2. **Startup Coordination**: Handles proper startup timing to prevent 1053 errors
+3. **Signal Handling**: Properly responds to service stop/shutdown requests
+4. **Event Logging**: Integrated Windows Event Log support
+5. **Configuration**: Uses config path passed during installation or default locations
 
 ### Troubleshooting Service Installation
 
@@ -175,6 +202,17 @@ Ensure the service account has:
 - Execute permissions on the binary
 
 ## Updating
+
+### Service Mode
+
+1. Uninstall service: `.\tls-cert-monitor.exe uninstall`
+2. Download new version
+3. Verify signature
+4. Replace executable
+5. Install service: `.\tls-cert-monitor.exe install --config "C:\path\to\config.yaml"`
+6. Start service: `sc.exe start TLSCertMonitor`
+
+### Alternative (Manual Service Management)
 
 1. Stop the service: `sc.exe stop TLSCertMonitor`
 2. Download new version

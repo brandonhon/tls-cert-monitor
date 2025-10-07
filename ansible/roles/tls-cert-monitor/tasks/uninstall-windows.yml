@@ -12,21 +12,29 @@
   register: service_exists
   changed_when: false
 
-- name: Stop and uninstall Windows service (PowerShell method)
+- name: Stop and uninstall Windows service (Nuitka-winsvc native)
   win_shell: |
+    $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
     $serviceName = "{{ service_name }}"
 
     Write-Host "Stopping Windows service..."
     Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
 
-    Write-Host "Removing Windows service..."
-    $result = sc.exe delete $serviceName
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Windows service removed successfully using PowerShell"
+    Write-Host "Uninstalling Windows service using Nuitka-winsvc..."
+    if (Test-Path $exePath) {
+        & $exePath uninstall
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Windows service uninstalled successfully using Nuitka-winsvc"
+        } else {
+            Write-Warning "Nuitka-winsvc uninstall returned code: $LASTEXITCODE"
+            # Fallback to manual service removal if Nuitka-winsvc fails
+            Write-Host "Falling back to manual service removal..."
+            sc.exe delete $serviceName
+        }
     } else {
-        Write-Warning "Service removal returned code: $LASTEXITCODE. Output: $result"
+        Write-Host "Binary not found, using manual service removal..."
+        sc.exe delete $serviceName
     }
   args:
     executable: powershell

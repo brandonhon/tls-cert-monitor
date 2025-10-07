@@ -236,14 +236,19 @@ class TLSCertMonitor:
 )
 @click.option("--version", "-v", is_flag=True, help="Show version information")
 @click.option("--dry-run", is_flag=True, help="Enable dry-run mode (scan only, don't start server)")
-# Windows service management is now handled by Nuitka-winsvc automatically
-# Use: .\tls-cert-monitor.exe install/uninstall
 def main(
     config: Optional[Path],
     version: bool,
     dry_run: bool,
 ) -> None:
-    """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues."""
+    """TLS Certificate Monitor - Monitor SSL/TLS certificates for expiration and security issues.
+
+    Windows Service Management (run as Administrator):
+      .\tls-cert-monitor.exe install [--config path]  Install as Windows service
+      .\tls-cert-monitor.exe uninstall               Uninstall Windows service
+
+    Note: Service management commands are handled by Nuitka-winsvc and
+    will override the normal application behavior."""
 
     # Handle special flags first (before any potential import issues)
     if version:

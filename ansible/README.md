@@ -722,20 +722,21 @@ Get-MpPreference | Select-Object -ExpandProperty ExclusionPath | Where-Object { 
 
 ### Windows Service Method
 
-The application uses native Windows service functionality:
+The application uses **Nuitka-winsvc** for native Windows service support:
 
 ```yaml
 # group_vars/windows_servers.yml
 
-# Windows service method (PowerShell-based)
+# Windows service method (Nuitka-winsvc native)
 windows_service_method: "native"
 ```
 
-The PowerShell-based method offers:
-- Pure PowerShell service creation using sc.exe
-- Direct integration with Windows Service Control Manager
-- No dependency on pywin32 or binary-based service commands
-- Better compatibility with security policies and onefile binaries
+The Nuitka-winsvc approach offers:
+- **Built-in service support**: Native Windows service functionality compiled into the executable
+- **Simple installation**: Uses `.\tls-cert-monitor.exe install` and `uninstall` commands
+- **Config path support**: Pass configuration file during service installation
+- **Dual functionality**: Same executable works as service and console application
+- **No external dependencies**: No pywin32 or external scripts required
 
 ### TLS/SSL Certificate Configuration
 

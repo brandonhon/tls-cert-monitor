@@ -51,46 +51,33 @@
     dest: "{{ config_dir_windows }}\\config.yaml"
     backup: yes
 
-# PowerShell Windows Service Installation
-- name: Install Windows service (PowerShell method)
+# Nuitka-winsvc Windows Service Installation
+- name: Install Windows service (Nuitka-winsvc native)
   win_shell: |
     $exePath = "{{ install_dir_windows }}\\tls-cert-monitor.exe"
     $configPath = "{{ config_dir_windows }}\\config.yaml"
     $serviceName = "{{ service_name }}"
-    $serviceDisplayName = "{{ service_name }}"
-    $serviceDescription = "Monitor TLS/SSL certificates for expiration and security issues"
 
-    # Check if service exists and stop/remove it
+    # Check if service exists and uninstall it first
     $existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
     if ($existingService) {
-        Write-Host "Stopping existing service..."
-        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-
-        Write-Host "Removing existing service..."
-        sc.exe delete $serviceName
-        Start-Sleep -Seconds 2
+        Write-Host "Uninstalling existing service using Nuitka-winsvc..."
+        & $exePath uninstall
+        Start-Sleep -Seconds 3
     }
 
-    # Create the service using sc.exe with proper binary path
-    Write-Host "Creating Windows service..."
-    $binaryPathName = "`"$exePath`" --config `"$configPath`""
+    # Install service using Nuitka-winsvc with config path
+    Write-Host "Installing Windows service using Nuitka-winsvc with native service support..."
+    $installArgs = @("install", "--config", "`"$configPath`"")
+    & $exePath @installArgs
 
-    $result = sc.exe create $serviceName binPath= $binaryPathName DisplayName= $serviceDisplayName start= auto
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create Windows service. Exit code: $LASTEXITCODE. Output: $result"
+        throw "Failed to install Windows service using Nuitka-winsvc. Exit code: $LASTEXITCODE"
     }
 
-    # Set service description
-    sc.exe description $serviceName $serviceDescription
-
-    # Start the service (with enhanced startup coordination)
+    # Start the service
     Write-Host "Starting Windows service..."
-    Write-Host "Note: Application includes enhanced service startup coordination to prevent 1053 errors"
-    $result = sc.exe start $serviceName
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to start Windows service. Exit code: $LASTEXITCODE. Output: $result"
-    }
+    Start-Service -Name $serviceName
 
     # Verify service is running
     Start-Sleep -Seconds 5
@@ -99,10 +86,18 @@
         throw "Service was not created successfully"
     }
     if ($service.Status -ne 'Running') {
+        # Try to get more information about why the service failed
+        $eventLogs = Get-WinEvent -FilterHashtable @{LogName='System'; Id=7034,7035,7036} -MaxEvents 10 -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Message -like "*$serviceName*" } |
+                     Select-Object -First 3
+        if ($eventLogs) {
+            Write-Host "Recent service-related events:"
+            $eventLogs | ForEach-Object { Write-Host "  $($_.TimeCreated): $($_.Message)" }
+        }
         throw "Service is not running. Status: $($service.Status)"
     }
 
-    Write-Host "Windows service created and started successfully using PowerShell"
+    Write-Host "Windows service installed and started successfully using Nuitka-winsvc native support"
   args:
     executable: powershell
   notify: restart tls-cert-monitor-windows-native

@@ -191,6 +191,8 @@ jobs:
           "--windows-service-name=TLSCertMonitor",
           "--windows-service-display-name=TLS Certificate Monitor",
           "--windows-service-description=Monitor TLS/SSL certificates for expiration and security issues",
+          "--windows-service-install=install",
+          "--windows-service-uninstall=uninstall",
           "--output-dir=dist",
           "--output-filename=${{ env.PROJECT_NAME }}",
           "--windows-company-name=TLS Cert Monitor",

@@ -20,7 +20,7 @@ NUITKA_WINSVC := $(VENV_PYTHON) -m nuitka
 NUITKA_FLAGS := --onefile --enable-plugin=pkg-resources --assume-yes-for-downloads
 
 # Windows-specific Nuitka-winsvc flags for native Windows service support
-NUITKA_WIN_FLAGS := --windows-service --windows-service-name=TLSCertMonitor --windows-service-display-name="TLS Certificate Monitor" --windows-service-description="Monitor TLS/SSL certificates for expiration and security issues"
+NUITKA_WIN_FLAGS := --windows-service --windows-service-name=TLSCertMonitor --windows-service-display-name="TLS Certificate Monitor" --windows-service-description="Monitor TLS/SSL certificates for expiration and security issues" --windows-service-install="install" --windows-service-uninstall="uninstall"
 
 # Include package for your source code
 INCLUDE_SRC := --include-package=tls_cert_monitor
