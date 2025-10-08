@@ -231,14 +231,21 @@ def load_config(config_path: Optional[str] = None) -> Config:
     Load configuration from file or environment variables.
 
     Args:
-        config_path: Path to configuration file
+        config_path: Path to configuration file. If not provided, will search
+                     for config files in standard locations:
+                     - Windows: C:\\ProgramData\\TLSCertMonitor\\config.yaml
+                     - Linux/macOS: /etc/tls-cert-monitor/config.yaml, ./config.yaml
 
     Returns:
         Config object
     """
     config_data: Dict[str, Any] = {}
 
-    # Load from file if provided
+    # If no config path provided, search for default locations
+    if not config_path:
+        config_path = _find_default_config()
+
+    # Load from file if provided or found
     if config_path:
         config_file = Path(config_path)
         if config_file.exists():
@@ -252,6 +259,42 @@ def load_config(config_path: Optional[str] = None) -> Config:
     config_data.update(env_overrides)
 
     return Config(**config_data)
+
+
+def _find_default_config() -> Optional[str]:
+    """
+    Search for configuration file in default locations.
+
+    Returns:
+        Path to config file if found, None otherwise
+    """
+    import platform
+
+    system = platform.system()
+
+    # Define search paths based on platform
+    if system == "Windows":
+        search_paths = [
+            Path(r"C:\ProgramData\TLSCertMonitor\config.yaml"),
+            Path(os.getenv("APPDATA", "")) / "TLSCertMonitor" / "config.yaml",
+            Path.cwd() / "config.yaml",
+        ]
+    else:
+        # Linux/macOS
+        search_paths = [
+            Path("/etc/tls-cert-monitor/config.yaml"),
+            Path.home() / ".config" / "tls-cert-monitor" / "config.yaml",
+            Path.cwd() / "config.yaml",
+        ]
+
+    # Search for first existing config file
+    for path in search_paths:
+        if path.exists() and path.is_file():
+            logging.info(f"Found configuration file at: {path}")
+            return str(path)
+
+    logging.warning("No configuration file found in default locations, using defaults")
+    return None
 
 
 def _get_env_overrides() -> dict:
