@@ -53,18 +53,13 @@ chmod +x tls-cert-monitor
 ./tls-cert-monitor --help
 ```
 
-**Windows Installation:**
 ```powershell
-# Download and extract Windows standalone directory
-# Extract windows-amd64.tar.gz to get the tls-cert-monitor.dist directory
-# The Windows binary is distributed as a standalone directory containing all dependencies
-
-# Navigate to extracted directory
-cd tls-cert-monitor.dist
+# Download and extract Windows
+curl.exe -L https://github.com/brandonhon/tls-cert-monitor/releases/latest/download/windows-amd64.tar.gz -o windows-amd64.tar.gz
+tar.exe -xzf .\windows-amd64.tar.gz
+rm .\windows-amd64.tar.gz
 .\tls-cert-monitor.exe --help
 ```
-
-**Note**: The Windows binary is packaged as a standalone directory (`tls-cert-monitor.dist`) containing the main executable and all required dependencies. This provides better compatibility and avoids antivirus false positives compared to single-file executables.
 
 ### 🐍 From Source
 

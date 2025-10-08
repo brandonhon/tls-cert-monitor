@@ -544,7 +544,7 @@ ansible-vault-edit: ## Edit encrypted vault file
 .PHONY: clean
 clean: ## Clean development artifacts
 	@printf "$(BLUE)🧹 Cleaning development artifacts...$(NC)\n"
-	@rm -rf build/ dist/ *.egg-info/ .pytest_cache/ .coverage htmlcov/ coverage/ .mypy_cache/
+	@rm -rf dist/ *.egg-info/ .pytest_cache/ .coverage htmlcov/ coverage/ .mypy_cache/ coverage.xml
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@rm -f bandit-report.json .dev_server.pid
 	@printf "$(GREEN)✅ Cleanup completed$(NC)\n"
@@ -552,7 +552,7 @@ clean: ## Clean development artifacts
 .PHONY: clean-all
 clean-all: clean ## Clean everything including venv, config, and certs
 	@printf "$(BLUE)🧹 Deep cleaning everything...$(NC)\n"
-	@rm -rf $(VENV_DIR)/ tests/fixtures/certs/ tests/fixtures/configs/ config.yaml config-dev.yaml
+	@rm -rf $(VENV_DIR)/ tests/fixtures/certs/ tests/fixtures/configs/ config.yaml config-dev.yaml logs cache
 	@printf "$(GREEN)✅ Everything cleaned$(NC)\n"
 
 # ----------------------------
