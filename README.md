@@ -592,9 +592,16 @@ The Windows binary is compiled with **Nuitka-winsvc** and includes native Window
 # Extract the binary from the archive
 tar -xzf windows-amd64.tar.gz
 
-# Create config directory and place your config file
+# Create config directory and place your config file (choose one of these locations)
+# Option 1: System-wide configuration (recommended for services)
 mkdir "C:\ProgramData\tls-cert-monitor"
 copy config.yaml "C:\ProgramData\tls-cert-monitor\config.yaml"
+
+# Option 2: User-specific configuration
+# Config will be read from %APPDATA%\tls-cert-monitor\config.yaml
+
+# Option 3: Current directory
+# Place config.yaml in the same directory as the executable
 
 # Install service (run as Administrator)
 .\tls-cert-monitor.exe install
@@ -631,7 +638,10 @@ Get-Service -Name TLSCertMonitor
 - **Dual functionality**: Same executable works as both service and console application
 - **Simple installation**: No external scripts or dependencies required
 - **Administrator privileges**: Required only for service installation/uninstallation
-- **Standard config path**: Service uses `C:\ProgramData\tls-cert-monitor\config.yaml`
+- **Flexible config paths**: Service searches for config in multiple locations:
+  1. `C:\ProgramData\tls-cert-monitor\config.yaml` (system-wide)
+  2. `%APPDATA%\tls-cert-monitor\config.yaml` (user-specific)
+  3. `.\config.yaml` (current directory)
 
 
 ### macOS Service (LaunchDaemon)

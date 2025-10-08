@@ -92,7 +92,7 @@ hot_reload: {{ tls_cert_monitor_config.hot_reload | default(true) | lower }}
 
 # Cache settings - Windows paths
 cache_type: "{{ tls_cert_monitor_config.cache_type | default('memory') }}"       # "memory", "file", or "both"
-cache_dir: "{{ tls_cert_monitor_config.cache_dir | default('C:\\ProgramData\\TLSCertMonitor\\cache') }}"
+cache_dir: "{{ tls_cert_monitor_config.cache_dir | default('C:\\ProgramData\\tls-cert-monitor\\cache') }}"
 cache_ttl: "{{ tls_cert_monitor_config.cache_ttl | default('1h') }}"
 cache_max_size: {{ tls_cert_monitor_config.cache_max_size | default(10485760) }}   # 10MB (memory)
 

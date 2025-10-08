@@ -81,7 +81,7 @@ tls_cert_monitor_config:
 
   # Logging
   log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  log_file: "C:\\ProgramData\\TLSCertMonitor\\logs\\tls-monitor.log"
+  log_file: "C:\\ProgramData\\tls-cert-monitor\\logs\\tls-monitor.log"
 
   # Operation modes
   dry_run: false
@@ -89,7 +89,7 @@ tls_cert_monitor_config:
 
   # Cache settings - Windows paths
   cache_type: "memory"       # "memory", "file", or "both"
-  cache_dir: "C:\\ProgramData\\TLSCertMonitor\\cache"
+  cache_dir: "C:\\ProgramData\\tls-cert-monitor\\cache"
   cache_ttl: "1h"
   cache_max_size: 10485760   # 10MB (memory)
 
@@ -101,6 +101,6 @@ tls_cert_monitor_config:
     - "192.168.1.0/24"      # Local network (CIDR notation)
 
 # Service settings
-config_dir_windows: "C:\\ProgramData\\TLSCertMonitor"
-log_dir_windows: "C:\\ProgramData\\TLSCertMonitor\\logs"
-bin_dir_windows: "C:\\Program Files\\TLSCertMonitor"
+config_dir_windows: "C:\\ProgramData\\tls-cert-monitor"
+log_dir_windows: "C:\\ProgramData\\tls-cert-monitor\\logs"
+bin_dir_windows: "C:\\Program Files\\tls-cert-monitor"

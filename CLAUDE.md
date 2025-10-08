@@ -95,8 +95,11 @@ The application supports both console and service modes with the following optio
 **Windows Service (via Nuitka-winsvc compilation):**
 - `.\tls-cert-monitor.exe install`: Install as Windows service
 - `.\tls-cert-monitor.exe uninstall`: Uninstall Windows service
-- **IMPORTANT**: Service requires config file at `C:\ProgramData\TLSCertMonitor\config.yaml`
-  - Create this directory and file before installing the service
+- **IMPORTANT**: Service searches for config file in the following order:
+  1. `C:\ProgramData\tls-cert-monitor\config.yaml`
+  2. `%APPDATA%\tls-cert-monitor\config.yaml`
+  3. `.\config.yaml`
+  - Create config file in one of these locations before installing the service
   - Use `config.windows.example.yaml` as a template
 
 Examples:

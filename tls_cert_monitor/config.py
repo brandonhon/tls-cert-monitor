@@ -233,7 +233,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
     Args:
         config_path: Path to configuration file. If not provided, will search
                      for config files in standard locations:
-                     - Windows: C:\\ProgramData\\TLSCertMonitor\\config.yaml
+                     - Windows: C:\\ProgramData\\tls-cert-monitor\\config.yaml,
+                                %APPDATA%\\tls-cert-monitor\\config.yaml, .\\config.yaml
                      - Linux/macOS: /etc/tls-cert-monitor/config.yaml, ./config.yaml
 
     Returns:
@@ -275,8 +276,8 @@ def _find_default_config() -> Optional[str]:
     # Define search paths based on platform
     if system == "Windows":
         search_paths = [
-            Path(r"C:\ProgramData\TLSCertMonitor\config.yaml"),
-            Path(os.getenv("APPDATA", "")) / "TLSCertMonitor" / "config.yaml",
+            Path(r"C:\ProgramData\tls-cert-monitor\config.yaml"),
+            Path(os.getenv("APPDATA", "")) / "tls-cert-monitor" / "config.yaml",
             Path.cwd() / "config.yaml",
         ]
     else:
