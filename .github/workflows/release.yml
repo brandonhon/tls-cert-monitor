@@ -193,7 +193,7 @@ jobs:
           "--windows-service-description=Monitor TLS/SSL certificates for expiration and security issues",
           "--windows-service-install=install",
           "--windows-service-uninstall=uninstall",
-          "--windows-service-cmdline=--config C:\\ProgramData\\tls-cert-monitor\\config.yaml",
+          "--windows-service-cmdline=--config C:\\ProgramData\\TLSCertMonitor\\config.yaml",
           "--output-dir=dist",
           "--output-filename=${{ env.PROJECT_NAME }}",
           "--windows-company-name=TLS Cert Monitor",
