@@ -221,19 +221,41 @@ class HotReloadManager:
 
             log_hot_reload(self.logger, file_path, event_type)
 
-            # Invalidate cache for the changed file
+            file_path_obj = Path(file_path)
+
+            # Invalidate cache for the changed/deleted file
             if hasattr(self.scanner, "cache"):
-                file_path_obj = Path(file_path)
+                # For existing files, use mtime-based cache key
                 if file_path_obj.exists():
                     cache_key = self.scanner.cache.make_key(
                         "cert", str(file_path), file_path_obj.stat().st_mtime
                     )
                     await self.scanner.cache.delete(cache_key)
                     self.logger.debug(f"Invalidated cache for: {file_path}")
+                else:
+                    # For deleted files, we can't get mtime, so clear entire cache to be safe
+                    # This ensures deleted certificate metrics/cache are removed
+                    await self.scanner.cache.clear()
+                    self.logger.info(f"Cache cleared due to certificate deletion: {file_path}")
 
-            # For certificate changes, we don't need to rescan immediately
-            # The regular scan cycle will pick up the changes
-            self.logger.debug(f"Certificate change processed: {file_path}")
+            # If file was deleted, trigger a re-scan to update metrics
+            # This ensures metrics for deleted certificates are removed
+            if event_type == "deleted" or not file_path_obj.exists():
+                if hasattr(self.scanner, "metrics"):
+                    # Clear all certificate metrics to remove the deleted certificate's metrics
+                    self.scanner.metrics.clear_all_certificate_metrics()
+                    self.scanner.metrics.reset_scan_metrics()
+                    self.logger.info(f"Metrics cleared due to certificate deletion: {file_path}")
+
+                # Trigger immediate re-scan to update all metrics
+                try:
+                    self.logger.info(f"Triggering re-scan due to certificate deletion: {file_path}")
+                    await self.scanner.scan_once()
+                except Exception as e:
+                    self.logger.error(f"Failed to trigger re-scan after deletion: {e}")
+            else:
+                # For modifications/creations, the regular scan cycle will pick up the changes
+                self.logger.debug(f"Certificate change processed: {file_path}")
 
         except asyncio.CancelledError:
             self.logger.debug(f"Certificate change handling cancelled for: {file_path}")
@@ -294,7 +316,25 @@ class HotReloadManager:
 
             # Update watched directories if needed
             if dirs_added or dirs_removed:
+                # Clear cache entries for removed directories
+                if dirs_removed and hasattr(self.scanner, "cache"):
+                    await self.scanner.cache.clear()
+                    self.logger.info("Cache cleared due to directory changes")
+
+                # Reset all metrics when directories change
+                if hasattr(self.scanner, "metrics"):
+                    self.scanner.metrics.clear_all_certificate_metrics()
+                    self.scanner.metrics.reset_scan_metrics()
+                    self.logger.info("Metrics cleared and reset due to directory changes")
+
                 await self._update_watched_directories(dirs_added, dirs_removed)
+
+                # Trigger immediate re-scan to update metrics with new directory structure
+                try:
+                    self.logger.info("Triggering certificate re-scan due to directory changes")
+                    await self.scanner.scan_once()
+                except Exception as e:
+                    self.logger.error(f"Failed to trigger re-scan after directory change: {e}")
 
             # Clear cache if scan interval changed significantly
             if abs(old_config.scan_interval_seconds - new_config.scan_interval_seconds) > 60:
