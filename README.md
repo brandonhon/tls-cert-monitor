@@ -450,9 +450,6 @@ tls-cert-monitor/
 │   └── build.yml                # Multi-platform build and release
 ├── scripts/                     # Installation and service scripts
 │   ├── install-linux-service.sh              # Linux systemd service installer
-│   ├── install-windows-service.bat           # Windows service installer (legacy)
-│   ├── install-windows-service-native.bat    # Windows native service installer
-│   ├── Install-WindowsService.ps1            # PowerShell Windows service installer
 │   ├── install-macos-service.sh              # macOS service installer
 │   ├── tls-cert-monitor.service              # systemd service file
 │   └── com.tlscertmonitor.service.plist      # macOS LaunchDaemon config

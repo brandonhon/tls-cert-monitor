@@ -2,6 +2,7 @@
 Setup script for TLS Certificate Monitor.
 """
 
+import re
 from pathlib import Path
 
 from setuptools import find_packages, setup
@@ -17,13 +18,26 @@ def read_requirements(filename):
     return []
 
 
+# Read version from package __init__.py
+def read_version():
+    """Read version from tls_cert_monitor/__init__.py."""
+    init_path = Path(__file__).parent / "tls_cert_monitor" / "__init__.py"
+    if init_path.exists():
+        with open(init_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+            if match:
+                return match.group(1)
+    return "0.0.0"
+
+
 # Read long description from README
 readme_path = Path(__file__).parent / "README.md"
 long_description = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
 
 setup(
     name="tls-cert-monitor",
-    version="1.0.0",
+    version=read_version(),
     description="Cross-platform TLS certificate monitoring application",
     long_description=long_description,
     long_description_content_type="text/markdown",
