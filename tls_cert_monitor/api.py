@@ -184,7 +184,7 @@ def create_app(
         try:
             # Use current config from scanner (updated by hot reload)
             current_config = scanner.config
-            config_dict: Dict[str, Any] = current_config.dict()
+            config_dict: Dict[str, Any] = current_config.model_dump()
 
             # Always redact sensitive information
             sensitive_keys = ["p12_passwords", "tls_key", "allowed_ips"]

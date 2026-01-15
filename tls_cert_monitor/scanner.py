@@ -8,7 +8,7 @@ import re
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -441,9 +441,9 @@ class CertificateScanner:
         serial = str(cert.serial_number)
 
         # Dates
-        not_before = cert.not_valid_before
-        not_after = cert.not_valid_after
-        now = datetime.utcnow()
+        not_before = cert.not_valid_before_utc
+        not_after = cert.not_valid_after_utc
+        now = datetime.now(timezone.utc)
 
         expiration_timestamp = not_after.timestamp()
         days_until_expiry = (not_after - now).days

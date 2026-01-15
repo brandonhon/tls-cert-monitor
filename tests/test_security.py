@@ -196,7 +196,7 @@ class TestConfigurationEndpointSecurity:
     def mock_config(self):
         """Create mock config with sensitive data."""
         config = MagicMock(spec=Config)
-        config.dict.return_value = {
+        config_data = {
             "port": 3200,
             "certificate_directories": ["/etc/ssl/certs", "/opt/certs"],
             "p12_passwords": ["", "password123", "secret"],
@@ -204,6 +204,8 @@ class TestConfigurationEndpointSecurity:
             "allowed_ips": ["127.0.0.1", "192.168.1.0/24"],
             "log_level": "INFO",
         }
+        config.dict.return_value = config_data
+        config.model_dump.return_value = config_data
         config.dry_run = False
         config.enable_ip_whitelist = False  # Disable for testing
         return config
