@@ -221,49 +221,42 @@ class HotReloadManager:
             event_type: Type of file system event
         """
         try:
-            # Wait for debounce period
-            await asyncio.sleep(1.0)
+            # Increased debounce period to catch rapid successive writes
+            await asyncio.sleep(2.0)
+
+            # Verify file still exists and has stabilized (for non-delete events)
+            file_path_obj = Path(file_path)
+            if file_path_obj.exists() and event_type != "deleted":
+                initial_mtime = file_path_obj.stat().st_mtime
+                await asyncio.sleep(0.5)  # Wait to ensure file is stable
+                if file_path_obj.exists():
+                    current_mtime = file_path_obj.stat().st_mtime
+                    if initial_mtime != current_mtime:
+                        # File is still being written, wait a bit more
+                        await asyncio.sleep(1.0)
 
             log_hot_reload(self.logger, file_path, event_type)
 
-            file_path_obj = Path(file_path)
-
-            # Invalidate cache for the changed/deleted/created file
+            # Clear entire cache for any file change to ensure consistency
+            # Individual cache invalidation is unreliable due to mtime changes
             if hasattr(self.scanner, "cache"):
-                # For created, deleted, or moved files, clear entire cache to ensure consistency
-                if event_type in ("created", "deleted", "moved") or not file_path_obj.exists():
-                    await self.scanner.cache.clear()
-                    self.logger.info(f"Cache cleared due to certificate {event_type}: {file_path}")
-                elif file_path_obj.exists():
-                    # For existing files (modifications only), use mtime-based cache key
-                    cache_key = self.scanner.cache.make_key(
-                        "cert", str(file_path), file_path_obj.stat().st_mtime
-                    )
-                    await self.scanner.cache.delete(cache_key)
-                    self.logger.debug(f"Invalidated cache for: {file_path}")
+                await self.scanner.cache.clear()
+                self.logger.info(f"Cache cleared due to certificate {event_type}: {file_path}")
 
-            # Handle file changes (created, modified, deleted, moved)
-            # For any meaningful change, clear metrics and trigger re-scan
-            if event_type in ("deleted", "created", "moved") or not file_path_obj.exists():
-                if hasattr(self.scanner, "metrics"):
-                    # Clear all certificate metrics to ensure accurate state
-                    self.scanner.metrics.clear_all_certificate_metrics()
-                    self.scanner.metrics.reset_scan_metrics()
-                    self.logger.info(
-                        f"Metrics cleared due to certificate {event_type}: {file_path}"
-                    )
+            # Clear all certificate metrics and trigger immediate re-scan for ALL changes
+            if hasattr(self.scanner, "metrics"):
+                self.scanner.metrics.clear_all_certificate_metrics()
+                self.scanner.metrics.reset_scan_metrics()
+                self.logger.info(f"Metrics cleared due to certificate {event_type}: {file_path}")
 
-                # Trigger immediate re-scan to update all metrics
-                try:
-                    self.logger.info(
-                        f"Triggering re-scan due to certificate {event_type}: {file_path}"
-                    )
-                    await self.scanner.scan_once()
-                except Exception as e:
-                    self.logger.error(f"Failed to trigger re-scan after {event_type}: {e}")
-            else:
-                # For modifications only, the regular scan cycle will pick up the changes
-                self.logger.debug(f"Certificate modification processed: {file_path}")
+            # Trigger immediate re-scan to update all metrics
+            try:
+                self.logger.info(
+                    f"Triggering re-scan due to certificate {event_type}: {file_path}"
+                )
+                await self.scanner.scan_once()
+            except Exception as e:
+                self.logger.error(f"Failed to trigger re-scan after {event_type}: {e}")
 
         except asyncio.CancelledError:
             self.logger.debug(f"Certificate change handling cancelled for: {file_path}")

@@ -52,6 +52,7 @@ class CertificateScanner:
         self._scanning = False
         self._scan_task: Optional[asyncio.Task] = None
         self._executor = ThreadPoolExecutor(max_workers=config.workers)
+        self._scan_lock: Optional[asyncio.Lock] = None  # Initialize lock lazily in async context
 
         self.logger.info(f"Certificate scanner initialized - Workers: {config.workers}")
 
@@ -86,72 +87,78 @@ class CertificateScanner:
         Returns:
             Scan results summary
         """
-        start_time = time.time()
-        total_files = 0
-        total_parsed = 0
-        total_errors = 0
+        # Initialize lock lazily if needed
+        if self._scan_lock is None:
+            self._scan_lock = asyncio.Lock()
 
-        # Reset metrics for new scan
-        self.metrics.reset_scan_metrics()
+        # Prevent concurrent scans
+        async with self._scan_lock:
+            start_time = time.time()
+            total_files = 0
+            total_parsed = 0
+            total_errors = 0
 
-        scan_results: Dict[str, Any] = {"directories": {}, "summary": {}, "timestamp": start_time}
+            # Reset metrics for new scan
+            self.metrics.reset_scan_metrics()
 
-        for directory in self.config.certificate_directories:
-            dir_start_time = time.time()
+            scan_results: Dict[str, Any] = {"directories": {}, "summary": {}, "timestamp": start_time}
 
-            try:
-                result = await self._scan_directory(directory)
+            for directory in self.config.certificate_directories:
+                dir_start_time = time.time()
 
-                dir_duration = time.time() - dir_start_time
-                total_files += result["files_processed"]
-                total_parsed += result["certificates_parsed"]
-                total_errors += result["parse_errors"]
+                try:
+                    result = await self._scan_directory(directory)
 
-                # Update metrics
-                self.metrics.update_scan_metrics(
-                    directory=directory,
-                    duration=dir_duration,
-                    files_total=result["files_processed"],
-                    parsed_total=result["certificates_parsed"],
-                    errors_total=result["parse_errors"],
-                )
+                    dir_duration = time.time() - dir_start_time
+                    total_files += result["files_processed"]
+                    total_parsed += result["certificates_parsed"]
+                    total_errors += result["parse_errors"]
 
-                scan_results["directories"][directory] = result
+                    # Update metrics
+                    self.metrics.update_scan_metrics(
+                        directory=directory,
+                        duration=dir_duration,
+                        files_total=result["files_processed"],
+                        parsed_total=result["certificates_parsed"],
+                        errors_total=result["parse_errors"],
+                    )
 
-                log_cert_scan_complete(
-                    self.logger,
-                    directory,
-                    dir_duration,
-                    result["certificates_parsed"],
-                    result["parse_errors"],
-                )
+                    scan_results["directories"][directory] = result
 
-            except Exception as e:
-                self.logger.error(f"Failed to scan directory {directory}: {e}")
-                scan_results["directories"][directory] = {
-                    "error": str(e),
-                    "files_processed": 0,
-                    "certificates_parsed": 0,
-                    "parse_errors": 1,
-                }
-                total_errors += 1
+                    log_cert_scan_complete(
+                        self.logger,
+                        directory,
+                        dir_duration,
+                        result["certificates_parsed"],
+                        result["parse_errors"],
+                    )
 
-        total_duration = time.time() - start_time
+                except Exception as e:
+                    self.logger.error(f"Failed to scan directory {directory}: {e}")
+                    scan_results["directories"][directory] = {
+                        "error": str(e),
+                        "files_processed": 0,
+                        "certificates_parsed": 0,
+                        "parse_errors": 1,
+                    }
+                    total_errors += 1
 
-        scan_results["summary"] = {
-            "total_duration": total_duration,
-            "total_files": total_files,
-            "total_parsed": total_parsed,
-            "total_errors": total_errors,
-            "directories_scanned": len(self.config.certificate_directories),
-        }
+            total_duration = time.time() - start_time
 
-        self.logger.info(
-            f"Scan completed - Duration: {total_duration:.2f}s, "
-            f"Files: {total_files}, Parsed: {total_parsed}, Errors: {total_errors}"
-        )
+            scan_results["summary"] = {
+                "total_duration": total_duration,
+                "total_files": total_files,
+                "total_parsed": total_parsed,
+                "total_errors": total_errors,
+                "directories_scanned": len(self.config.certificate_directories),
+            }
 
-        return scan_results
+            self.logger.info(
+                f"Scan completed - Duration: {total_duration:.2f}s, "
+                f"Files: {total_files}, Parsed: {total_parsed}, Errors: {total_errors}"
+            )
+
+            return scan_results
 
     async def _scan_loop(self) -> None:
         """Main scanning loop."""

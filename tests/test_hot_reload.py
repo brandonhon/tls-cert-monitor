@@ -319,7 +319,7 @@ class TestHotReloadManager:
     async def test_certificate_modified_only_invalidates_cache_entry(
         self, hot_reload_manager, temp_cert_dir
     ):
-        """Test that modifying a certificate only invalidates its cache entry."""
+        """Test that modifying a certificate triggers cache clear, metrics clear, and immediate re-scan."""
         await hot_reload_manager.start()
 
         # Create a test certificate file
@@ -330,20 +330,21 @@ class TestHotReloadManager:
         hot_reload_manager.scanner.cache.delete = AsyncMock()
         hot_reload_manager.scanner.cache.clear = AsyncMock()
         hot_reload_manager.scanner.metrics.clear_all_certificate_metrics = MagicMock()
+        hot_reload_manager.scanner.metrics.reset_scan_metrics = MagicMock()
         hot_reload_manager.scanner.scan_once = AsyncMock()
 
         # Simulate certificate modification
         await hot_reload_manager._debounced_cert_change(str(test_file), "modified")
 
-        # Verify only cache entry was deleted, not entire cache
-        hot_reload_manager.scanner.cache.delete.assert_called_once()
-        hot_reload_manager.scanner.cache.clear.assert_not_called()
+        # Verify entire cache was cleared (not just single entry)
+        hot_reload_manager.scanner.cache.clear.assert_called_once()
 
-        # Verify metrics were NOT cleared (modifications don't trigger immediate re-scan)
-        hot_reload_manager.scanner.metrics.clear_all_certificate_metrics.assert_not_called()
+        # Verify metrics were cleared (modifications now trigger immediate re-scan)
+        hot_reload_manager.scanner.metrics.clear_all_certificate_metrics.assert_called_once()
+        hot_reload_manager.scanner.metrics.reset_scan_metrics.assert_called_once()
 
-        # Verify re-scan was NOT triggered
-        hot_reload_manager.scanner.scan_once.assert_not_called()
+        # Verify re-scan was triggered
+        hot_reload_manager.scanner.scan_once.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_status(self, hot_reload_manager):
