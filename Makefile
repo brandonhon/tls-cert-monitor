@@ -98,6 +98,12 @@ security: ## Run security checks with bandit
 	@$(VENV_PYTHON) -m bandit -r tls_cert_monitor/ --skip B110
 	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
+.PHONY: deadcode
+deadcode: ## Detect dead code with vulture
+	@printf "$(BLUE)🦅 Running dead code detection...$(NC)\n"
+	@$(VENV_PYTHON) -m vulture tls_cert_monitor/ --min-confidence 80 --exclude=.venv,build,dist
+	@printf "$(GREEN)✅ Dead code check completed$(NC)\n"
+
 .PHONY: format-system
 format-system: ## Format code with black and isort (system-wide)
 	@printf "$(BLUE)🎨 Formatting code (system-wide)...$(NC)\n"
@@ -125,6 +131,12 @@ security-system: ## Run security checks with bandit (system-wide)
 	@$(PYTHON) -m bandit -r tls_cert_monitor/ --skip B110
 	@printf "$(GREEN)✅ Security checks completed$(NC)\n"
 
+.PHONY: deadcode-system
+deadcode-system: ## Detect dead code with vulture (system-wide)
+	@printf "$(BLUE)🦅 Running dead code detection (system-wide)...$(NC)\n"
+	@$(PYTHON) -m vulture tls_cert_monitor/ --min-confidence 80 --exclude=.venv,build,dist
+	@printf "$(GREEN)✅ Dead code check completed$(NC)\n"
+
 .PHONY: test-system
 test-system: ## Run tests (system-wide)
 	@printf "$(BLUE)🧪 Running tests (system-wide)...$(NC)\n"
@@ -132,10 +144,10 @@ test-system: ## Run tests (system-wide)
 	@printf "$(GREEN)✅ Tests completed$(NC)\n"
 
 .PHONY: check-system
-check-system: format-system lint-system typecheck-system security-system ## Run all code quality checks (system-wide)
+check-system: format-system lint-system typecheck-system security-system deadcode-system ## Run all code quality checks (system-wide)
 
 .PHONY: check
-check: format lint typecheck security ## Run all code quality checks
+check: format lint typecheck security deadcode ## Run all code quality checks
 
 # ----------------------------
 # Testing

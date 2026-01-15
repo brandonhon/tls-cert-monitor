@@ -166,9 +166,20 @@ drwxr-xr-x  2 root       root       4096 Oct  7 13:30 logs
 4. ✅ **Kept just_ansible.md** as quick reference with note to comprehensive docs
 5. ✅ **Removed docker directories** and added to `.gitignore` for auto-creation
 
-### Low Priority (Optional)
-- Consider adding a tool like `vulture` to CI/CD for automated dead code detection
-- Add version consistency check to CI/CD to ensure setup.py and __init__.py match
+### ✅ Low Priority (Implemented)
+
+6. ✅ **Added vulture for automated dead code detection**
+   - Added `vulture>=2.11,<3.0.0` to `requirements-dev.txt`
+   - Created `make deadcode` target for local checking
+   - Created `make deadcode-system` target for CI/CD
+   - Integrated into `make check` and `make check-system` targets
+   - Usage: `make deadcode` or `vulture tls_cert_monitor/ --min-confidence 80`
+
+7. ✅ **Added version consistency check to CI/CD**
+   - Created new `version-check` job in `.github/workflows/ci.yml`
+   - Automatically verifies `__init__.py` and `setup.py` versions match
+   - Runs on every push and pull request
+   - Fails CI if versions are inconsistent
 
 ---
 

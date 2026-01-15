@@ -91,3 +91,37 @@ jobs:
       with:
         name: security-report
         path: security-report.json
+
+  version-check:
+    name: Version Consistency Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Check version consistency
+      run: |
+        # Extract version from __init__.py
+        INIT_VERSION=$(grep -E "__version__\s*=\s*['\"]([^'\"]+)['\"]" tls_cert_monitor/__init__.py | sed -E "s/__version__\s*=\s*['\"]([^'\"]+)['\"]/\1/")
+
+        # Extract version from setup.py by running it
+        python -m pip install --upgrade pip setuptools
+        SETUP_VERSION=$(python setup.py --version 2>/dev/null)
+
+        echo "Version in __init__.py: $INIT_VERSION"
+        echo "Version from setup.py: $SETUP_VERSION"
+
+        if [ "$INIT_VERSION" != "$SETUP_VERSION" ]; then
+          echo "❌ ERROR: Version mismatch!"
+          echo "__init__.py has version: $INIT_VERSION"
+          echo "setup.py returns version: $SETUP_VERSION"
+          exit 1
+        fi
+
+        echo "✅ Version consistency check passed: $INIT_VERSION"
