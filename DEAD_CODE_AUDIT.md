@@ -173,6 +173,8 @@ drwxr-xr-x  2 root       root       4096 Oct  7 13:30 logs
    - Created `make deadcode` target for local checking
    - Created `make deadcode-system` target for CI/CD
    - Integrated into `make check` and `make check-system` targets
+   - Configured as informational only (doesn't fail build)
+   - Note: Some false positives expected (e.g., `cls` parameters in Pydantic `@field_validator` methods)
    - Usage: `make deadcode` or `vulture tls_cert_monitor/ --min-confidence 80`
 
 7. ✅ **Added version consistency check to CI/CD**
