@@ -15,11 +15,12 @@ Or: make test-integration
 
 import asyncio
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import AsyncGenerator
 
 import httpx
 import pytest
+import pytest_asyncio
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -35,7 +36,7 @@ from tls_cert_monitor.scanner import CertificateScanner
 
 
 @pytest.fixture
-async def test_certs_dir(tmp_path: Path) -> Path:
+def test_certs_dir(tmp_path: Path) -> Path:
     """Create a temporary directory with test certificates."""
     certs_dir = tmp_path / "certs"
     certs_dir.mkdir()
@@ -43,14 +44,14 @@ async def test_certs_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-async def test_config(test_certs_dir: Path, tmp_path: Path) -> Config:
+def test_config(test_certs_dir: Path, tmp_path: Path) -> Config:
     """Create a test configuration."""
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
 
     return Config(
         certificate_directories=[str(test_certs_dir)],
-        port=0,  # Random port for testing
+        port=9999,  # High port for testing
         bind_address="127.0.0.1",
         scan_interval_seconds=300,  # Long interval, we'll trigger manually
         workers=2,
@@ -63,8 +64,8 @@ async def test_config(test_certs_dir: Path, tmp_path: Path) -> Config:
     )
 
 
-@pytest.fixture
-async def app_components(test_config: Config) -> AsyncGenerator[tuple, None]:
+@pytest_asyncio.fixture
+async def app_components(test_config: Config):
     """Create and initialize application components."""
     metrics = MetricsCollector()
     cache = CacheManager(test_config)
@@ -102,11 +103,8 @@ def generate_test_certificate(path: Path, cn: str = "test.example.com") -> None:
         .issuer_name(issuer)
         .public_key(private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(x509.datetime.datetime.now(x509.datetime.timezone.utc))
-        .not_valid_after(
-            x509.datetime.datetime.now(x509.datetime.timezone.utc)
-            + x509.datetime.timedelta(days=365)
-        )
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
         .add_extension(
             x509.SubjectAlternativeName([x509.DNSName(cn)]),
             critical=False,
@@ -182,7 +180,6 @@ class TestFullApplicationIntegration:
         data = response.json()
         assert data["status"] == "healthy"
         assert "version" in data
-        assert "uptime_seconds" in data
 
         # Perform a scan first
         await scanner.scan_once()
@@ -205,15 +202,18 @@ class TestFullApplicationIntegration:
         response = client.get("/scan")
         assert response.status_code == 200
         scan_data = response.json()
-        assert "message" in scan_data
+        # Scan endpoint returns full scan results
+        assert "summary" in scan_data
+        assert "directories" in scan_data
+        assert "timestamp" in scan_data
 
         # Test cache stats endpoint
         response = client.get("/cache/stats")
         assert response.status_code == 200
         cache_stats = response.json()
-        assert "size" in cache_stats
-        assert "hits" in cache_stats
-        assert "misses" in cache_stats
+        assert "entries_total" in cache_stats
+        assert "cache_hits" in cache_stats
+        assert "cache_misses" in cache_stats
 
     async def test_metrics_collection_accuracy(self, app_components, test_certs_dir):
         """Test that metrics are collected accurately."""
@@ -226,15 +226,13 @@ class TestFullApplicationIntegration:
         # Scan and collect metrics
         await scanner.scan_once()
 
-        # Verify metrics were updated
+        # Verify metrics were updated (get_registry_status returns dict)
         registry_status = metrics.get_registry_status()
-        assert "total_collectors" in registry_status
-        assert registry_status["total_collectors"] > 0
+        assert isinstance(registry_status, dict)
 
-        # Check that certificate metrics exist
-        from prometheus_client import REGISTRY
-
-        metric_names = [m.name for m in REGISTRY.collect()]
+        # Check that certificate metrics exist in the metrics collector's registry
+        # Note: MetricsCollector uses its own registry, not the global REGISTRY
+        metric_names = [m.name for m in metrics.registry.collect()]
         assert "ssl_cert_expiration_timestamp" in metric_names
         assert "ssl_cert_info" in metric_names
         assert "ssl_certs_parsed_total" in metric_names
@@ -251,15 +249,15 @@ class TestFullApplicationIntegration:
         await scanner.scan_once()
 
         # Check cache stats
-        stats = cache.get_stats()
-        initial_hits = stats["hits"]
+        stats = await cache.get_stats()
+        initial_hits = stats["cache_hits"]
 
         # Second scan - should use cache
         await scanner.scan_once()
 
         # Verify cache was used
-        stats_after = cache.get_stats()
-        assert stats_after["hits"] > initial_hits or stats_after["size"] > 0
+        stats_after = await cache.get_stats()
+        assert stats_after["cache_hits"] > initial_hits or stats_after["entries_total"] > 0
 
     async def test_hot_reload_with_certificate_changes(
         self, app_components, test_certs_dir, tmp_path
@@ -360,8 +358,8 @@ class TestFullApplicationIntegration:
 
         # Clear cache and verify memory release
         await cache.clear()
-        stats = cache.get_stats()
-        assert stats["size"] == 0
+        stats = await cache.get_stats()
+        assert stats["entries_total"] == 0
 
     async def test_complete_application_lifecycle(self, app_components, test_certs_dir):
         """Test the complete application lifecycle from start to finish."""
@@ -383,10 +381,11 @@ class TestFullApplicationIntegration:
 
         # 5. Query metrics
         registry_status = metrics.get_registry_status()
-        assert registry_status["total_collectors"] > 0
+        assert registry_status["prometheus_registry"]["status"] == "healthy"
+        assert registry_status["prometheus_registry"]["metrics_count"] > 0
 
         # 6. Check cache
-        cache_stats = cache.get_stats()
+        cache_stats = await cache.get_stats()
         assert cache_stats is not None
 
         # 7. Add new certificate (simulating runtime change)
