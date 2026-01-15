@@ -88,19 +88,10 @@ setup(
 - `ansible/README.md` - Comprehensive Ansible documentation in ansible directory
 - Both cover similar Ansible deployment commands with significant overlap
 
-**Recommendation**:
-⚠️ **DECISION NEEDED**: Two options:
-1. **Keep both** - `just_ansible.md` serves as a quick reference for users who don't want to navigate into ansible/
-2. **Remove just_ansible.md** - Keep only `ansible/README.md` to reduce duplication
-
-If keeping both, add a note in `just_ansible.md`:
-```markdown
-# TLS Certificate Monitor - Ansible Quick Reference
-
-> For complete Ansible documentation, see [ansible/README.md](ansible/README.md)
-
-Quick reference for deploying TLS Certificate Monitor...
-```
+**Resolution**: ✅ **IMPLEMENTED - Option A**
+- Kept both files for different use cases
+- Added reference note to `just_ansible.md` pointing to comprehensive documentation
+- Quick reference remains easily accessible in root directory
 
 ---
 
@@ -157,40 +148,23 @@ drwxr-xr-x  2 root       root       4096 Oct  7 13:30 cache
 drwxr-xr-x  2 root       root       4096 Oct  7 13:30 logs
 ```
 
-**Recommendation**:
-⚠️ **DECISION NEEDED**:
-1. **Keep with .gitkeep** - Add `.gitkeep` files to preserve directory structure
-2. **Remove and document** - Remove from git, document that Docker will create them
-3. **Add to .gitignore** - Ignore the contents but keep structure
-
-Suggested approach:
-```bash
-# Remove root-owned empty directories
-sudo rm -rf docker/cache docker/logs
-
-# Add .gitignore entry
-echo "docker/cache/*" >> docker/.gitignore
-echo "docker/logs/*" >> docker/.gitignore
-echo "!docker/cache/.gitkeep" >> docker/.gitignore
-echo "!docker/logs/.gitkeep" >> docker/.gitignore
-
-# Create .gitkeep files
-mkdir -p docker/cache docker/logs
-touch docker/cache/.gitkeep docker/logs/.gitkeep
-```
+**Resolution**: ✅ **IMPLEMENTED - Option B**
+- Removed empty directories from filesystem
+- Added `docker/cache/` and `docker/logs/` to `.gitignore`
+- Docker will automatically create these directories when needed
+- Eliminates permission issues with root-owned directories
 
 ---
 
 ## 📋 Recommendations Summary
 
-### High Priority (Should Fix)
-1. ✅ **Update setup.py version** to read from `__init__.py`
-2. ✅ **Remove README.md references** to non-existent Windows scripts
-3. ✅ **Clean up mypy config** to remove unused module overrides
+### ✅ All Items Resolved
 
-### Medium Priority (Should Review)
-4. ⚠️ **Decide on just_ansible.md** - Keep as quick reference or remove duplication
-5. ⚠️ **Fix docker/ ownership** - Use .gitkeep or document auto-creation
+1. ✅ **Updated setup.py version** to read from `__init__.py`
+2. ✅ **Removed README.md references** to non-existent Windows scripts
+3. ✅ **Cleaned up mypy config** to remove unused module overrides
+4. ✅ **Kept just_ansible.md** as quick reference with note to comprehensive docs
+5. ✅ **Removed docker directories** and added to `.gitignore` for auto-creation
 
 ### Low Priority (Optional)
 - Consider adding a tool like `vulture` to CI/CD for automated dead code detection

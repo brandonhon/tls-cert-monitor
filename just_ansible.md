@@ -1,4 +1,6 @@
-# TLS Certificate Monitor - Ansible Commands
+# TLS Certificate Monitor - Ansible Quick Reference
+
+> **📚 For comprehensive documentation**, see [ansible/README.md](ansible/README.md)
 
 Quick reference for deploying TLS Certificate Monitor using Ansible on Linux and Windows hosts.
 

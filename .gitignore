@@ -175,6 +175,10 @@ certs/
 *.pfx
 *.key
 
+# Docker runtime directories (created automatically by Docker)
+docker/cache/
+docker/logs/
+
 # OS specific
 .DS_Store
 .DS_Store?
