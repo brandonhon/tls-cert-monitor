@@ -485,8 +485,14 @@ tls-cert-monitor/
 Run the test suite:
 
 ```bash
-# Run all tests
-make test
+# Run all tests (unit + integration)
+make test-all
+
+# Run only unit tests
+make test-unit
+
+# Run only integration tests (full application testing)
+make test-integration
 
 # Run with coverage
 make test-coverage
@@ -497,6 +503,14 @@ python -m pytest tests/test_config.py -v
 # Run tests matching pattern
 python -m pytest -k "test_cache" -v
 ```
+
+**Integration Tests**: Comprehensive tests that verify the entire application working together:
+- Full application lifecycle (startup → operation → shutdown)
+- Real certificate file scanning
+- Live API endpoints
+- Metrics collection
+- Hot reload functionality
+- See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for details
 
 ### Code Quality
 

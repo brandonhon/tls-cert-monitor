@@ -168,6 +168,23 @@ test-cov: ## Run tests with coverage
 	@$(VENV_PYTHON) -m pytest tests/ --cov=tls_cert_monitor --cov-report=html --cov-report=xml --cov-report=term
 	@printf "$(GREEN)✅ Coverage report generated$(NC)\n"
 
+.PHONY: test-unit
+test-unit: ## Run unit tests only (exclude integration tests)
+	@printf "$(BLUE)🧪 Running unit tests...$(NC)\n"
+	@$(VENV_PYTHON) -m pytest tests/ -v -m "not integration"
+	@printf "$(GREEN)✅ Unit tests completed$(NC)\n"
+
+.PHONY: test-integration
+test-integration: ## Run integration tests only
+	@printf "$(BLUE)🚀 Running integration tests...$(NC)\n"
+	@printf "$(YELLOW)⚠️  Integration tests start the full application$(NC)\n"
+	@$(VENV_PYTHON) -m pytest tests/test_integration.py -v -m integration
+	@printf "$(GREEN)✅ Integration tests completed$(NC)\n"
+
+.PHONY: test-all
+test-all: test-unit test-integration ## Run all tests (unit + integration)
+	@printf "$(GREEN)✅ All tests completed successfully$(NC)\n"
+
 # ----------------------------
 # Running
 # ----------------------------

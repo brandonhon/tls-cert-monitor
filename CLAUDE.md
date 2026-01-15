@@ -10,13 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make install-dev-system` - Install development dependencies system-wide
 
 ### Code Quality & Testing
-- `make check` - Run all code quality checks (format, lint, type-check, security)
-- `make test` - Run tests with pytest
+- `make check` - Run all code quality checks (format, lint, type-check, security, deadcode)
+- `make test` - Run all tests (same as test-all)
+- `make test-unit` - Run unit tests only (fast, isolated tests)
+- `make test-integration` - Run integration tests (full application tests)
+- `make test-all` - Run all tests (unit + integration)
 - `make test-coverage` - Run tests with coverage report
 - `make format` - Format code with black and isort
 - `make lint` - Run flake8 and pylint
 - `make type-check` - Run mypy type checking
 - `make security` - Run bandit security checks
+- `make deadcode` - Detect dead code with vulture
 
 ### Running the Application
 - `make run` - Run with virtual environment (recommended)
