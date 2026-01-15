@@ -18,7 +18,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import httpx
 import pytest
 import pytest_asyncio
 from cryptography import x509
@@ -319,9 +318,7 @@ class TestFullApplicationIntegration:
         for result in results:
             assert result["summary"]["total_files"] == 5
 
-    async def test_error_handling_with_invalid_certificates(
-        self, app_components, test_certs_dir
-    ):
+    async def test_error_handling_with_invalid_certificates(self, app_components, test_certs_dir):
         """Test that invalid certificates are handled gracefully."""
         config, scanner, metrics, cache = app_components
 

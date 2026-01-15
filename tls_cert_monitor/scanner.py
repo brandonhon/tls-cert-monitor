@@ -101,7 +101,11 @@ class CertificateScanner:
             # Reset metrics for new scan
             self.metrics.reset_scan_metrics()
 
-            scan_results: Dict[str, Any] = {"directories": {}, "summary": {}, "timestamp": start_time}
+            scan_results: Dict[str, Any] = {
+                "directories": {},
+                "summary": {},
+                "timestamp": start_time,
+            }
 
             for directory in self.config.certificate_directories:
                 dir_start_time = time.time()

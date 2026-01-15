@@ -251,9 +251,7 @@ class HotReloadManager:
 
             # Trigger immediate re-scan to update all metrics
             try:
-                self.logger.info(
-                    f"Triggering re-scan due to certificate {event_type}: {file_path}"
-                )
+                self.logger.info(f"Triggering re-scan due to certificate {event_type}: {file_path}")
                 await self.scanner.scan_once()
             except Exception as e:
                 self.logger.error(f"Failed to trigger re-scan after {event_type}: {e}")
