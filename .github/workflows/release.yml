@@ -308,6 +308,7 @@ jobs:
     name: Build macOS Binary (AMD64)
     runs-on: macos-15-large  # Intel-based runner for AMD64
     needs: test
+    continue-on-error: true  # Optional build - may fail due to billing limits
     permissions:
       contents: read
       id-token: write
@@ -555,7 +556,7 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-linux-amd64, build-windows-amd64, build-macos-amd64, build-macos-arm64, build-container]
+    needs: [build-linux-amd64, build-windows-amd64, build-macos-arm64, build-container]
     permissions:
       contents: write
     
