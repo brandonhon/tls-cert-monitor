@@ -306,7 +306,7 @@ jobs:
 
   build-macos-amd64:
     name: Build macOS Binary (AMD64)
-    runs-on: macos-13  # Intel-based runner for AMD64
+    runs-on: macos-15-large  # Intel-based runner for AMD64
     needs: test
     permissions:
       contents: read
