@@ -185,6 +185,24 @@ test-integration: ## Run integration tests only
 test-all: test-unit test-integration ## Run all tests (unit + integration)
 	@printf "$(GREEN)✅ All tests completed successfully$(NC)\n"
 
+.PHONY: test-e2e
+test-e2e: ## Run end-to-end Docker tests
+	@printf "$(BLUE)🐳 Running E2E Docker tests...$(NC)\n"
+	@printf "$(YELLOW)⚠️  Requires Docker daemon running$(NC)\n"
+	@$(VENV_PYTHON) -m pytest tests/test_e2e_docker.py -v -m e2e
+	@printf "$(GREEN)✅ E2E tests completed$(NC)\n"
+
+.PHONY: test-e2e-system
+test-e2e-system: ## Run end-to-end Docker tests (system-wide)
+	@printf "$(BLUE)🐳 Running E2E Docker tests (system-wide)...$(NC)\n"
+	@printf "$(YELLOW)⚠️  Requires Docker daemon running$(NC)\n"
+	@python3 -m pytest tests/test_e2e_docker.py -v -m e2e
+	@printf "$(GREEN)✅ E2E tests completed$(NC)\n"
+
+.PHONY: test-full
+test-full: test-unit test-integration test-e2e ## Run all tests including E2E
+	@printf "$(GREEN)✅ All tests completed successfully (unit + integration + e2e)$(NC)\n"
+
 # ----------------------------
 # Running
 # ----------------------------

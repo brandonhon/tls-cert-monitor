@@ -365,12 +365,30 @@ Priority areas for new integration tests:
 5. P12/PFX password trying
 6. Network-based certificate fetching (if added)
 
+## End-to-End (E2E) Docker Testing
+
+For production-like testing in real Docker containers, see the [E2E Testing Guide](E2E_TESTING.md).
+
+**Key Differences**:
+- **Integration Tests**: Run in-process, test components working together
+- **E2E Tests**: Run in Docker containers, test from external perspective (HTTP only)
+
+**When to Use**:
+- Integration tests for rapid development feedback
+- E2E tests for production deployment validation and Docker-specific issues
+
+**Running E2E Tests**:
+```bash
+make test-e2e  # Requires Docker daemon running
+```
+
 ## Resources
 
 - [pytest Documentation](https://docs.pytest.org/)
 - [pytest-asyncio](https://pytest-asyncio.readthedocs.io/)
 - [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
 - [Python cryptography](https://cryptography.io/)
+- [E2E Testing Guide](E2E_TESTING.md) - Docker-based end-to-end tests
 
 ## Support
 

@@ -34,8 +34,10 @@ Thank you for your interest in contributing! This document provides guidelines f
 ### Testing
 - Write tests for new features and bug fixes
 - Maintain or improve test coverage
-- Run `make test` to ensure all tests pass
+- Run `make test-all` to ensure all tests pass (unit + integration)
+- For Docker-related changes, run `make test-e2e` (requires Docker daemon)
 - Test on multiple platforms when possible
+- See test documentation: [INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) and [E2E_TESTING.md](docs/E2E_TESTING.md)
 
 ### Commit Messages
 Follow [Conventional Commits](https://conventionalcommits.org/):

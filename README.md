@@ -488,11 +488,17 @@ Run the test suite:
 # Run all tests (unit + integration)
 make test-all
 
+# Run all tests including E2E (unit + integration + E2E)
+make test-full
+
 # Run only unit tests
 make test-unit
 
 # Run only integration tests (full application testing)
 make test-integration
+
+# Run only E2E Docker tests (requires Docker daemon)
+make test-e2e
 
 # Run with coverage
 make test-coverage
@@ -504,13 +510,17 @@ python -m pytest tests/test_config.py -v
 python -m pytest -k "test_cache" -v
 ```
 
-**Integration Tests**: Comprehensive tests that verify the entire application working together:
-- Full application lifecycle (startup → operation → shutdown)
-- Real certificate file scanning
-- Live API endpoints
-- Metrics collection
-- Hot reload functionality
-- See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for details
+**Test Levels**:
+- **Unit Tests** (~92 tests): Test individual components and functions in isolation
+- **Integration Tests** (~12 tests): Verify the entire application working together with live API endpoints, real certificate scanning, metrics collection, and hot reload
+  - See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for details
+- **E2E Docker Tests** (~23 tests): Test the complete application running in a real Docker container, simulating production deployment
+  - Multiple certificate formats (PEM, DER, PKCS#12/PFX)
+  - Password-protected P12 files
+  - Weak key and security analysis
+  - Invalid certificate handling
+  - Duplicate certificate detection
+  - See [docs/E2E_TESTING.md](docs/E2E_TESTING.md) for details
 
 ### Code Quality
 

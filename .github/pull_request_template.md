@@ -15,7 +15,9 @@ Fixes # (issue number)
 
 ## Testing
 - [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
+- [ ] New and existing unit tests pass locally with my changes (`make test-unit`)
+- [ ] Integration tests pass locally (`make test-integration`)
+- [ ] E2E Docker tests pass if applicable (`make test-e2e`)
 - [ ] I have tested this on multiple platforms (if applicable)
 
 ## Platform Testing
