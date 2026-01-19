@@ -247,6 +247,7 @@ class HotReloadManager:
             if hasattr(self.scanner, "metrics"):
                 self.scanner.metrics.clear_all_certificate_metrics()
                 self.scanner.metrics.reset_scan_metrics()
+                self.scanner.metrics.reset_parse_error_metrics()
                 self.logger.info(f"Metrics cleared due to certificate {event_type}: {file_path}")
 
             # Trigger immediate re-scan to update all metrics
